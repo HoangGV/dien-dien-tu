@@ -64,21 +64,7 @@ export const PropsPanel: React.FC<PropsPanelProps> = ({ isBottomSheet = false })
   }, [selectedComp?.id, selectedComp?.rot, selectedComp?.label]);
 
   if (!rightPanelOpen) {
-    if (isBottomSheet) return null;
-    return (
-      <div
-        onClick={toggleRightPanel}
-        className="w-[20px] h-full bg-white border-l-2 border-black flex flex-col items-center justify-center cursor-pointer hover:bg-[#EEF2FF] select-none shadow-[-1px_0_0_#000] z-20 shrink-0"
-        title="Mở bảng thuộc tính"
-      >
-        <span
-          className="font-black text-[10px] tracking-wider uppercase text-black -rotate-90 whitespace-nowrap mb-4"
-          style={{ writingMode: 'vertical-rl' }}
-        >
-          ◂ THUỘC TÍNH
-        </span>
-      </div>
-    );
+    return null;
   }
 
   const panelContainerClass = isBottomSheet
@@ -95,7 +81,7 @@ export const PropsPanel: React.FC<PropsPanelProps> = ({ isBottomSheet = false })
         </span>
         <button
           onClick={closeRightPanel}
-          className="w-[18px] h-[18px] bg-white text-black border border-black flex items-center justify-center hover:bg-[#FFD84D] active:translate-y-0.5"
+          className="w-[18px] h-[18px] bg-white text-black border border-black flex items-center justify-center hover:bg-[#FFD84D] active:translate-y-0.5 cursor-pointer"
           title="Đóng bảng thuộc tính"
         >
           <X size={12} strokeWidth={3} />
@@ -168,7 +154,7 @@ export const PropsPanel: React.FC<PropsPanelProps> = ({ isBottomSheet = false })
                         <button
                           key={col.id}
                           onClick={() => updateComponentProp(selectedComp.id, 'color', col.id)}
-                          className={`h-5 border-2 border-black flex items-center justify-center ${
+                          className={`h-5 border-2 border-black flex items-center justify-center cursor-pointer ${
                             isCur ? 'ring-2 ring-black scale-110 shadow-[1px_1px_0_#000]' : ''
                           }`}
                           style={{ backgroundColor: col.hex }}
@@ -182,25 +168,25 @@ export const PropsPanel: React.FC<PropsPanelProps> = ({ isBottomSheet = false })
 
               {/* Dynamic Property Schema Fields */}
               {def.propsSchema &&
-                Object.entries(def.propsSchema).map(([key, schema]) => {
-                  if (selectedComp.type === 'led' && key === 'color') return null;
-                  const currentVal = selectedComp.props[key] ?? schema.default;
+                def.propsSchema.map((schema) => {
+                  if (selectedComp.type === 'led' && schema.key === 'color') return null;
+                  const currentVal = selectedComp.props[schema.key] ?? schema.default;
 
                   return (
-                    <div key={key} className="space-y-1">
+                    <div key={schema.key} className="space-y-1">
                       <div className="flex items-center justify-between text-[10px]">
-                        <span className="text-gray-700">{schema.labelVi}:</span>
+                        <span className="text-gray-700">{schema.label}:</span>
                         {schema.unit && <span className="text-gray-500 font-mono">({schema.unit})</span>}
                       </div>
 
-                      {schema.type === 'select' && schema.options && (
+                      {schema.kind === 'select' && schema.options && (
                         <select
                           value={currentVal}
                           onChange={(e) => {
                             const val = isNaN(Number(e.target.value))
                               ? e.target.value
                               : Number(e.target.value);
-                            updateComponentProp(selectedComp.id, key, val);
+                            updateComponentProp(selectedComp.id, schema.key, val);
                           }}
                           className="w-full h-[24px] px-1 border border-black text-[11px] font-bold bg-white outline-none cursor-pointer"
                         >
@@ -212,7 +198,7 @@ export const PropsPanel: React.FC<PropsPanelProps> = ({ isBottomSheet = false })
                         </select>
                       )}
 
-                      {schema.type === 'number' && (
+                      {schema.kind === 'number' && (
                         <div className="flex items-center gap-1">
                           <input
                             type="number"
@@ -223,7 +209,7 @@ export const PropsPanel: React.FC<PropsPanelProps> = ({ isBottomSheet = false })
                             onChange={(e) =>
                               updateComponentProp(
                                 selectedComp.id,
-                                key,
+                                schema.key,
                                 parseFloat(e.target.value) || schema.default
                               )
                             }
@@ -232,23 +218,23 @@ export const PropsPanel: React.FC<PropsPanelProps> = ({ isBottomSheet = false })
                         </div>
                       )}
 
-                      {schema.type === 'string' && (
+                      {schema.kind === 'text' && (
                         <input
                           type="text"
                           value={currentVal}
-                          onChange={(e) => updateComponentProp(selectedComp.id, key, e.target.value)}
+                          onChange={(e) => updateComponentProp(selectedComp.id, schema.key, e.target.value)}
                           className="w-full h-[24px] px-1 border border-black text-[11px] font-bold bg-white"
                         />
                       )}
 
-                      {schema.type === 'boolean' && (
+                      {schema.kind === 'bool' && (
                         <button
-                          onClick={() => updateComponentProp(selectedComp.id, key, !currentVal)}
-                          className={`w-full h-[24px] border border-black text-[10px] font-black uppercase ${
+                          onClick={() => updateComponentProp(selectedComp.id, schema.key, !currentVal)}
+                          className={`w-full h-[24px] border border-black text-[10px] font-black uppercase cursor-pointer transition-colors ${
                             currentVal ? 'bg-[#2DB84D] text-white' : 'bg-gray-200 text-black'
                           }`}
                         >
-                          {currentVal ? 'BẬT / ĐÓNG' : 'TẮT / MỞ'}
+                          {currentVal ? 'BẬT / ĐÓNG' : 'TẮT / NGẮT'}
                         </button>
                       )}
                     </div>

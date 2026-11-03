@@ -34,6 +34,8 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ slug }) => {
     selectedWireIds,
     rightPanelOpen,
     toggleRightPanel,
+    editorMode,
+    cancelWiring,
   } = useWorkspaceStore();
 
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -82,6 +84,12 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ slug }) => {
 
       const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
       const cmdOrCtrl = isMac ? e.metaKey : e.ctrlKey;
+
+      if (editorMode === 'wiring' && (e.key === 'Escape' || e.code === 'Space' || e.key === ' ')) {
+        e.preventDefault();
+        cancelWiring();
+        return;
+      }
 
       if (e.key === 'Tab') {
         e.preventDefault();

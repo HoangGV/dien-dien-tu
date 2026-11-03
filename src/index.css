@@ -61,7 +61,8 @@ body {
   gap: var(--gap);
   min-height: var(--btn-h);
   height: var(--btn-h);
-  padding: 0 8px;
+  padding: 0 6px;
+  line-height: 1;
   font-weight: 800;
   font-size: var(--ui-font);
   text-transform: uppercase;

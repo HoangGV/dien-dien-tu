@@ -57,9 +57,10 @@ export const NeoDropdown: React.FC<NeoDropdownProps> = ({
         variant={variant}
         onClick={() => setIsOpen(!isOpen)}
         icon={icon}
+        className="!h-[26px] !px-2"
       >
-        <span>{label}</span>
-        <ChevronDown size={14} strokeWidth={3} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <span className="leading-none text-[12px]">{label}</span>
+        <ChevronDown size={11} strokeWidth={3} className={`shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </NeoButton>
 
       {isOpen && (

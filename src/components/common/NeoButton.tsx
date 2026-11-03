@@ -27,8 +27,12 @@ export const NeoButton: React.FC<NeoButtonProps> = ({
       disabled={disabled}
       {...props}
     >
-      {icon && <span className="inline-flex shrink-0">{icon}</span>}
-      {children ? <span className="font-extrabold tracking-wide">{children}</span> : null}
+      {icon && <span className="inline-flex items-center justify-center shrink-0">{icon}</span>}
+      {children ? (
+        <span className="inline-flex items-center gap-1 leading-none font-extrabold tracking-wide">
+          {children}
+        </span>
+      ) : null}
     </button>
   );
 };

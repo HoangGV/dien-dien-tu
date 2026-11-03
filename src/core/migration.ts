@@ -72,11 +72,24 @@ export function migrateCircuitState(state: CircuitState, workspaceSlug?: string)
     let toPin = w.to.pinId;
 
     if (isHousehold) {
-      if (fromPin === 'L') fromPin = 'A';
-      else if (fromPin === 'N') fromPin = 'O';
+      const fromComp = state.components.find(c => c.id === w.from.compId);
+      const toComp = state.components.find(c => c.id === w.to.compId);
 
-      if (toPin === 'L') toPin = 'A';
-      else if (toPin === 'N') toPin = 'O';
+      if (fromComp?.type === 'ceiling_fan') {
+        if (fromPin === 'A') fromPin = '1';
+        else if (fromPin === 'O') fromPin = '2';
+      } else {
+        if (fromPin === 'L') fromPin = 'A';
+        else if (fromPin === 'N') fromPin = 'O';
+      }
+
+      if (toComp?.type === 'ceiling_fan') {
+        if (toPin === 'A') toPin = '1';
+        else if (toPin === 'O') toPin = '2';
+      } else {
+        if (toPin === 'L') toPin = 'A';
+        else if (toPin === 'N') toPin = 'O';
+      }
     }
 
     let wireType = w.wireType;

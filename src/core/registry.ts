@@ -277,8 +277,9 @@ export const COMPONENT_DEFINITIONS: ComponentDef[] = [
         default: 'incandescent',
       },
       { key: 'power', label: 'Công suất bóng', kind: 'number', min: 5, max: 200, step: 5, unit: 'W', default: 60 },
+      { key: 'isOn', label: 'Trạng thái phát sáng', kind: 'bool', default: false },
     ],
-    defaultProps: { lampType: 'incandescent', power: 60 },
+    defaultProps: { lampType: 'incandescent', power: 60, isOn: false },
   },
   {
     type: 'lamp_fluorescent',
@@ -294,8 +295,9 @@ export const COMPONENT_DEFINITIONS: ComponentDef[] = [
     symbol: FluorescentLampSymbol,
     propsSchema: [
       { key: 'power', label: 'Công suất đèn', kind: 'number', min: 18, max: 72, step: 18, unit: 'W', default: 36 },
+      { key: 'isOn', label: 'Trạng thái phát sáng', kind: 'bool', default: false },
     ],
-    defaultProps: { power: 36 },
+    defaultProps: { power: 36, isOn: false },
   },
   {
     type: 'ceiling_fan',
@@ -305,14 +307,15 @@ export const COMPONENT_DEFINITIONS: ComponentDef[] = [
     width: 80,
     height: 60,
     pins: [
-      { id: 'A', label: 'A', dx: -2, dy: 0, polarity: 'A' },
-      { id: 'O', label: 'O', dx: 2, dy: 0, polarity: 'O' },
+      { id: '1', label: '', dx: -2, dy: 0 },
+      { id: '2', label: '', dx: 2, dy: 0 },
     ],
     symbol: CeilingFanSymbol,
     propsSchema: [
       { key: 'power', label: 'Công suất quạt', kind: 'number', min: 40, max: 150, step: 5, unit: 'W', default: 75 },
+      { key: 'isOn', label: 'Trạng thái chạy', kind: 'bool', default: false },
     ],
-    defaultProps: { power: 75 },
+    defaultProps: { power: 75, isOn: false },
   },
   {
     type: 'electric_bell',

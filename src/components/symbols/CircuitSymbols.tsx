@@ -427,18 +427,28 @@ export const Switch3PSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, 
 };
 
 // 7. BÓNG ĐÈN CHIẾU SÁNG (TCVN 1622-75 & SGK: Vòng tròn dấu ×)
+// 7. BÓNG ĐÈN CHIẾU SÁNG (TCVN 1622-75 & SGK: Vòng tròn dấu ×, sáng vàng rực khi hoạt động)
 export const LampSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPinHover, hoveredPinId }) => {
   const pins: PinDef[] = [
     { id: '1', label: '', dx: -2, dy: 0 },
     { id: '2', label: '', dx: 2, dy: 0 },
   ];
+  const isActive = Boolean(comp.props.isOn || comp.props.state);
 
   return (
     <g>
-      <circle cx={0} cy={0} r={18} fill="#FFFFFF" stroke="#000000" strokeWidth={2} />
+      <circle
+        cx={0}
+        cy={0}
+        r={18}
+        fill={isActive ? '#FFD84D' : '#FFFFFF'}
+        stroke="#000000"
+        strokeWidth={2}
+        style={isActive ? { filter: 'drop-shadow(0 0 8px #FFD84D)' } : undefined}
+      />
       {/* TCVN cross × */}
-      <line x1={-12.7} y1={-12.7} x2={12.7} y2={12.7} stroke="#000" strokeWidth={2} />
-      <line x1={-12.7} y1={12.7} x2={12.7} y2={-12.7} stroke="#000" strokeWidth={2} />
+      <line x1={-12.7} y1={-12.7} x2={12.7} y2={12.7} stroke="#000" strokeWidth={2.5} />
+      <line x1={-12.7} y1={12.7} x2={12.7} y2={-12.7} stroke="#000" strokeWidth={2.5} />
 
       <line x1={-40} y1={0} x2={-18} y2={0} stroke="#000" strokeWidth={2} />
       <line x1={18} y1={0} x2={40} y2={0} stroke="#000" strokeWidth={2} />
@@ -446,22 +456,33 @@ export const LampSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPi
       {pins.map(p => (
         <PinDot key={p.id} pin={p} onPointerDown={onPinPointerDown} onHover={onPinHover} isHovered={hoveredPinId === p.id} />
       ))}
-      <SymbolLabels label={comp.label} valueStr={`${comp.props.power || 60}W`} rot={comp.rot} flip={comp.flip} flipY={comp.flipY} yOffset={-24} />
+      <SymbolLabels label={comp.label} rot={comp.rot} flip={comp.flip} flipY={comp.flipY} yOffset={-24} />
     </g>
   );
 };
 
-// 8. ĐÈN HUỲNH QUANG (SGK Công nghệ 9, 12: Hình chữ nhật bo tròn có dấu × ở giữa)
+// 8. ĐÈN HUỲNH QUANG (SGK Công nghệ 9, 12: Hình chữ nhật bo tròn có dấu × ở giữa, sáng xanh neon ngọc khi hoạt động)
 export const FluorescentLampSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPinHover, hoveredPinId }) => {
   const pins: PinDef[] = [
     { id: '1', label: '', dx: -3, dy: 0 },
     { id: '2', label: '', dx: 3, dy: 0 },
   ];
+  const isActive = Boolean(comp.props.isOn || comp.props.state);
 
   return (
     <g>
       {/* Elongated tube with rounded ends */}
-      <rect x={-40} y={-10} width={80} height={20} rx={10} fill="#FFFFFF" stroke="#000000" strokeWidth={2} />
+      <rect
+        x={-40}
+        y={-10}
+        width={80}
+        height={20}
+        rx={10}
+        fill={isActive ? '#A5F3FC' : '#FFFFFF'}
+        stroke="#000000"
+        strokeWidth={2}
+        style={isActive ? { filter: 'drop-shadow(0 0 10px #22D3EE)' } : undefined}
+      />
       {/* Center cross mark */}
       <line x1={-8} y1={-8} x2={8} y2={8} stroke="#000" strokeWidth={2} />
       <line x1={-8} y1={8} x2={8} y2={-8} stroke="#000" strokeWidth={2} />
@@ -472,25 +493,45 @@ export const FluorescentLampSymbol: React.FC<SymbolProps> = ({ comp, onPinPointe
       {pins.map(p => (
         <PinDot key={p.id} pin={p} onPointerDown={onPinPointerDown} onHover={onPinHover} isHovered={hoveredPinId === p.id} />
       ))}
-      <SymbolLabels label={comp.label} valueStr={`${comp.props.power || 36}W`} rot={comp.rot} flip={comp.flip} flipY={comp.flipY} yOffset={-16} />
+      <SymbolLabels label={comp.label} rot={comp.rot} flip={comp.flip} flipY={comp.flipY} yOffset={-16} />
     </g>
   );
 };
 
-// 9. QUẠT TRẦN (TCVN 1619-75 & SGK: Hình cánh quạt 2 tam giác đối đỉnh có tâm tròn, 2 chân A và O)
+// 9. QUẠT TRẦN (TCVN 1619-75 & SGK: Hình cánh quạt 2 tam giác đối đỉnh có tâm tròn, 2 chân không phân cực, sáng màu xanh khi quay)
 export const CeilingFanSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPinHover, hoveredPinId }) => {
   const pins: PinDef[] = [
-    { id: 'A', label: 'A', dx: -2, dy: 0, polarity: 'A' },
-    { id: 'O', label: 'O', dx: 2, dy: 0, polarity: 'O' },
+    { id: '1', label: '', dx: -2, dy: 0 },
+    { id: '2', label: '', dx: 2, dy: 0 },
   ];
+  const isActive = Boolean(comp.props.isOn || comp.props.state);
 
   return (
     <g>
       {/* 2 bow-tie triangles touching at center */}
-      <polygon points="-30,-12 0,0 -30,12" fill="#FFFFFF" stroke="#000000" strokeWidth={2} />
-      <polygon points="30,-12 0,0 30,12" fill="#FFFFFF" stroke="#000000" strokeWidth={2} />
+      <polygon
+        points="-30,-12 0,0 -30,12"
+        fill={isActive ? '#34D399' : '#FFFFFF'}
+        stroke="#000000"
+        strokeWidth={2}
+        style={isActive ? { filter: 'drop-shadow(0 0 8px #10B981)' } : undefined}
+      />
+      <polygon
+        points="30,-12 0,0 30,12"
+        fill={isActive ? '#34D399' : '#FFFFFF'}
+        stroke="#000000"
+        strokeWidth={2}
+        style={isActive ? { filter: 'drop-shadow(0 0 8px #10B981)' } : undefined}
+      />
       {/* Center rotor dot */}
-      <circle cx={0} cy={0} r={4} fill="#4169E1" stroke="#000" strokeWidth={1.5} />
+      <circle
+        cx={0}
+        cy={0}
+        r={4.5}
+        fill={isActive ? '#E5322D' : '#4169E1'}
+        stroke="#000"
+        strokeWidth={1.5}
+      />
 
       <line x1={-40} y1={0} x2={-30} y2={0} stroke="#000" strokeWidth={2} />
       <line x1={30} y1={0} x2={40} y2={0} stroke="#000" strokeWidth={2} />

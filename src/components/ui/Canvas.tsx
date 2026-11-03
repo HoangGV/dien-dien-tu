@@ -110,16 +110,20 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement)?.tagName === 'INPUT' || (e.target as HTMLElement)?.tagName === 'TEXTAREA') return;
 
-      if (e.code === 'Space') {
-        setIsSpacePressed(true);
+      if (e.code === 'Space' || e.key === ' ') {
         if (editorMode === 'wiring') {
           e.preventDefault();
-          toggleWiringDirection();
+          e.stopPropagation();
+          cancelWiring();
+          return;
         }
+        setIsSpacePressed(true);
       } else if (e.key === 'Backspace' && editorMode === 'wiring') {
         e.preventDefault();
         undoWiringWaypoint();
       } else if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
         if (editorMode === 'wiring') {
           cancelWiring();
         } else if (editorMode === 'placing') {

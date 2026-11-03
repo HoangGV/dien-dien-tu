@@ -21,6 +21,7 @@ import {
   BookmarkCheck,
   Tag,
   MoreHorizontal,
+  Sliders,
 } from 'lucide-react';
 import { NeoButton } from '../common/NeoButton';
 import { NeoDropdown, DropdownItem } from '../common/NeoDropdown';
@@ -45,6 +46,8 @@ export const TopBar: React.FC<TopBarProps> = ({ svgRef }) => {
     showGrid,
     showWireLabels,
     fullFrameMode,
+    rightPanelOpen,
+    toggleRightPanel,
     canUndo,
     canRedo,
     stopSimulating,
@@ -312,6 +315,17 @@ export const TopBar: React.FC<TopBarProps> = ({ svgRef }) => {
           {!isNarrow && (
             <NeoDropdown label="CÀI ĐẶT" icon={<Settings size={12} />} items={settingsItems} align="right" />
           )}
+
+          {/* Dedicated Thuộc tính toggle button in the top-right corner */}
+          <NeoButton
+            variant={rightPanelOpen ? 'primary' : 'secondary'}
+            onClick={toggleRightPanel}
+            icon={<Sliders size={12} strokeWidth={2.5} />}
+            className="!h-[26px] !px-2"
+            title={rightPanelOpen ? 'Thu gọn bảng thuộc tính' : 'Mở bảng thuộc tính'}
+          >
+            <span className="text-[12px] leading-none">THUỘC TÍNH</span>
+          </NeoButton>
 
           {/* Overflow Menu for smaller screens */}
           {isNarrow && (
