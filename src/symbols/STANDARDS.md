@@ -4,11 +4,9 @@ Tài liệu đối chiếu kí hiệu quy ước trong môn Công nghệ (Chươ
 
 | Tên linh kiện / Thiết bị | Tiêu chuẩn tham chiếu | Mô tả hình vẽ quy chuẩn SGK GDPT 2018 | Trạng thái đối chiếu |
 | :--- | :--- | :--- | :--- |
-| **Nguồn điện xoay chiều** | SGK Công nghệ 12 / TCVN | Vòng tròn chân cắm A (dây pha) và O (dây trung tính) có mũi tên/dây dẫn đi xuống | Đã đối chiếu SGK |
-| **Aptomat 1 cực (MCB 1P)** | TCVN 1615-75 / SGK | Tiếp điểm đóng cắt kiểu lưỡi nghiêng, đầu tiếp điểm có dấu `×` và ký hiệu hộp bảo vệ quá dòng | Đã đối chiếu SGK |
-| **Aptomat 2 cực (MCB 2P)** | TCVN 1615-75 / SGK | 2 tiếp điểm aptomat xếp song song, liên động bằng đường nét đứt ngang | Đã đối chiếu SGK |
-| **Aptomat 3 cực (MCB 3P)** | TCVN 1615-75 / SGK | 3 tiếp điểm aptomat xếp song song, liên động bằng đường nét đứt ngang | Đã đối chiếu SGK |
-| **Cầu dao 2 cực, 3 cực** | TCVN 1615-75 / SGK | Tiếp điểm đóng cắt kép với các gạch chéo và nét đứt liên động cơ khí | Đã đối chiếu SGK |
+| **Nguồn điện xoay chiều** | SGK Công nghệ 12 / TCVN | Khung hộp nét chấm mảnh, chỉ gồm 2 điểm A (pha) và O (trung tính) | Đã đối chiếu SGK |
+| **Aptomat 2 cực, 3 cực (MCB)** | SGK Công nghệ 12 / TCVN | 2 đường line xiên từ circle phía (1) và (2) xiên lên circle phía (1') và (2'), mũi tên ngang đâm xuyên qua các cực | Đã đối chiếu SGK |
+| **Aptomat dạng hộp (CB)** | TCVN 1615-75 / SGK | Khung chữ nhật bao ngoài, các tiếp điểm o--/--o nằm ngang và mũi tên thẳng đứng liên động ở giữa | Đã đối chiếu SGK |
 | **Cầu chì (1, 2, 3 cực)** | TCVN 1623-75 / SGK | Hình chữ nhật dài nằm ngang, có đường dây dẫn xuyên dọc tâm từ đầu này sang đầu kia | Đã đối chiếu SGK |
 | **Công tắc 2 cực** | TCVN 1615-75 / SGK | Vòng tròn có 2 tiếp điểm chấm tròn nhỏ và lưỡi đóng cắt nghiêng | Đã đối chiếu SGK |
 | **Công tắc 3 cực (cầu thang)** | TCVN 1615-75 / SGK | Vòng tròn có 1 tiếp điểm chung và 2 tiếp điểm chuyển mạch đối diện | Đã đối chiếu SGK |

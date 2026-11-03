@@ -76,33 +76,50 @@ export const SymbolLabels: React.FC<{
   );
 };
 
-// 1. NGUỒN ĐIỆN XOAY CHIỀU (TCVN / SGK: 2 cực A - Pha, O - Trung tính, không cần PE)
+// 1. NGUỒN ĐIỆN XOAY CHIỀU (TCVN / SGK: 2 cực A - Pha, O - Trung tính trong khung nét chấm mảnh)
 export const ACSourceSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPinHover, hoveredPinId }) => {
   const pins: PinDef[] = [
-    { id: 'A', label: 'A', dx: -1, dy: -2, polarity: 'A' },
-    { id: 'O', label: 'O', dx: 1, dy: -2, polarity: 'O' },
+    { id: 'O', label: 'O', dx: 2, dy: -1, polarity: 'O' },
+    { id: 'A', label: 'A', dx: 2, dy: 1, polarity: 'A' },
   ];
 
   return (
     <g>
-      {/* 2 terminals A and O at top with lines down according to SGK */}
-      <circle cx={-20} cy={-28} r={4} fill="#FFF" stroke="#000" strokeWidth={2} />
-      <text x={-20} y={-36} textAnchor="middle" fontSize="10" fontWeight="900" fill="#E5322D">A</text>
-      <line x1={-20} y1={-24} x2={-20} y2={40} stroke="#000" strokeWidth={2} />
+      {/* Box with thin dotted line (chuẩn sơ đồ tủ điện ngoài trời / nguồn vào) */}
+      <rect
+        x={-28}
+        y={-32}
+        width={56}
+        height={64}
+        fill="#FFFFFF"
+        stroke="#000000"
+        strokeWidth={1.5}
+        strokeDasharray="4 3"
+      />
 
-      <circle cx={20} cy={-28} r={4} fill="#FFF" stroke="#000" strokeWidth={2} />
-      <text x={20} y={-36} textAnchor="middle" fontSize="10" fontWeight="900" fill="#4169E1">O</text>
-      <line x1={20} y1={-24} x2={20} y2={40} stroke="#000" strokeWidth={2} />
+      {/* Point O (Trung tính - N) */}
+      <circle cx={-4} cy={-20} r={4.5} fill="#000000" />
+      <text x={-12} y={-16} textAnchor="end" fontSize="12" fontWeight="900" fill="#4169E1">
+        O
+      </text>
+      <line x1={-4} y1={-20} x2={40} y2={-20} stroke="#000000" strokeWidth={2} />
+
+      {/* Point A (Pha - L) */}
+      <circle cx={-4} cy={20} r={4.5} fill="#E5322D" />
+      <text x={-12} y={24} textAnchor="end" fontSize="12" fontWeight="900" fill="#E5322D">
+        A
+      </text>
+      <line x1={-4} y1={20} x2={40} y2={20} stroke="#000000" strokeWidth={2} />
 
       {pins.map(p => (
         <PinDot key={p.id} pin={p} onPointerDown={onPinPointerDown} onHover={onPinHover} isHovered={hoveredPinId === p.id} />
       ))}
-      <SymbolLabels label={comp.label} rot={comp.rot} flip={comp.flip} flipY={comp.flipY} yOffset={12} />
+      <SymbolLabels label={comp.label} rot={comp.rot} flip={comp.flip} flipY={comp.flipY} yOffset={-36} />
     </g>
   );
 };
 
-// 2. APTOMAT (MCB 1, 2, 3 CỰC - CHUẨN SGK VÀ SƠ ĐỒ TỦ ĐIỆN)
+// 2. APTOMAT HỘP (MCB 1, 2, 3 CỰC - DẠNG TỦ ĐIỆN NHÁNH)
 // Khung chữ nhật bao ngoài, các tiếp điểm o---/---o nằm ngang nối thẳng hàng với nguồn/tải, mũi tên liên động cơ khí ở giữa
 export const CBSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPinHover, hoveredPinId }) => {
   const poles = comp.props.poles || 1;
@@ -207,47 +224,49 @@ export const CBSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPinH
   );
 };
 
-// 3. CẦU DAO (2, 3 CỰC - CHUẨN SGK GDPT HÌNH 2)
-// Tiếp điểm cực thẳng đứng, lưỡi dao nghiêng từ cực dưới lên cực trên, mũi tên ngang xuyên qua các lưỡi dao
+// 3. APTOMAT (MCB 2, 3 CỰC - CHUẨN SGK GDPT HÌNH BẢNG KÍ HIỆU)
+// Tiếp điểm thẳng đứng, 2 đường line xiên từ circle phía (1) và (2) xiên lên circle phía (1') và (2'), mũi tên ngang xuyên qua các lưỡi dao
 export const KnifeSwitchSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPinHover, hoveredPinId }) => {
   const poles = comp.props.poles || 2;
-  const isClosed = comp.props.state ?? true;
+  const isTripped = comp.props.isTripped ?? false;
+  const isClosed = (comp.props.state ?? true) && !isTripped;
 
+  // Cực (1) và (2) ở phía dưới (dy: 2); Cực (1') và (2') ở phía trên (dy: -2)
   const pins: PinDef[] = poles === 2
     ? [
-        { id: 'in1', label: '1', dx: -1, dy: -2 },
-        { id: 'in2', label: '2', dx: 1, dy: -2 },
-        { id: 'out1', label: '1\'', dx: -1, dy: 2 },
-        { id: 'out2', label: '2\'', dx: 1, dy: 2 },
+        { id: 'in1', label: '1', dx: -1, dy: 2 },
+        { id: 'in2', label: '2', dx: 1, dy: 2 },
+        { id: 'out1', label: '1\'', dx: -1, dy: -2 },
+        { id: 'out2', label: '2\'', dx: 1, dy: -2 },
       ]
     : [
-        { id: 'in1', label: '1', dx: -2, dy: -2 },
-        { id: 'in2', label: '2', dx: 0, dy: -2 },
-        { id: 'in3', label: '3', dx: 2, dy: -2 },
-        { id: 'out1', label: '1\'', dx: -2, dy: 2 },
-        { id: 'out2', label: '2\'', dx: 0, dy: 2 },
-        { id: 'out3', label: '3\'', dx: 2, dy: 2 },
+        { id: 'in1', label: '1', dx: -1, dy: 2 },
+        { id: 'in2', label: '2', dx: 0, dy: 2 },
+        { id: 'in3', label: '3', dx: 1, dy: 2 },
+        { id: 'out1', label: '1\'', dx: -1, dy: -2 },
+        { id: 'out2', label: '2\'', dx: 0, dy: -2 },
+        { id: 'out3', label: '3\'', dx: 1, dy: -2 },
       ];
 
-  const poleXOffsets = poles === 2 ? [-16, 16] : [-26, 0, 26];
+  const poleXOffsets = poles === 2 ? [-20, 20] : [-20, 0, 20];
 
   return (
     <g>
       {poleXOffsets.map((px, i) => (
         <g key={i}>
-          {/* Top terminal lead down to top circle */}
-          <line x1={px} y1={-40} x2={px} y2={-14} stroke="#000" strokeWidth={2} />
-          <circle cx={px} cy={-14} r={3.5} fill="#FFF" stroke="#000" strokeWidth={1.8} />
+          {/* Top terminal lead down to top circle (1', 2') */}
+          <line x1={px} y1={-40} x2={px} y2={-17.5} stroke="#000" strokeWidth={2} />
+          <circle cx={px} cy={-14} r={3.5} fill="#FFF" stroke="#000" strokeWidth={2} />
 
-          {/* Bottom terminal lead up to bottom circle */}
-          <line x1={px} y1={40} x2={px} y2={14} stroke="#000" strokeWidth={2} />
-          <circle cx={px} cy={14} r={3.5} fill="#FFF" stroke="#000" strokeWidth={1.8} />
+          {/* Bottom terminal lead up to bottom circle (1, 2) */}
+          <line x1={px} y1={40} x2={px} y2={17.5} stroke="#000" strokeWidth={2} />
+          <circle cx={px} cy={14} r={3.5} fill="#FFF" stroke="#000" strokeWidth={2} />
 
-          {/* Knife contact blade: pivots at bottom circle, angles up-right towards top circle */}
+          {/* Contact blade: Xiên từ hướng circle phía (1) và (2) xiên lên circle phía (1') và (2') */}
           {isClosed ? (
-            <line x1={px} y1={14} x2={px} y2={-14} stroke="#000" strokeWidth={2.5} />
+            <line x1={px} y1={14} x2={px + 4} y2={-13} stroke="#000" strokeWidth={2.5} />
           ) : (
-            <line x1={px} y1={14} x2={px + 10} y2={-10} stroke="#000" strokeWidth={2.5} />
+            <line x1={px} y1={14} x2={px + 12} y2={-10} stroke="#E5322D" strokeWidth={2.5} />
           )}
         </g>
       ))}
@@ -262,7 +281,7 @@ export const KnifeSwitchSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDow
         strokeWidth={1.8}
       />
       <polygon
-        points={`${poleXOffsets[poleXOffsets.length - 1] + 16},0 ${poleXOffsets[poleXOffsets.length - 1] + 9},-3.5 ${poleXOffsets[poleXOffsets.length - 1] + 9},3.5`}
+        points={`${poleXOffsets[poleXOffsets.length - 1] + 18},0 ${poleXOffsets[poleXOffsets.length - 1] + 11},-4 ${poleXOffsets[poleXOffsets.length - 1] + 11},4`}
         fill="#000"
       />
 

@@ -44,8 +44,8 @@ export const COMPONENT_DEFINITIONS: ComponentDef[] = [
     width: 80,
     height: 80,
     pins: [
-      { id: 'A', label: 'A', dx: -1, dy: -2, polarity: 'A' },
-      { id: 'O', label: 'O', dx: 1, dy: -2, polarity: 'O' },
+      { id: 'O', label: 'O', dx: 2, dy: -1, polarity: 'O' },
+      { id: 'A', label: 'A', dx: 2, dy: 1, polarity: 'A' },
     ],
     symbol: ACSourceSymbol,
     propsSchema: [
@@ -56,9 +56,9 @@ export const COMPONENT_DEFINITIONS: ComponentDef[] = [
   },
   {
     type: 'cb',
-    nameVi: 'Aptomat (CB)',
+    nameVi: 'Aptomat hộp (CB)',
     category: 'protection',
-    refPrefix: 'CB',
+    refPrefix: 'MCB',
     width: 80,
     height: 80,
     pins: (props) => {
@@ -120,27 +120,27 @@ export const COMPONENT_DEFINITIONS: ComponentDef[] = [
   },
   {
     type: 'knife_switch',
-    nameVi: 'Cầu dao',
-    category: 'control',
-    refPrefix: 'CD',
+    nameVi: 'Aptomat (MCB)',
+    category: 'protection',
+    refPrefix: 'MCB',
     width: 80,
     height: 80,
     pins: (props) => {
       const poles = props.poles || 2;
       return poles === 2
         ? [
-            { id: 'in1', label: '1', dx: -1, dy: -2 },
-            { id: 'in2', label: '2', dx: 1, dy: -2 },
-            { id: 'out1', label: '1\'', dx: -1, dy: 2 },
-            { id: 'out2', label: '2\'', dx: 1, dy: 2 },
+            { id: 'in1', label: '1', dx: -1, dy: 2 },
+            { id: 'in2', label: '2', dx: 1, dy: 2 },
+            { id: 'out1', label: '1\'', dx: -1, dy: -2 },
+            { id: 'out2', label: '2\'', dx: 1, dy: -2 },
           ]
         : [
-            { id: 'in1', label: '1', dx: -2, dy: -2 },
-            { id: 'in2', label: '2', dx: 0, dy: -2 },
-            { id: 'in3', label: '3', dx: 2, dy: -2 },
-            { id: 'out1', label: '1\'', dx: -2, dy: 2 },
-            { id: 'out2', label: '2\'', dx: 0, dy: 2 },
-            { id: 'out3', label: '3\'', dx: 2, dy: 2 },
+            { id: 'in1', label: '1', dx: -1, dy: 2 },
+            { id: 'in2', label: '2', dx: 0, dy: 2 },
+            { id: 'in3', label: '3', dx: 1, dy: 2 },
+            { id: 'out1', label: '1\'', dx: -1, dy: -2 },
+            { id: 'out2', label: '2\'', dx: 0, dy: -2 },
+            { id: 'out3', label: '3\'', dx: 1, dy: -2 },
           ];
     },
     symbol: KnifeSwitchSymbol,

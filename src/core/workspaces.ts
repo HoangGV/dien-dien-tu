@@ -8,12 +8,12 @@ export const WORKSPACE_HOUSEHOLD: WorkspaceConfig = {
   slug: 'mang-dien-trong-nha',
   title: 'Mạng điện trong nhà',
   grades: 'Lớp 8, 9, 12',
-  description: 'Mô phỏng mạng điện dân dụng 220 V (RMS): nguồn điện pha A - trung tính O, aptomat CB 1/2/3 cực, cầu dao, cầu chì, công tắc 2 cực, công tắc 3 cực cầu thang, bóng đèn, đèn huỳnh quang, quạt trần, chuông điện, ổ cắm, công tơ kWh, dụng cụ đo A/V/W/Ω theo chuẩn TCVN và SGK GDPT 2018.',
+  description: 'Mô phỏng mạng điện dân dụng 220 V (RMS): nguồn điện nét chấm mảnh (A, O), aptomat MCB 2P/3P, aptomat hộp CB, cầu chì, công tắc 2 cực, công tắc 3 cực cầu thang, bóng đèn, đèn huỳnh quang, quạt trần, chuông điện, ổ cắm, công tơ kWh, dụng cụ đo A/V/W/Ω theo chuẩn TCVN và SGK GDPT 2018.',
   mode: 'rms',
   paletteIds: [
     'ac_source',
-    'cb',
     'knife_switch',
+    'cb',
     'fuse',
     'switch_2p',
     'switch_3p',
@@ -32,13 +32,12 @@ export const WORKSPACE_HOUSEHOLD: WorkspaceConfig = {
   presets: [],
   helpText: `HƯỚNG DẪN MẠNG ĐIỆN DÂN DỤNG (TCVN & CHƯƠNG TRÌNH GDPT 2018):
 • Kí hiệu quy chuẩn SGK:
-  - Nguồn điện xoay chiều: Dây pha A (đỏ) và Dây trung tính O (xanh dương).
-  - Dây nối đất bảo vệ PE: Màu vàng - xanh lá.
-  - Aptomat (MCB 1P, 2P, 3P): Kí hiệu tiếp điểm nghiêng kèm dấu × bảo vệ quá dòng.
-  - Cầu chì: Hình chữ nhật dài có đường nét xuyên dọc giữa.
-  - Cầu dao: Tiếp điểm đóng cắt kép với nét đứt liên động cơ khí.
+  - Nguồn điện xoay chiều: Đặt trong khung hộp nét chấm mảnh, gồm 2 điểm A (pha) và O (trung tính).
+  - Aptomat (MCB 2P, 3P): 2 đường line xiên từ circle phía (1) và (2) xiên lên circle phía (1') và (2'), có mũi tên ngang xuyên qua các lưỡi dao.
+  - Aptomat dạng hộp (CB): Khung hộp chữ nhật có tiếp điểm ngang và mũi tên liên động cơ khí thẳng đứng.
+  - Cầu chì: Hình chữ nhật dài có đường nét xuyên dọc giữa (1, 2, 3 cực).
   - Đèn chiếu sáng: Vòng tròn có dấu ×; Đèn huỳnh quang: Hình chữ nhật bo tròn có dấu × ở giữa.
-  - Quạt trần: Hình cánh quạt 2 tam giác đối đỉnh có tâm tròn (3 chân: A, O, PE).
+  - Quạt trần: Hình cánh quạt 2 tam giác đối đỉnh có tâm tròn (2 chân A, O).
   - Chuông điện: Vòm chuông úp, đáy phẳng.`,
   defaultSpecs: {
     voltage: 220,
