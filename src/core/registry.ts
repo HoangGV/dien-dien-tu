@@ -1,0 +1,701 @@
+/**
+ * Component Definitions Registry
+ * Follows the "one component - multiple properties" principle strictly.
+ */
+
+import React from 'react';
+import { ComponentDef, PinDef } from './model';
+import {
+  ACSourceSymbol,
+  CBSymbol,
+  KnifeSwitchSymbol,
+  FuseSymbol,
+  Switch2PSymbol,
+  Switch3PSymbol,
+  LampSymbol,
+  FluorescentLampSymbol,
+  CeilingFanSymbol,
+  ElectricBellSymbol,
+  SocketSymbol,
+  KWhMeterSymbol,
+  InstrumentSymbol,
+  GenericApplianceSymbol,
+  LEDSymbol,
+  ResistorSymbol,
+  DCSourceSymbol,
+  GroundSymbol,
+  VCCSymbol,
+  PushButtonSymbol,
+  PotentiometerSymbol,
+  CapacitorCeramicSymbol,
+  CapacitorElectrolyticSymbol,
+  DiodeSymbol,
+  TransistorNPNSymbol,
+  TransistorPNPSymbol,
+} from '../components/symbols/CircuitSymbols';
+
+export const COMPONENT_DEFINITIONS: ComponentDef[] = [
+  // =================== WORKSPACE: MẠNG ĐIỆN TRONG NHÀ ===================
+  {
+    type: 'ac_source',
+    nameVi: 'Nguồn điện xoay chiều',
+    category: 'source',
+    refPrefix: 'U',
+    width: 80,
+    height: 80,
+    pins: [
+      { id: 'A', label: 'A', dx: -1, dy: -2, polarity: 'A' },
+      { id: 'O', label: 'O', dx: 1, dy: -2, polarity: 'O' },
+    ],
+    symbol: ACSourceSymbol,
+    propsSchema: [
+      { key: 'voltage', label: 'Điện áp hiệu dụng', kind: 'number', min: 110, max: 250, step: 5, unit: 'V', default: 220 },
+      { key: 'frequency', label: 'Tần số', kind: 'number', min: 50, max: 60, step: 10, unit: 'Hz', default: 50 },
+    ],
+    defaultProps: { voltage: 220, frequency: 50 },
+  },
+  {
+    type: 'cb',
+    nameVi: 'Aptomat (CB)',
+    category: 'protection',
+    refPrefix: 'CB',
+    width: 80,
+    height: 80,
+    pins: (props) => {
+      const poles = props.poles || 1;
+      if (poles === 1) {
+        return [
+          { id: 'in', label: '1', dx: -2, dy: 0 },
+          { id: 'out', label: '1\'', dx: 2, dy: 0 },
+        ];
+      }
+      if (poles === 2) {
+        return [
+          { id: 'in1', label: '1', dx: -2, dy: -1 },
+          { id: 'out1', label: '1\'', dx: 2, dy: -1 },
+          { id: 'in2', label: '2', dx: -2, dy: 1 },
+          { id: 'out2', label: '2\'', dx: 2, dy: 1 },
+        ];
+      }
+      return [
+        { id: 'in1', label: '1', dx: -2, dy: -2 },
+        { id: 'out1', label: '1\'', dx: 2, dy: -2 },
+        { id: 'in2', label: '2', dx: -2, dy: 0 },
+        { id: 'out2', label: '2\'', dx: 2, dy: 0 },
+        { id: 'in3', label: '3', dx: -2, dy: 2 },
+        { id: 'out3', label: '3\'', dx: 2, dy: 2 },
+      ];
+    },
+    symbol: CBSymbol,
+    propsSchema: [
+      {
+        key: 'poles',
+        label: 'Số cực',
+        kind: 'select',
+        options: [
+          { label: '1 cực (MCB-1P)', value: 1 },
+          { label: '2 cực (MCB-2P)', value: 2 },
+          { label: '3 cực (MCB-3P)', value: 3 },
+        ],
+        default: 1,
+      },
+      {
+        key: 'ratedCurrent',
+        label: 'Dòng định mức (In)',
+        kind: 'select',
+        options: [
+          { label: '6 A', value: 6 },
+          { label: '10 A', value: 10 },
+          { label: '16 A', value: 16 },
+          { label: '20 A', value: 20 },
+          { label: '32 A', value: 32 },
+          { label: '40 A', value: 40 },
+        ],
+        default: 16,
+      },
+      { key: 'state', label: 'Trạng thái đóng/ngắt', kind: 'bool', default: true },
+      { key: 'isTripped', label: 'Đã nhảy do sự cố', kind: 'bool', default: false },
+    ],
+    defaultProps: { poles: 1, ratedCurrent: 16, state: true, isTripped: false },
+  },
+  {
+    type: 'knife_switch',
+    nameVi: 'Cầu dao',
+    category: 'control',
+    refPrefix: 'CD',
+    width: 80,
+    height: 80,
+    pins: (props) => {
+      const poles = props.poles || 2;
+      return poles === 2
+        ? [
+            { id: 'in1', label: '1', dx: -1, dy: -2 },
+            { id: 'in2', label: '2', dx: 1, dy: -2 },
+            { id: 'out1', label: '1\'', dx: -1, dy: 2 },
+            { id: 'out2', label: '2\'', dx: 1, dy: 2 },
+          ]
+        : [
+            { id: 'in1', label: '1', dx: -2, dy: -2 },
+            { id: 'in2', label: '2', dx: 0, dy: -2 },
+            { id: 'in3', label: '3', dx: 2, dy: -2 },
+            { id: 'out1', label: '1\'', dx: -2, dy: 2 },
+            { id: 'out2', label: '2\'', dx: 0, dy: 2 },
+            { id: 'out3', label: '3\'', dx: 2, dy: 2 },
+          ];
+    },
+    symbol: KnifeSwitchSymbol,
+    propsSchema: [
+      {
+        key: 'poles',
+        label: 'Số cực',
+        kind: 'select',
+        options: [
+          { label: '2 cực', value: 2 },
+          { label: '3 cực', value: 3 },
+        ],
+        default: 2,
+      },
+      { key: 'state', label: 'Đang đóng', kind: 'bool', default: true },
+    ],
+    defaultProps: { poles: 2, state: true },
+  },
+  {
+    type: 'fuse',
+    nameVi: 'Cầu chì',
+    category: 'protection',
+    refPrefix: 'F',
+    width: 80,
+    height: 60,
+    pins: (props) => {
+      const poles = props.poles || 1;
+      if (poles === 1) {
+        return [{ id: '1', label: '', dx: -2, dy: 0 }, { id: '2', label: '', dx: 2, dy: 0 }];
+      }
+      if (poles === 2) {
+        return [
+          { id: 'in1', label: '1', dx: -2, dy: -1 },
+          { id: 'out1', label: '1\'', dx: 2, dy: -1 },
+          { id: 'in2', label: '2', dx: -2, dy: 1 },
+          { id: 'out2', label: '2\'', dx: 2, dy: 1 },
+        ];
+      }
+      return [
+        { id: 'in1', label: '1', dx: -2, dy: -2 },
+        { id: 'out1', label: '1\'', dx: 2, dy: -2 },
+        { id: 'in2', label: '2', dx: -2, dy: 0 },
+        { id: 'out2', label: '2\'', dx: 2, dy: 0 },
+        { id: 'in3', label: '3', dx: -2, dy: 2 },
+        { id: 'out3', label: '3\'', dx: 2, dy: 2 },
+      ];
+    },
+    symbol: FuseSymbol,
+    propsSchema: [
+      {
+        key: 'poles',
+        label: 'Số cực',
+        kind: 'select',
+        options: [
+          { label: '1 cực', value: 1 },
+          { label: '2 cực', value: 2 },
+          { label: '3 cực', value: 3 },
+        ],
+        default: 1,
+      },
+      {
+        key: 'ratedCurrent',
+        label: 'Dòng định mức',
+        kind: 'select',
+        options: [
+          { label: '2 A', value: 2 },
+          { label: '5 A', value: 5 },
+          { label: '10 A', value: 10 },
+          { label: '16 A', value: 16 },
+        ],
+        default: 10,
+      },
+      { key: 'isBlown', label: 'Đã đứt (cháy)', kind: 'bool', default: false },
+    ],
+    defaultProps: { poles: 1, ratedCurrent: 10, isBlown: false },
+  },
+  {
+    type: 'switch_2p',
+    nameVi: 'Công tắc hai cực',
+    category: 'control',
+    refPrefix: 'CT',
+    width: 80,
+    height: 40,
+    pins: [
+      { id: '1', label: '', dx: -2, dy: 0 },
+      { id: '2', label: '', dx: 2, dy: 0 },
+    ],
+    symbol: Switch2PSymbol,
+    propsSchema: [
+      { key: 'state', label: 'Đang đóng', kind: 'bool', default: false },
+    ],
+    defaultProps: { state: false },
+  },
+  {
+    type: 'switch_3p',
+    nameVi: 'Công tắc ba cực (cầu thang)',
+    category: 'control',
+    refPrefix: 'CT',
+    width: 80,
+    height: 60,
+    pins: [
+      { id: 'com', label: 'com', dx: -2, dy: 0 },
+      { id: 'a', label: '1', dx: 2, dy: -1 },
+      { id: 'b', label: '2', dx: 2, dy: 1 },
+    ],
+    symbol: Switch3PSymbol,
+    propsSchema: [
+      { key: 'state', label: 'Vị trí công tắc (1/2)', kind: 'bool', default: true },
+    ],
+    defaultProps: { state: true },
+  },
+  {
+    type: 'lamp',
+    nameVi: 'Bóng đèn',
+    category: 'load',
+    refPrefix: 'Đ',
+    width: 80,
+    height: 60,
+    pins: [
+      { id: '1', label: '', dx: -2, dy: 0 },
+      { id: '2', label: '', dx: 2, dy: 0 },
+    ],
+    symbol: LampSymbol,
+    propsSchema: [
+      {
+        key: 'lampType',
+        label: 'Loại bóng',
+        kind: 'select',
+        options: [
+          { label: 'Sợi đốt', value: 'incandescent' },
+          { label: 'LED dân dụng', value: 'led' },
+          { label: 'Compact', value: 'compact' },
+        ],
+        default: 'incandescent',
+      },
+      { key: 'power', label: 'Công suất bóng', kind: 'number', min: 5, max: 200, step: 5, unit: 'W', default: 60 },
+    ],
+    defaultProps: { lampType: 'incandescent', power: 60 },
+  },
+  {
+    type: 'lamp_fluorescent',
+    nameVi: 'Đèn huỳnh quang',
+    category: 'load',
+    refPrefix: 'ĐHQ',
+    width: 120,
+    height: 40,
+    pins: [
+      { id: '1', label: '', dx: -3, dy: 0 },
+      { id: '2', label: '', dx: 3, dy: 0 },
+    ],
+    symbol: FluorescentLampSymbol,
+    propsSchema: [
+      { key: 'power', label: 'Công suất đèn', kind: 'number', min: 18, max: 72, step: 18, unit: 'W', default: 36 },
+    ],
+    defaultProps: { power: 36 },
+  },
+  {
+    type: 'ceiling_fan',
+    nameVi: 'Quạt trần',
+    category: 'load',
+    refPrefix: 'QT',
+    width: 80,
+    height: 60,
+    pins: [
+      { id: 'A', label: 'A', dx: -2, dy: 0, polarity: 'A' },
+      { id: 'O', label: 'O', dx: 2, dy: 0, polarity: 'O' },
+    ],
+    symbol: CeilingFanSymbol,
+    propsSchema: [
+      { key: 'power', label: 'Công suất quạt', kind: 'number', min: 40, max: 150, step: 5, unit: 'W', default: 75 },
+    ],
+    defaultProps: { power: 75 },
+  },
+  {
+    type: 'electric_bell',
+    nameVi: 'Chuông điện',
+    category: 'load',
+    refPrefix: 'CH',
+    width: 60,
+    height: 60,
+    pins: [
+      { id: '1', label: '', dx: -1, dy: 2 },
+      { id: '2', label: '', dx: 1, dy: 2 },
+    ],
+    symbol: ElectricBellSymbol,
+    propsSchema: [
+      { key: 'voltage', label: 'Điện áp làm việc', kind: 'number', min: 12, max: 220, step: 12, unit: 'V', default: 220 },
+    ],
+    defaultProps: { voltage: 220 },
+  },
+  {
+    type: 'socket',
+    nameVi: 'Ổ cắm điện',
+    category: 'connector',
+    refPrefix: 'OC',
+    width: 80,
+    height: 60,
+    pins: [
+      { id: 'A', label: 'A', dx: -2, dy: 0 },
+      { id: 'O', label: 'O', dx: 2, dy: 0 },
+    ],
+    symbol: SocketSymbol,
+    propsSchema: [],
+    defaultProps: {},
+  },
+  {
+    type: 'kwh_meter',
+    nameVi: 'Công tơ điện',
+    category: 'meter',
+    refPrefix: 'CT',
+    width: 80,
+    height: 60,
+    pins: [
+      { id: '1', label: '1', dx: -2, dy: -1 },
+      { id: '2', label: '2', dx: 2, dy: -1 },
+      { id: '3', label: '3', dx: -2, dy: 1 },
+      { id: '4', label: '4', dx: 2, dy: 1 },
+    ],
+    symbol: KWhMeterSymbol,
+    propsSchema: [
+      { key: 'kwh', label: 'Điện năng tích lũy', kind: 'number', min: 0, max: 9999, step: 0.1, unit: 'kWh', default: 0 },
+    ],
+    defaultProps: { kwh: 0 },
+  },
+  {
+    type: 'appliance_generic',
+    nameVi: 'Thiết bị điện khác',
+    category: 'load',
+    refPrefix: 'TB',
+    width: 80,
+    height: 60,
+    pins: [
+      { id: 'A', label: 'A', dx: -2, dy: -1 },
+      { id: 'O', label: 'O', dx: -2, dy: 1 },
+    ],
+    symbol: GenericApplianceSymbol,
+    propsSchema: [
+      {
+        key: 'applianceType',
+        label: 'Loại thiết bị',
+        kind: 'select',
+        options: [
+          { label: 'Điều hòa nhiệt độ (1200 W)', value: 'ac' },
+          { label: 'Bếp điện từ (1500 W)', value: 'cooker' },
+          { label: 'Tủ lạnh (150 W)', value: 'fridge' },
+          { label: 'Nồi cơm điện (700 W)', value: 'cooker_rice' },
+          { label: 'Bình nóng lạnh (2500 W)', value: 'water_heater' },
+        ],
+        default: 'ac',
+      },
+      { key: 'power', label: 'Công suất định mức', kind: 'number', min: 50, max: 3500, step: 50, unit: 'W', default: 1200 },
+      { key: 'leakageChassis', label: 'Sự cố: Rò điện ra vỏ (10 Ω)', kind: 'bool', default: false },
+      { key: 'humanContact', label: 'Có người chạm vào vỏ (1 kΩ)', kind: 'bool', default: false },
+    ],
+    defaultProps: { applianceType: 'ac', power: 1200, leakageChassis: false, humanContact: false },
+  },
+
+  // =================== WORKSPACE: MẠCH ĐIỆN TỬ CƠ BẢN ===================
+  {
+    type: 'vcc',
+    nameVi: 'Dương nguồn VCC',
+    category: 'source',
+    refPrefix: 'VCC',
+    width: 40,
+    height: 40,
+    pins: [{ id: 'vcc', label: '', dx: 0, dy: 1, polarity: '+' }],
+    symbol: VCCSymbol,
+    propsSchema: [
+      { key: 'voltage', label: 'Điện áp cấp (V)', kind: 'number', min: 1.5, max: 24, step: 0.5, unit: 'V', default: 5 },
+    ],
+    defaultProps: { voltage: 5 },
+  },
+  {
+    type: 'dc_source',
+    nameVi: 'Nguồn một chiều DC',
+    category: 'source',
+    refPrefix: 'V',
+    width: 60,
+    height: 80,
+    pins: [
+      { id: 'pos', label: '+', dx: 0, dy: -2, polarity: '+' },
+      { id: 'neg', label: '−', dx: 0, dy: 2, polarity: '-' },
+    ],
+    symbol: DCSourceSymbol,
+    propsSchema: [
+      { key: 'voltage', label: 'Điện áp DC', kind: 'number', min: 1.5, max: 24, step: 0.5, unit: 'V', default: 9 },
+    ],
+    defaultProps: { voltage: 9 },
+  },
+  {
+    type: 'gnd',
+    nameVi: 'Nối đất 0 V (GND)',
+    category: 'connector',
+    refPrefix: 'GND',
+    width: 40,
+    height: 40,
+    pins: [{ id: 'gnd', label: '', dx: 0, dy: -1 }],
+    symbol: GroundSymbol,
+    propsSchema: [],
+    defaultProps: {},
+  },
+  {
+    type: 'resistor',
+    nameVi: 'Điện trở TCVN/IEC',
+    category: 'passive',
+    refPrefix: 'R',
+    width: 80,
+    height: 40,
+    pins: [
+      { id: '1', label: '', dx: -2, dy: 0 },
+      { id: '2', label: '', dx: 2, dy: 0 },
+    ],
+    symbol: ResistorSymbol,
+    propsSchema: [
+      { key: 'resistance', label: 'Trị số điện trở (E12)', kind: 'number', min: 1, max: 10000000, step: 10, unit: 'Ω', default: 1000 },
+      {
+        key: 'powerRating',
+        label: 'Công suất định mức',
+        kind: 'select',
+        options: [
+          { label: '0.125 W', value: 0.125 },
+          { label: '0.25 W (tiêu chuẩn)', value: 0.25 },
+          { label: '0.5 W', value: 0.5 },
+          { label: '1 W', value: 1.0 },
+          { label: '2 W', value: 2.0 },
+        ],
+        default: 0.25,
+      },
+    ],
+    defaultProps: { resistance: 1000, powerRating: 0.25 },
+  },
+  {
+    type: 'potentiometer',
+    nameVi: 'Biến trở',
+    category: 'passive',
+    refPrefix: 'VR',
+    width: 80,
+    height: 60,
+    pins: [
+      { id: '1', label: '1', dx: -2, dy: 0 },
+      { id: '2', label: 'W', dx: 0, dy: 2 },
+      { id: '3', label: '3', dx: 2, dy: 0 },
+    ],
+    symbol: PotentiometerSymbol,
+    propsSchema: [
+      { key: 'resistance', label: 'Điện trở toàn phần', kind: 'number', min: 100, max: 1000000, step: 100, unit: 'Ω', default: 10000 },
+      { key: 'ratio', label: 'Tỉ lệ con chạy (0–100%)', kind: 'number', min: 0, max: 100, step: 1, unit: '%', default: 50 },
+    ],
+    defaultProps: { resistance: 10000, ratio: 50 },
+  },
+  {
+    type: 'capacitor_ceramic',
+    nameVi: 'Tụ điện không phân cực',
+    category: 'passive',
+    refPrefix: 'C',
+    width: 80,
+    height: 40,
+    pins: [
+      { id: '1', label: '', dx: -2, dy: 0 },
+      { id: '2', label: '', dx: 2, dy: 0 },
+    ],
+    symbol: CapacitorCeramicSymbol,
+    propsSchema: [
+      { key: 'capacitance', label: 'Điện dung (nF)', kind: 'number', min: 0.1, max: 1000, step: 1, unit: 'nF', default: 100 },
+      { key: 'ratedVoltage', label: 'Điện áp giới hạn', kind: 'number', min: 10, max: 100, step: 10, unit: 'V', default: 50 },
+    ],
+    defaultProps: { capacitance: 100, ratedVoltage: 50 },
+  },
+  {
+    type: 'capacitor_electrolytic',
+    nameVi: 'Tụ hóa (có cực)',
+    category: 'passive',
+    refPrefix: 'C',
+    width: 80,
+    height: 40,
+    pins: [
+      { id: 'pos', label: '+', dx: -2, dy: 0, polarity: '+' },
+      { id: 'neg', label: '−', dx: 2, dy: 0, polarity: '-' },
+    ],
+    symbol: CapacitorElectrolyticSymbol,
+    propsSchema: [
+      { key: 'capacitance', label: 'Điện dung (µF)', kind: 'number', min: 1, max: 4700, step: 10, unit: 'µF', default: 100 },
+      { key: 'ratedVoltage', label: 'Điện áp định mức', kind: 'select', options: [{ label: '16 V', value: 16 }, { label: '25 V', value: 25 }, { label: '50 V', value: 50 }], default: 16 },
+    ],
+    defaultProps: { capacitance: 100, ratedVoltage: 16 },
+  },
+  {
+    type: 'diode',
+    nameVi: 'Diode tiếp mặt',
+    category: 'semiconductor',
+    refPrefix: 'D',
+    width: 80,
+    height: 40,
+    pins: [
+      { id: 'A', label: 'A', dx: -2, dy: 0, polarity: '+' },
+      { id: 'K', label: 'K', dx: 2, dy: 0, polarity: '-' },
+    ],
+    symbol: DiodeSymbol,
+    propsSchema: [
+      { key: 'model', label: 'Mã linh kiện', kind: 'text', default: '1N4007' },
+    ],
+    defaultProps: { model: '1N4007' },
+  },
+  {
+    // UNIFIED SINGLE LED (TCVN)
+    type: 'led',
+    nameVi: 'LED (Điot phát quang)',
+    category: 'semiconductor',
+    refPrefix: 'LED',
+    width: 80,
+    height: 40,
+    pins: [
+      { id: 'A', label: 'A', dx: -2, dy: 0, polarity: '+' },
+      { id: 'K', label: 'K', dx: 2, dy: 0, polarity: '-' },
+    ],
+    symbol: LEDSymbol,
+    propsSchema: [
+      {
+        key: 'color',
+        label: 'Màu phát quang',
+        kind: 'select',
+        options: [
+          { label: 'Đỏ (2.0 V)', value: 'red' },
+          { label: 'Vàng (2.1 V)', value: 'yellow' },
+          { label: 'Xanh lá (2.2 V)', value: 'green' },
+          { label: 'Xanh dương (3.0 V)', value: 'blue' },
+          { label: 'Trắng (3.0 V)', value: 'white' },
+          { label: 'Cam (2.0 V)', value: 'orange' },
+        ],
+        default: 'red',
+      },
+      { key: 'maxCurrent', label: 'Dòng cực đại (Imax)', kind: 'number', min: 20, max: 40, step: 5, unit: 'mA', default: 30 },
+    ],
+    defaultProps: { color: 'red', maxCurrent: 30 },
+  },
+  {
+    type: 'transistor_npn',
+    nameVi: 'Transistor NPN',
+    category: 'semiconductor',
+    refPrefix: 'Q',
+    width: 80,
+    height: 80,
+    pins: [
+      { id: 'B', label: 'B', dx: -2, dy: 0, polarity: 'B' },
+      { id: 'C', label: 'C', dx: 1, dy: -2, polarity: 'C' },
+      { id: 'E', label: 'E', dx: 1, dy: 2, polarity: 'E' },
+    ],
+    symbol: TransistorNPNSymbol,
+    propsSchema: [
+      { key: 'beta', label: 'Hệ số khuếch đại (β/hFE)', kind: 'number', min: 20, max: 500, step: 10, default: 100 },
+      { key: 'maxCurrent', label: 'Ic max', kind: 'number', min: 50, max: 500, step: 50, unit: 'mA', default: 150 },
+    ],
+    defaultProps: { beta: 100, maxCurrent: 150 },
+  },
+  {
+    type: 'transistor_pnp',
+    nameVi: 'Transistor PNP',
+    category: 'semiconductor',
+    refPrefix: 'Q',
+    width: 80,
+    height: 80,
+    pins: [
+      { id: 'B', label: 'B', dx: -2, dy: 0, polarity: 'B' },
+      { id: 'C', label: 'C', dx: 1, dy: 2, polarity: 'C' },
+      { id: 'E', label: 'E', dx: 1, dy: -2, polarity: 'E' },
+    ],
+    symbol: TransistorPNPSymbol,
+    propsSchema: [
+      { key: 'beta', label: 'Hệ số khuếch đại (β/hFE)', kind: 'number', min: 20, max: 500, step: 10, default: 100 },
+    ],
+    defaultProps: { beta: 100, maxCurrent: 150 },
+  },
+  {
+    type: 'push_button',
+    nameVi: 'Nút nhấn nhả',
+    category: 'control',
+    refPrefix: 'PB',
+    width: 80,
+    height: 40,
+    pins: [
+      { id: '1', label: '', dx: -2, dy: 0 },
+      { id: '2', label: '', dx: 2, dy: 0 },
+    ],
+    symbol: PushButtonSymbol,
+    propsSchema: [
+      { key: 'state', label: 'Đang nhấn', kind: 'bool', default: false },
+    ],
+    defaultProps: { state: false },
+  },
+  {
+    type: 'ammeter',
+    nameVi: 'Ampe kế',
+    category: 'meter',
+    refPrefix: 'A',
+    width: 80,
+    height: 60,
+    pins: [
+      { id: 'pos', label: '+', dx: -2, dy: 0, polarity: '+' },
+      { id: 'neg', label: '−', dx: 2, dy: 0, polarity: '-' },
+    ],
+    symbol: (props) => React.createElement(InstrumentSymbol, { ...props, meterKind: 'A' }),
+    propsSchema: [],
+    defaultProps: {},
+  },
+  {
+    type: 'voltmeter',
+    nameVi: 'Vôn kế',
+    category: 'meter',
+    refPrefix: 'V',
+    width: 80,
+    height: 60,
+    pins: [
+      { id: 'pos', label: '+', dx: -2, dy: 0, polarity: '+' },
+      { id: 'neg', label: '−', dx: 2, dy: 0, polarity: '-' },
+    ],
+    symbol: (props) => React.createElement(InstrumentSymbol, { ...props, meterKind: 'V' }),
+    propsSchema: [],
+    defaultProps: {},
+  },
+  {
+    type: 'wattmeter',
+    nameVi: 'Oát kế',
+    category: 'meter',
+    refPrefix: 'W',
+    width: 80,
+    height: 60,
+    pins: [
+      { id: 'pos', label: '+', dx: -2, dy: 0, polarity: '+' },
+      { id: 'neg', label: '−', dx: 2, dy: 0, polarity: '-' },
+    ],
+    symbol: (props) => React.createElement(InstrumentSymbol, { ...props, meterKind: 'W' }),
+    propsSchema: [],
+    defaultProps: {},
+  },
+  {
+    type: 'ohmmeter',
+    nameVi: 'Ôm kế',
+    category: 'meter',
+    refPrefix: 'Ω',
+    width: 80,
+    height: 60,
+    pins: [
+      { id: 'pos', label: '+', dx: -2, dy: 0, polarity: '+' },
+      { id: 'neg', label: '−', dx: 2, dy: 0, polarity: '-' },
+    ],
+    symbol: (props) => React.createElement(InstrumentSymbol, { ...props, meterKind: 'Ω' }),
+    propsSchema: [],
+    defaultProps: {},
+  },
+];
+
+export const COMPONENT_MAP = new Map<string, ComponentDef>(
+  COMPONENT_DEFINITIONS.map(def => [def.type, def])
+);
+
+export function getComponentDef(type: string): ComponentDef | undefined {
+  return COMPONENT_MAP.get(type);
+}

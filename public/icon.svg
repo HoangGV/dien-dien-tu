@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" fill="#4169E1" rx="0"/>
+  <!-- Neo-brutalist inner card -->
+  <rect x="40" y="40" width="432" height="432" fill="#FFFFFF" stroke="#000000" stroke-width="16" />
+  <!-- Circuit tracks -->
+  <path d="M96 256 H180 L220 180 L260 332 L300 256 H416" fill="none" stroke="#000000" stroke-width="20" stroke-linecap="square" stroke-linejoin="miter"/>
+  <!-- Connection terminals -->
+  <circle cx="96" cy="256" r="24" fill="#FFD84D" stroke="#000000" stroke-width="12"/>
+  <circle cx="416" cy="256" r="24" fill="#FFD84D" stroke="#000000" stroke-width="12"/>
+  <!-- Electric spark / lamp accent -->
+  <polygon points="260,80 230,170 280,170 240,240 310,150 260,150" fill="#FFD84D" stroke="#000000" stroke-width="8"/>
+</svg>
