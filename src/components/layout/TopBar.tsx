@@ -246,7 +246,7 @@ export const TopBar: React.FC<TopBarProps> = ({ svgRef }) => {
             className="!h-[26px] !px-2"
             title="Mô phỏng dòng điện và linh kiện (Sẽ kích hoạt ở giai đoạn C)"
           >
-            ▶ CHẠY
+            CHẠY
           </NeoButton>
 
           {/* STOP */}
@@ -258,7 +258,7 @@ export const TopBar: React.FC<TopBarProps> = ({ svgRef }) => {
             className="!h-[26px] !px-1.5"
             title="Dừng mô phỏng"
           >
-            ■ DỪNG
+            DỪNG
           </NeoButton>
 
           {/* UNDO */}
@@ -270,7 +270,7 @@ export const TopBar: React.FC<TopBarProps> = ({ svgRef }) => {
             className="!h-[26px] !px-1.5"
             title="Hoàn tác (Ctrl+Z)"
           >
-            {!isUltraNarrow ? '↶ HOÀN TÁC' : ''}
+            {!isUltraNarrow ? 'HOÀN TÁC' : ''}
           </NeoButton>
 
           {/* REDO */}
@@ -282,7 +282,7 @@ export const TopBar: React.FC<TopBarProps> = ({ svgRef }) => {
             className="!h-[26px] !px-1.5"
             title="Làm lại (Ctrl+Y)"
           >
-            {!isUltraNarrow ? '↷ LÀM LẠI' : ''}
+            {!isUltraNarrow ? 'LÀM LẠI' : ''}
           </NeoButton>
         </div>
 

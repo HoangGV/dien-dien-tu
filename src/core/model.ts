@@ -58,7 +58,7 @@ export interface SymbolProps {
 export interface ComponentDef {
   type: string;
   nameVi: string;
-  category: 'source' | 'protection' | 'control' | 'load' | 'semiconductor' | 'passive' | 'meter' | 'connector';
+  category: 'source' | 'protection' | 'control' | 'load' | 'semiconductor' | 'passive' | 'meter' | 'connector' | 'annotation';
   pins: PinDef[] | ((props: Record<string, any>) => PinDef[]);
   symbol: React.ComponentType<SymbolProps>;
   propsSchema: PropSchemaItem[];

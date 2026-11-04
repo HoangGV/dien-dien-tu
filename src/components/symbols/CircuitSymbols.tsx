@@ -1,15 +1,77 @@
 import React from 'react';
 import { SymbolProps, PinDef } from '../../core/model';
 
-// Pin dot renderer
+// Text component that counter-transforms so text glyphs are ALWAYS upright & unmirrored
+export const UprightText: React.FC<{
+  x: number;
+  y: number;
+  rot?: number;
+  flip?: boolean;
+  flipY?: boolean;
+  children: React.ReactNode;
+  fontSize?: number | string;
+  fontWeight?: string | number;
+  fill?: string;
+  textAnchor?: 'start' | 'middle' | 'end';
+  dominantBaseline?: 'auto' | 'central' | 'middle' | 'hanging';
+  className?: string;
+}> = ({
+  x,
+  y,
+  rot = 0,
+  flip = false,
+  flipY = false,
+  children,
+  fontSize = 11,
+  fontWeight = 'bold',
+  fill = '#000000',
+  textAnchor = 'middle',
+  dominantBaseline = 'central',
+  className = '',
+}) => {
+  const flipX = flip ? -1 : 1;
+  const flipYVal = flipY ? -1 : 1;
+  return (
+    <g
+      transform={`translate(${x}, ${y}) scale(${flipX}, ${flipYVal}) rotate(${-rot})`}
+      pointerEvents="none"
+      className="select-none"
+    >
+      <text
+        x={0}
+        y={0}
+        textAnchor={textAnchor}
+        dominantBaseline={dominantBaseline}
+        fontSize={fontSize}
+        fontWeight={fontWeight}
+        fill={fill}
+        className={className}
+      >
+        {children}
+      </text>
+    </g>
+  );
+};
+
+// Pin dot renderer: pin position rotates/flips with component, but pin label remains upright & unmirrored
 export const PinDot: React.FC<{
   pin: PinDef;
+  rot?: number;
+  flip?: boolean;
+  flipY?: boolean;
   onPointerDown?: (pinId: string, e: React.PointerEvent) => void;
   onHover?: (pinId: string | null) => void;
   isHovered?: boolean;
-}> = ({ pin, onPointerDown, onHover, isHovered }) => {
+}> = ({ pin, rot = 0, flip = false, flipY = false, onPointerDown, onHover, isHovered }) => {
   const cx = pin.dx * 20;
   const cy = pin.dy * 20;
+  const flipX = flip ? -1 : 1;
+  const flipYVal = flipY ? -1 : 1;
+
+  // Calculate world vertical orientation relative to component center
+  const rad = (rot * Math.PI) / 180;
+  const worldDy = Math.sin(rad) * (cx * flipX) + Math.cos(rad) * (cy * flipYVal);
+  const textOffset = Math.abs(worldDy) < 5 ? -9 : worldDy > 0 ? 11 : -11;
 
   return (
     <g
@@ -31,24 +93,29 @@ export const PinDot: React.FC<{
         strokeWidth={isHovered ? 2.5 : 2}
       />
       {pin.label && (
-        <text
-          x={cx}
-          y={cy > 0 ? cy + 12 : cy - 6}
-          textAnchor="middle"
-          fontSize="9"
-          fontWeight="800"
-          fill="#333333"
+        <g
+          transform={`translate(${cx}, ${cy}) scale(${flipX}, ${flipYVal}) rotate(${-rot})`}
           pointerEvents="none"
         >
-          {pin.label}
-        </text>
+          <text
+            x={0}
+            y={textOffset}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fontSize="9"
+            fontWeight="800"
+            fill="#222222"
+          >
+            {pin.label}
+          </text>
+        </g>
       )}
     </g>
   );
 };
 
-// Label renderer that counter-rotates so text is ALWAYS horizontal
-// Displays ONLY the component reference symbol (e.g. Q1, R1, MCB, Đ1) without distracting verbose value labels
+// Label renderer that counter-transforms so text is ALWAYS horizontal and upright
+// Displays the component reference symbol (e.g. Q1, R1, MCB, Đ1)
 export const SymbolLabels: React.FC<{
   label: string;
   valueStr?: string;
@@ -58,14 +125,20 @@ export const SymbolLabels: React.FC<{
   yOffset?: number;
 }> = ({ label, rot = 0, flip = false, flipY = false, yOffset = -22 }) => {
   if (!label) return null;
-  const counterTransform = `scale(${flip ? -1 : 1}, ${flipY ? -1 : 1}) rotate(${-rot})`;
+  const flipX = flip ? -1 : 1;
+  const flipYVal = flipY ? -1 : 1;
 
   return (
-    <g transform={counterTransform} pointerEvents="none" className="select-none">
+    <g
+      transform={`translate(0, ${yOffset}) scale(${flipX}, ${flipYVal}) rotate(${-rot})`}
+      pointerEvents="none"
+      className="select-none"
+    >
       <text
         x={0}
-        y={yOffset}
+        y={0}
         textAnchor="middle"
+        dominantBaseline="central"
         fontSize="11"
         fontWeight="900"
         fill="#000000"
@@ -99,20 +172,47 @@ export const ACSourceSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, 
 
       {/* Point O (Trung tính - N) */}
       <circle cx={-4} cy={-20} r={4.5} fill="#000000" />
-      <text x={-12} y={-16} textAnchor="end" fontSize="12" fontWeight="900" fill="#4169E1">
+      <UprightText
+        x={-14}
+        y={-20}
+        rot={comp.rot}
+        flip={comp.flip}
+        flipY={comp.flipY}
+        fontSize={12}
+        fontWeight={900}
+        fill="#4169E1"
+      >
         O
-      </text>
+      </UprightText>
       <line x1={-4} y1={-20} x2={40} y2={-20} stroke="#000000" strokeWidth={2} />
 
       {/* Point A (Pha - L) */}
       <circle cx={-4} cy={20} r={4.5} fill="#E5322D" />
-      <text x={-12} y={24} textAnchor="end" fontSize="12" fontWeight="900" fill="#E5322D">
+      <UprightText
+        x={-14}
+        y={20}
+        rot={comp.rot}
+        flip={comp.flip}
+        flipY={comp.flipY}
+        fontSize={12}
+        fontWeight={900}
+        fill="#E5322D"
+      >
         A
-      </text>
+      </UprightText>
       <line x1={-4} y1={20} x2={40} y2={20} stroke="#000000" strokeWidth={2} />
 
       {pins.map(p => (
-        <PinDot key={p.id} pin={p} onPointerDown={onPinPointerDown} onHover={onPinHover} isHovered={hoveredPinId === p.id} />
+        <PinDot
+          key={p.id}
+          pin={p}
+          rot={comp.rot}
+          flip={comp.flip}
+          flipY={comp.flipY}
+          onPointerDown={onPinPointerDown}
+          onHover={onPinHover}
+          isHovered={hoveredPinId === p.id}
+        />
       ))}
       <SymbolLabels label={comp.label} rot={comp.rot} flip={comp.flip} flipY={comp.flipY} yOffset={-36} />
     </g>
@@ -211,7 +311,16 @@ export const CBSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPinH
       )}
 
       {pins.map(p => (
-        <PinDot key={p.id} pin={p} onPointerDown={onPinPointerDown} onHover={onPinHover} isHovered={hoveredPinId === p.id} />
+        <PinDot
+          key={p.id}
+          pin={p}
+          rot={comp.rot}
+          flip={comp.flip}
+          flipY={comp.flipY}
+          onPointerDown={onPinPointerDown}
+          onHover={onPinHover}
+          isHovered={hoveredPinId === p.id}
+        />
       ))}
       <SymbolLabels
         label={comp.label}
@@ -286,7 +395,16 @@ export const KnifeSwitchSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDow
       />
 
       {pins.map(p => (
-        <PinDot key={p.id} pin={p} onPointerDown={onPinPointerDown} onHover={onPinHover} isHovered={hoveredPinId === p.id} />
+        <PinDot
+          key={p.id}
+          pin={p}
+          rot={comp.rot}
+          flip={comp.flip}
+          flipY={comp.flipY}
+          onPointerDown={onPinPointerDown}
+          onHover={onPinHover}
+          isHovered={hoveredPinId === p.id}
+        />
       ))}
       <SymbolLabels label={comp.label} rot={comp.rot} flip={comp.flip} flipY={comp.flipY} yOffset={-46} />
     </g>
@@ -348,7 +466,16 @@ export const FuseSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPi
       )}
 
       {pins.map(p => (
-        <PinDot key={p.id} pin={p} onPointerDown={onPinPointerDown} onHover={onPinHover} isHovered={hoveredPinId === p.id} />
+        <PinDot
+          key={p.id}
+          pin={p}
+          rot={comp.rot}
+          flip={comp.flip}
+          flipY={comp.flipY}
+          onPointerDown={onPinPointerDown}
+          onHover={onPinHover}
+          isHovered={hoveredPinId === p.id}
+        />
       ))}
       <SymbolLabels
         label={comp.label}
@@ -385,7 +512,16 @@ export const Switch2PSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, 
       )}
 
       {pins.map(p => (
-        <PinDot key={p.id} pin={p} onPointerDown={onPinPointerDown} onHover={onPinHover} isHovered={hoveredPinId === p.id} />
+        <PinDot
+          key={p.id}
+          pin={p}
+          rot={comp.rot}
+          flip={comp.flip}
+          flipY={comp.flipY}
+          onPointerDown={onPinPointerDown}
+          onHover={onPinHover}
+          isHovered={hoveredPinId === p.id}
+        />
       ))}
       <SymbolLabels label={comp.label} valueStr={isClosed ? 'ĐÓNG' : 'MỞ'} rot={comp.rot} flip={comp.flip} flipY={comp.flipY} yOffset={-24} />
     </g>
@@ -419,7 +555,16 @@ export const Switch3PSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, 
       )}
 
       {pins.map(p => (
-        <PinDot key={p.id} pin={p} onPointerDown={onPinPointerDown} onHover={onPinHover} isHovered={hoveredPinId === p.id} />
+        <PinDot
+          key={p.id}
+          pin={p}
+          rot={comp.rot}
+          flip={comp.flip}
+          flipY={comp.flipY}
+          onPointerDown={onPinPointerDown}
+          onHover={onPinHover}
+          isHovered={hoveredPinId === p.id}
+        />
       ))}
       <SymbolLabels label={comp.label} valueStr="3 CỰC" rot={comp.rot} flip={comp.flip} flipY={comp.flipY} yOffset={-26} />
     </g>
@@ -454,7 +599,16 @@ export const LampSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPi
       <line x1={18} y1={0} x2={40} y2={0} stroke="#000" strokeWidth={2} />
 
       {pins.map(p => (
-        <PinDot key={p.id} pin={p} onPointerDown={onPinPointerDown} onHover={onPinHover} isHovered={hoveredPinId === p.id} />
+        <PinDot
+          key={p.id}
+          pin={p}
+          rot={comp.rot}
+          flip={comp.flip}
+          flipY={comp.flipY}
+          onPointerDown={onPinPointerDown}
+          onHover={onPinHover}
+          isHovered={hoveredPinId === p.id}
+        />
       ))}
       <SymbolLabels label={comp.label} rot={comp.rot} flip={comp.flip} flipY={comp.flipY} yOffset={-24} />
     </g>
@@ -491,7 +645,16 @@ export const FluorescentLampSymbol: React.FC<SymbolProps> = ({ comp, onPinPointe
       <line x1={40} y1={0} x2={60} y2={0} stroke="#000" strokeWidth={2} />
 
       {pins.map(p => (
-        <PinDot key={p.id} pin={p} onPointerDown={onPinPointerDown} onHover={onPinHover} isHovered={hoveredPinId === p.id} />
+        <PinDot
+          key={p.id}
+          pin={p}
+          rot={comp.rot}
+          flip={comp.flip}
+          flipY={comp.flipY}
+          onPointerDown={onPinPointerDown}
+          onHover={onPinHover}
+          isHovered={hoveredPinId === p.id}
+        />
       ))}
       <SymbolLabels label={comp.label} rot={comp.rot} flip={comp.flip} flipY={comp.flipY} yOffset={-16} />
     </g>
@@ -537,7 +700,16 @@ export const CeilingFanSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown
       <line x1={30} y1={0} x2={40} y2={0} stroke="#000" strokeWidth={2} />
 
       {pins.map(p => (
-        <PinDot key={p.id} pin={p} onPointerDown={onPinPointerDown} onHover={onPinHover} isHovered={hoveredPinId === p.id} />
+        <PinDot
+          key={p.id}
+          pin={p}
+          rot={comp.rot}
+          flip={comp.flip}
+          flipY={comp.flipY}
+          onPointerDown={onPinPointerDown}
+          onHover={onPinHover}
+          isHovered={hoveredPinId === p.id}
+        />
       ))}
       <SymbolLabels label={comp.label} rot={comp.rot} flip={comp.flip} flipY={comp.flipY} yOffset={-18} />
     </g>
@@ -563,19 +735,27 @@ export const ElectricBellSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDo
       <line x1={20} y1={10} x2={20} y2={40} stroke="#000" strokeWidth={2} />
 
       {pins.map(p => (
-        <PinDot key={p.id} pin={p} onPointerDown={onPinPointerDown} onHover={onPinHover} isHovered={hoveredPinId === p.id} />
+        <PinDot
+          key={p.id}
+          pin={p}
+          rot={comp.rot}
+          flip={comp.flip}
+          flipY={comp.flipY}
+          onPointerDown={onPinPointerDown}
+          onHover={onPinHover}
+          isHovered={hoveredPinId === p.id}
+        />
       ))}
       <SymbolLabels label={comp.label} valueStr="Chuông 220V" rot={comp.rot} flip={comp.flip} flipY={comp.flipY} yOffset={-20} />
     </g>
   );
 };
 
-// 11. Ổ LẤY ĐIỆN (Ổ CẮM - TCVN & SGK: Vòng tròn có 2 lỗ cắm)
+// 11. Ổ LẤY ĐIỆN (Ổ CẮM - TCVN & SGK: Vòng tròn có 2 lỗ cắm, KHÔNG CÓ PE)
 export const SocketSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPinHover, hoveredPinId }) => {
   const pins: PinDef[] = [
     { id: 'A', label: 'A', dx: -2, dy: 0 },
     { id: 'O', label: 'O', dx: 2, dy: 0 },
-    { id: 'PE', label: 'PE', dx: 0, dy: 2 },
   ];
 
   return (
@@ -586,10 +766,18 @@ export const SocketSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, on
 
       <line x1={-40} y1={0} x2={-18} y2={0} stroke="#000" strokeWidth={2} />
       <line x1={18} y1={0} x2={40} y2={0} stroke="#000" strokeWidth={2} />
-      <line x1={0} y1={18} x2={0} y2={40} stroke="#000" strokeWidth={2} />
 
       {pins.map(p => (
-        <PinDot key={p.id} pin={p} onPointerDown={onPinPointerDown} onHover={onPinHover} isHovered={hoveredPinId === p.id} />
+        <PinDot
+          key={p.id}
+          pin={p}
+          rot={comp.rot}
+          flip={comp.flip}
+          flipY={comp.flipY}
+          onPointerDown={onPinPointerDown}
+          onHover={onPinHover}
+          isHovered={hoveredPinId === p.id}
+        />
       ))}
       <SymbolLabels label={comp.label} valueStr="Ổ cắm" rot={comp.rot} flip={comp.flip} flipY={comp.flipY} yOffset={-24} />
     </g>
@@ -608,9 +796,18 @@ export const KWhMeterSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, 
   return (
     <g>
       <rect x={-26} y={-18} width={52} height={36} fill="#FFFFFF" stroke="#000000" strokeWidth={2} />
-      <text x={0} y={5} textAnchor="middle" fontSize="13" fontWeight="900" fill="#000">
+      <UprightText
+        x={0}
+        y={0}
+        rot={comp.rot}
+        flip={comp.flip}
+        flipY={comp.flipY}
+        fontSize={13}
+        fontWeight={900}
+        fill="#000"
+      >
         kWh
-      </text>
+      </UprightText>
 
       <line x1={-40} y1={-20} x2={-26} y2={-20} stroke="#000" strokeWidth={2} />
       <line x1={26} y1={-20} x2={40} y2={-20} stroke="#000" strokeWidth={2} />
@@ -618,7 +815,16 @@ export const KWhMeterSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, 
       <line x1={26} y1={20} x2={40} y2={20} stroke="#000" strokeWidth={2} />
 
       {pins.map(p => (
-        <PinDot key={p.id} pin={p} onPointerDown={onPinPointerDown} onHover={onPinHover} isHovered={hoveredPinId === p.id} />
+        <PinDot
+          key={p.id}
+          pin={p}
+          rot={comp.rot}
+          flip={comp.flip}
+          flipY={comp.flipY}
+          onPointerDown={onPinPointerDown}
+          onHover={onPinHover}
+          isHovered={hoveredPinId === p.id}
+        />
       ))}
       <SymbolLabels label={comp.label} rot={comp.rot} flip={comp.flip} flipY={comp.flipY} yOffset={-24} />
     </g>
@@ -641,14 +847,32 @@ export const InstrumentSymbol: React.FC<SymbolProps & { meterKind: 'A' | 'V' | '
   return (
     <g>
       <circle cx={0} cy={0} r={18} fill="#FFFFFF" stroke="#000000" strokeWidth={2} />
-      <text x={0} y={6} textAnchor="middle" fontSize="16" fontWeight="900" fill="#4169E1">
+      <UprightText
+        x={0}
+        y={0}
+        rot={comp.rot}
+        flip={comp.flip}
+        flipY={comp.flipY}
+        fontSize={16}
+        fontWeight={900}
+        fill="#4169E1"
+      >
         {meterKind}
-      </text>
+      </UprightText>
       <line x1={-40} y1={0} x2={-18} y2={0} stroke="#000" strokeWidth={2} />
       <line x1={18} y1={0} x2={40} y2={0} stroke="#000" strokeWidth={2} />
 
       {pins.map(p => (
-        <PinDot key={p.id} pin={p} onPointerDown={onPinPointerDown} onHover={onPinHover} isHovered={hoveredPinId === p.id} />
+        <PinDot
+          key={p.id}
+          pin={p}
+          rot={comp.rot}
+          flip={comp.flip}
+          flipY={comp.flipY}
+          onPointerDown={onPinPointerDown}
+          onHover={onPinHover}
+          isHovered={hoveredPinId === p.id}
+        />
       ))}
       <SymbolLabels label={comp.label} rot={comp.rot} flip={comp.flip} flipY={comp.flipY} yOffset={-24} />
     </g>
@@ -662,19 +886,39 @@ export const GenericApplianceSymbol: React.FC<SymbolProps> = ({ comp, onPinPoint
     { id: 'O', label: 'O', dx: -2, dy: 1 },
   ];
 
+  const appLabel = comp.props.applianceType === 'ac' ? 'ĐH' : comp.props.applianceType === 'cooker' ? 'BẾP' : 'M';
+
   return (
     <g>
       <rect x={-26} y={-24} width={52} height={48} fill="#FFFFFF" stroke="#000000" strokeWidth={2} />
       <circle cx={0} cy={0} r={14} fill="#EEF2FF" stroke="#000" strokeWidth={1.5} />
-      <text x={0} y={4} textAnchor="middle" fontSize="10" fontWeight="900" fill="#4169E1">
-        {comp.props.applianceType === 'ac' ? 'ĐH' : comp.props.applianceType === 'cooker' ? 'BẾP' : 'M'}
-      </text>
+      <UprightText
+        x={0}
+        y={0}
+        rot={comp.rot}
+        flip={comp.flip}
+        flipY={comp.flipY}
+        fontSize={10}
+        fontWeight={900}
+        fill="#4169E1"
+      >
+        {appLabel}
+      </UprightText>
 
       <line x1={-40} y1={-20} x2={-26} y2={-20} stroke="#000" strokeWidth={2} />
       <line x1={-40} y1={20} x2={-26} y2={20} stroke="#000" strokeWidth={2} />
 
       {pins.map(p => (
-        <PinDot key={p.id} pin={p} onPointerDown={onPinPointerDown} onHover={onPinHover} isHovered={hoveredPinId === p.id} />
+        <PinDot
+          key={p.id}
+          pin={p}
+          rot={comp.rot}
+          flip={comp.flip}
+          flipY={comp.flipY}
+          onPointerDown={onPinPointerDown}
+          onHover={onPinHover}
+          isHovered={hoveredPinId === p.id}
+        />
       ))}
       <SymbolLabels label={comp.label} rot={comp.rot} flip={comp.flip} flipY={comp.flipY} yOffset={-30} />
     </g>
@@ -712,7 +956,16 @@ export const LEDSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPin
       <polygon points="14,-18 10,-16 12,-12" fill="#000" />
 
       {pins.map(p => (
-        <PinDot key={p.id} pin={p} onPointerDown={onPinPointerDown} onHover={onPinHover} isHovered={hoveredPinId === p.id} />
+        <PinDot
+          key={p.id}
+          pin={p}
+          rot={comp.rot}
+          flip={comp.flip}
+          flipY={comp.flipY}
+          onPointerDown={onPinPointerDown}
+          onHover={onPinHover}
+          isHovered={hoveredPinId === p.id}
+        />
       ))}
       <SymbolLabels label={comp.label} valueStr={comp.damaged ? 'ĐÃ CHÁY' : `LED ${comp.props.color || 'đỏ'}`} rot={comp.rot} flip={comp.flip} flipY={comp.flipY} yOffset={-26} />
     </g>
@@ -733,7 +986,16 @@ export const ResistorSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, 
       <line x1={20} y1={0} x2={40} y2={0} stroke="#000" strokeWidth={2} />
 
       {pins.map(p => (
-        <PinDot key={p.id} pin={p} onPointerDown={onPinPointerDown} onHover={onPinHover} isHovered={hoveredPinId === p.id} />
+        <PinDot
+          key={p.id}
+          pin={p}
+          rot={comp.rot}
+          flip={comp.flip}
+          flipY={comp.flipY}
+          onPointerDown={onPinPointerDown}
+          onHover={onPinHover}
+          isHovered={hoveredPinId === p.id}
+        />
       ))}
       <SymbolLabels
         label={comp.label}
@@ -760,7 +1022,16 @@ export const DCSourceSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, 
       <line x1={0} y1={-8} x2={0} y2={-40} stroke="#000" strokeWidth={2} />
       <line x1={0} y1={8} x2={0} y2={40} stroke="#000" strokeWidth={2} />
       {pins.map(p => (
-        <PinDot key={p.id} pin={p} onPointerDown={onPinPointerDown} onHover={onPinHover} isHovered={hoveredPinId === p.id} />
+        <PinDot
+          key={p.id}
+          pin={p}
+          rot={comp.rot}
+          flip={comp.flip}
+          flipY={comp.flipY}
+          onPointerDown={onPinPointerDown}
+          onHover={onPinHover}
+          isHovered={hoveredPinId === p.id}
+        />
       ))}
       <SymbolLabels label={comp.label} valueStr={`${comp.props.voltage || 9}V DC`} rot={comp.rot} flip={comp.flip} flipY={comp.flipY} yOffset={-46} />
     </g>
@@ -776,7 +1047,16 @@ export const GroundSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, on
       <line x1={-10} y1={6} x2={10} y2={6} stroke="#000" strokeWidth={2.5} />
       <line x1={-4} y1={12} x2={4} y2={12} stroke="#000" strokeWidth={2.5} />
       {pins.map(p => (
-        <PinDot key={p.id} pin={p} onPointerDown={onPinPointerDown} onHover={onPinHover} isHovered={hoveredPinId === p.id} />
+        <PinDot
+          key={p.id}
+          pin={p}
+          rot={comp.rot}
+          flip={comp.flip}
+          flipY={comp.flipY}
+          onPointerDown={onPinPointerDown}
+          onHover={onPinHover}
+          isHovered={hoveredPinId === p.id}
+        />
       ))}
       <SymbolLabels label={comp.label || 'GND'} rot={comp.rot} flip={comp.flip} flipY={comp.flipY} yOffset={-26} />
     </g>
@@ -798,7 +1078,16 @@ export const PushButtonSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown
       <line x1={-18} y1={isPressed ? 0 : -8} x2={18} y2={isPressed ? 0 : -8} stroke="#000" strokeWidth={3} />
       <line x1={0} y1={isPressed ? 0 : -8} x2={0} y2={isPressed ? -10 : -18} stroke="#000" strokeWidth={2} />
       {pins.map(p => (
-        <PinDot key={p.id} pin={p} onPointerDown={onPinPointerDown} onHover={onPinHover} isHovered={hoveredPinId === p.id} />
+        <PinDot
+          key={p.id}
+          pin={p}
+          rot={comp.rot}
+          flip={comp.flip}
+          flipY={comp.flipY}
+          onPointerDown={onPinPointerDown}
+          onHover={onPinHover}
+          isHovered={hoveredPinId === p.id}
+        />
       ))}
       <SymbolLabels label={comp.label} valueStr={isPressed ? 'ĐANG NHẤN' : 'NHẤN NHẢ'} rot={comp.rot} flip={comp.flip} flipY={comp.flipY} yOffset={-24} />
     </g>
@@ -814,13 +1103,126 @@ export const VCCSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPin
       <line x1={0} y1={20} x2={0} y2={-2} stroke="#000000" strokeWidth={2} />
       {/* Upward pointing triangle arrow */}
       <polygon points="0,-16 -7,-4 7,-4" fill="#E5322D" stroke="#000000" strokeWidth={1.5} />
-      <text x={0} y={-22} textAnchor="middle" fontSize="11" fontWeight="900" fill="#E5322D">
+      <UprightText
+        x={0}
+        y={-22}
+        rot={comp.rot}
+        flip={comp.flip}
+        flipY={comp.flipY}
+        fontSize={11}
+        fontWeight={900}
+        fill="#E5322D"
+      >
         {comp.props.voltage ? `+${comp.props.voltage}V` : '+VCC'}
-      </text>
+      </UprightText>
       {pins.map(p => (
-        <PinDot key={p.id} pin={p} onPointerDown={onPinPointerDown} onHover={onPinHover} isHovered={hoveredPinId === p.id} />
+        <PinDot
+          key={p.id}
+          pin={p}
+          rot={comp.rot}
+          flip={comp.flip}
+          flipY={comp.flipY}
+          onPointerDown={onPinPointerDown}
+          onHover={onPinHover}
+          isHovered={hoveredPinId === p.id}
+        />
       ))}
       <SymbolLabels label={comp.label || 'VCC'} rot={comp.rot} flip={comp.flip} flipY={comp.flipY} yOffset={14} />
+    </g>
+  );
+};
+
+// 19. KHUNG BAO VÙNG (ĐƯỜNG NÉT ĐỨT MẢNH - PHÂN CHIA VÙNG BÊN TRONG NHÀ / TỦ ĐIỆN)
+// Cả border và title đều có thể xoay, và khi lật không bị lộn chữ ngược
+export const BoundarySymbol: React.FC<SymbolProps> = ({ comp, isSelected }) => {
+  const w = comp.props.width || 240;
+  const h = comp.props.height || 160;
+  const title = comp.props.title || 'BÊN TRONG NHÀ';
+  const titlePos = comp.props.titlePos || 'top'; // 'top' | 'bottom' | 'none'
+  const titleY = titlePos === 'bottom' ? h / 2 + 14 : -h / 2 - 8;
+
+  return (
+    <g className="select-none">
+      {/* Dashed thin boundary rectangle enclosing the components */}
+      <rect
+        x={-w / 2}
+        y={-h / 2}
+        width={w}
+        height={h}
+        fill="rgba(65, 105, 225, 0.02)"
+        stroke="#000000"
+        strokeWidth={1.5}
+        strokeDasharray="6 4"
+        style={isSelected ? { stroke: '#4169E1', strokeWidth: 2 } : undefined}
+      />
+      {/* Boundary Title Text (keeps upright & readable) */}
+      {titlePos !== 'none' && title && (
+        <UprightText
+          x={0}
+          y={titleY}
+          rot={comp.rot}
+          flip={comp.flip}
+          flipY={comp.flipY}
+          fontSize={12}
+          fontWeight={900}
+          fill="#1E293B"
+        >
+          {title}
+        </UprightText>
+      )}
+    </g>
+  );
+};
+
+// 20. GHI CHÚ CHỮ (TEXT NOTE / TEXTBOX - XOAY ĐƯỢC, KHÔNG BỊ LẬT NGƯỢC CHỮ)
+export const TextBoxSymbol: React.FC<SymbolProps> = ({ comp, isSelected }) => {
+  const text = comp.props.text || 'Ghi chú...';
+  const fontSize = comp.props.fontSize || 13;
+  const showBorder = comp.props.showBorder ?? false;
+  const lines = text.split('\n');
+  const lineHeight = fontSize * 1.35;
+  const totalH = lines.length * lineHeight;
+  const maxLineLen = Math.max(...lines.map((l: string) => l.length), 4);
+  const approxW = maxLineLen * (fontSize * 0.6) + 16;
+  const boxH = Math.max(totalH + 12, 28);
+  const flipX = comp.flip ? -1 : 1;
+  const flipYVal = comp.flipY ? -1 : 1;
+
+  return (
+    <g
+      className="select-none"
+      transform={`scale(${flipX}, ${flipYVal})`}
+    >
+      {/* Optional dashed outline around note box */}
+      {(showBorder || isSelected) && (
+        <rect
+          x={-approxW / 2}
+          y={-boxH / 2}
+          width={approxW}
+          height={boxH}
+          fill="rgba(255, 255, 255, 0.85)"
+          stroke="#000000"
+          strokeWidth={1}
+          strokeDasharray={showBorder ? '3 2' : '2 2'}
+        />
+      )}
+      {/* Note Text: Multiple lines supported */}
+      <text
+        x={0}
+        y={-(lines.length - 1) * lineHeight * 0.5}
+        textAnchor="middle"
+        dominantBaseline="central"
+        fontSize={fontSize}
+        fontWeight="800"
+        fill="#111827"
+        fontFamily="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+      >
+        {lines.map((line: string, idx: number) => (
+          <tspan key={idx} x={0} dy={idx === 0 ? 0 : lineHeight}>
+            {line}
+          </tspan>
+        ))}
+      </text>
     </g>
   );
 };
