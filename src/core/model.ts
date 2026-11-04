@@ -111,6 +111,7 @@ export interface ViewportState {
 }
 
 export interface CircuitState {
+  version?: number;
   components: ComponentInstance[];
   wires: Wire[];
   junctions: Junction[];
@@ -122,6 +123,23 @@ export interface Net {
   pinKeys: string[];
   junctionIds: string[];
   wireIds: string[];
+}
+
+export interface CaseStatus {
+  caseVoltage: number; // V
+  humanCurrent: number; // mA
+  dangerLevel: 'none' | 'mild' | 'warning' | 'danger';
+  dangerMessage?: string;
+}
+
+export interface SimulationReport {
+  isRunning: boolean;
+  nodeVoltages: Record<string, number>;
+  componentCurrents: Record<string, number>;
+  caseStatuses: Record<string, CaseStatus>;
+  earthCurrents: Record<string, number>;
+  trippedComponents: string[];
+  statusMessages: string[];
 }
 
 export interface LintWarning {

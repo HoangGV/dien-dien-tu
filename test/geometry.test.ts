@@ -15,7 +15,7 @@ describe('Geometry & Pin Transformations (pinWorldPos)', () => {
       { id: '2', label: '2', dx: 2, dy: 0 },
     ],
     symbol: () => null as any,
-    propsSchema: {},
+    propsSchema: [],
   };
 
   const createComp = (rot: number, flip: boolean, flipY: boolean = false): ComponentInstance => ({

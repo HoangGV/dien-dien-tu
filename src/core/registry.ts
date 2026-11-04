@@ -20,6 +20,9 @@ import {
   KWhMeterSymbol,
   InstrumentSymbol,
   GenericApplianceSymbol,
+  EarthGroundSymbol,
+  BoundarySymbol,
+  TextBoxSymbol,
   LEDSymbol,
   ResistorSymbol,
   DCSourceSymbol,
@@ -43,16 +46,26 @@ export const COMPONENT_DEFINITIONS: ComponentDef[] = [
     refPrefix: 'U',
     width: 80,
     height: 80,
-    pins: [
-      { id: 'O', label: 'O', dx: 2, dy: -1, polarity: 'O' },
-      { id: 'A', label: 'A', dx: 2, dy: 1, polarity: 'A' },
-    ],
+    pins: (props) => {
+      const hasPE = Boolean(props.hasPE);
+      return hasPE
+        ? [
+            { id: 'O', label: 'O', dx: 2, dy: -1, polarity: 'O' },
+            { id: 'PE', label: 'PE', dx: 2, dy: 0, polarity: 'PE' },
+            { id: 'A', label: 'A', dx: 2, dy: 1, polarity: 'A' },
+          ]
+        : [
+            { id: 'O', label: 'O', dx: 2, dy: -1, polarity: 'O' },
+            { id: 'A', label: 'A', dx: 2, dy: 1, polarity: 'A' },
+          ];
+    },
     symbol: ACSourceSymbol,
     propsSchema: [
       { key: 'voltage', label: 'Điện áp hiệu dụng', kind: 'number', min: 110, max: 250, step: 5, unit: 'V', default: 220 },
       { key: 'frequency', label: 'Tần số', kind: 'number', min: 50, max: 60, step: 10, unit: 'Hz', default: 50 },
+      { key: 'hasPE', label: 'Hiện chân nối đất (PE)', kind: 'bool', default: false },
     ],
-    defaultProps: { voltage: 220, frequency: 50 },
+    defaultProps: { voltage: 220, frequency: 50, hasPE: false },
   },
   {
     type: 'cb',
@@ -259,10 +272,19 @@ export const COMPONENT_DEFINITIONS: ComponentDef[] = [
     refPrefix: 'Đ',
     width: 80,
     height: 60,
-    pins: [
-      { id: '1', label: '', dx: -2, dy: 0 },
-      { id: '2', label: '', dx: 2, dy: 0 },
-    ],
+    pins: (props) => {
+      const hasPE = Boolean(props.hasPE);
+      return hasPE
+        ? [
+            { id: '1', label: '', dx: -2, dy: 0 },
+            { id: '2', label: '', dx: 2, dy: 0 },
+            { id: 'PE', label: 'PE', dx: 0, dy: 1, polarity: 'PE' },
+          ]
+        : [
+            { id: '1', label: '', dx: -2, dy: 0 },
+            { id: '2', label: '', dx: 2, dy: 0 },
+          ];
+    },
     symbol: LampSymbol,
     propsSchema: [
       {
@@ -277,9 +299,12 @@ export const COMPONENT_DEFINITIONS: ComponentDef[] = [
         default: 'incandescent',
       },
       { key: 'power', label: 'Công suất bóng', kind: 'number', min: 5, max: 200, step: 5, unit: 'W', default: 60 },
+      { key: 'hasPE', label: 'Hiện chân nối đất (PE)', kind: 'bool', default: false },
+      { key: 'leakToCase', label: 'Rò điện ra vỏ (10 Ω)', kind: 'bool', default: false },
+      { key: 'humanTouch', label: 'Có người chạm vào vỏ (1 kΩ)', kind: 'bool', default: false },
       { key: 'isOn', label: 'Trạng thái phát sáng', kind: 'bool', default: false },
     ],
-    defaultProps: { lampType: 'incandescent', power: 60, isOn: false },
+    defaultProps: { lampType: 'incandescent', power: 60, hasPE: false, leakToCase: false, humanTouch: false, isOn: false },
   },
   {
     type: 'lamp_fluorescent',
@@ -288,16 +313,28 @@ export const COMPONENT_DEFINITIONS: ComponentDef[] = [
     refPrefix: 'ĐHQ',
     width: 120,
     height: 40,
-    pins: [
-      { id: '1', label: '', dx: -3, dy: 0 },
-      { id: '2', label: '', dx: 3, dy: 0 },
-    ],
+    pins: (props) => {
+      const hasPE = Boolean(props.hasPE);
+      return hasPE
+        ? [
+            { id: '1', label: '', dx: -3, dy: 0 },
+            { id: '2', label: '', dx: 3, dy: 0 },
+            { id: 'PE', label: 'PE', dx: 0, dy: 1, polarity: 'PE' },
+          ]
+        : [
+            { id: '1', label: '', dx: -3, dy: 0 },
+            { id: '2', label: '', dx: 3, dy: 0 },
+          ];
+    },
     symbol: FluorescentLampSymbol,
     propsSchema: [
       { key: 'power', label: 'Công suất đèn', kind: 'number', min: 18, max: 72, step: 18, unit: 'W', default: 36 },
+      { key: 'hasPE', label: 'Hiện chân nối đất (PE)', kind: 'bool', default: false },
+      { key: 'leakToCase', label: 'Rò điện ra vỏ (10 Ω)', kind: 'bool', default: false },
+      { key: 'humanTouch', label: 'Có người chạm vào vỏ (1 kΩ)', kind: 'bool', default: false },
       { key: 'isOn', label: 'Trạng thái phát sáng', kind: 'bool', default: false },
     ],
-    defaultProps: { power: 36, isOn: false },
+    defaultProps: { power: 36, hasPE: false, leakToCase: false, humanTouch: false, isOn: false },
   },
   {
     type: 'ceiling_fan',
@@ -306,16 +343,28 @@ export const COMPONENT_DEFINITIONS: ComponentDef[] = [
     refPrefix: 'QT',
     width: 80,
     height: 60,
-    pins: [
-      { id: '1', label: '', dx: -2, dy: 0 },
-      { id: '2', label: '', dx: 2, dy: 0 },
-    ],
+    pins: (props) => {
+      const hasPE = Boolean(props.hasPE);
+      return hasPE
+        ? [
+            { id: '1', label: '', dx: -2, dy: 0 },
+            { id: '2', label: '', dx: 2, dy: 0 },
+            { id: 'PE', label: 'PE', dx: 0, dy: 1, polarity: 'PE' },
+          ]
+        : [
+            { id: '1', label: '', dx: -2, dy: 0 },
+            { id: '2', label: '', dx: 2, dy: 0 },
+          ];
+    },
     symbol: CeilingFanSymbol,
     propsSchema: [
       { key: 'power', label: 'Công suất quạt', kind: 'number', min: 40, max: 150, step: 5, unit: 'W', default: 75 },
+      { key: 'hasPE', label: 'Hiện chân nối đất (PE)', kind: 'bool', default: false },
+      { key: 'leakToCase', label: 'Rò điện ra vỏ (10 Ω)', kind: 'bool', default: false },
+      { key: 'humanTouch', label: 'Có người chạm vào vỏ (1 kΩ)', kind: 'bool', default: false },
       { key: 'isOn', label: 'Trạng thái chạy', kind: 'bool', default: false },
     ],
-    defaultProps: { power: 75, isOn: false },
+    defaultProps: { power: 75, hasPE: false, leakToCase: false, humanTouch: false, isOn: false },
   },
   {
     type: 'electric_bell',
@@ -341,13 +390,43 @@ export const COMPONENT_DEFINITIONS: ComponentDef[] = [
     refPrefix: 'OC',
     width: 80,
     height: 60,
-    pins: [
-      { id: 'A', label: 'A', dx: -2, dy: 0 },
-      { id: 'O', label: 'O', dx: 2, dy: 0 },
-    ],
+    pins: (props) => {
+      const hasPE = Boolean(props.hasPE);
+      return hasPE
+        ? [
+            { id: 'in_A', label: 'A', dx: -2, dy: -1 },
+            { id: 'in_PE', label: 'PE', dx: -2, dy: 0, polarity: 'PE' },
+            { id: 'in_O', label: 'O', dx: -2, dy: 1 },
+            { id: 'out_A', label: 'A\'', dx: 2, dy: -1 },
+            { id: 'out_PE', label: 'PE\'', dx: 2, dy: 0, polarity: 'PE' },
+            { id: 'out_O', label: 'O\'', dx: 2, dy: 1 },
+          ]
+        : [
+            { id: 'in_A', label: 'A', dx: -2, dy: -1 },
+            { id: 'in_O', label: 'O', dx: -2, dy: 1 },
+            { id: 'out_A', label: 'A\'', dx: 2, dy: -1 },
+            { id: 'out_O', label: 'O\'', dx: 2, dy: 1 },
+          ];
+    },
     symbol: SocketSymbol,
-    propsSchema: [],
-    defaultProps: {},
+    propsSchema: [
+      { key: 'hasPE', label: 'Hiện chân nối đất (PE)', kind: 'bool', default: false },
+    ],
+    defaultProps: { hasPE: false },
+  },
+  {
+    type: 'earth_ground',
+    nameVi: 'Cọc nối đất (Tiếp địa)',
+    category: 'protection',
+    refPrefix: 'ĐẤT',
+    width: 60,
+    height: 60,
+    pins: [{ id: 'pe', label: 'PE', dx: 0, dy: -1, polarity: 'PE' }],
+    symbol: EarthGroundSymbol,
+    propsSchema: [
+      { key: 'resistance', label: 'Điện trở đất (Rđất)', kind: 'number', min: 1, max: 100, step: 1, unit: 'Ω', default: 4 },
+    ],
+    defaultProps: { resistance: 4 },
   },
   {
     type: 'kwh_meter',
@@ -375,10 +454,19 @@ export const COMPONENT_DEFINITIONS: ComponentDef[] = [
     refPrefix: 'TB',
     width: 80,
     height: 60,
-    pins: [
-      { id: 'A', label: 'A', dx: -2, dy: -1 },
-      { id: 'O', label: 'O', dx: -2, dy: 1 },
-    ],
+    pins: (props) => {
+      const hasPE = Boolean(props.hasPE);
+      return hasPE
+        ? [
+            { id: 'A', label: 'A', dx: -2, dy: -1 },
+            { id: 'O', label: 'O', dx: -2, dy: 1 },
+            { id: 'PE', label: 'PE', dx: 2, dy: 0, polarity: 'PE' },
+          ]
+        : [
+            { id: 'A', label: 'A', dx: -2, dy: -1 },
+            { id: 'O', label: 'O', dx: -2, dy: 1 },
+          ];
+    },
     symbol: GenericApplianceSymbol,
     propsSchema: [
       {
@@ -395,10 +483,54 @@ export const COMPONENT_DEFINITIONS: ComponentDef[] = [
         default: 'ac',
       },
       { key: 'power', label: 'Công suất định mức', kind: 'number', min: 50, max: 3500, step: 50, unit: 'W', default: 1200 },
-      { key: 'leakageChassis', label: 'Sự cố: Rò điện ra vỏ (10 Ω)', kind: 'bool', default: false },
-      { key: 'humanContact', label: 'Có người chạm vào vỏ (1 kΩ)', kind: 'bool', default: false },
+      { key: 'hasPE', label: 'Hiện chân nối đất (PE)', kind: 'bool', default: false },
+      { key: 'leakToCase', label: 'Rò điện ra vỏ (10 Ω)', kind: 'bool', default: false },
+      { key: 'humanTouch', label: 'Có người chạm vào vỏ (1 kΩ)', kind: 'bool', default: false },
     ],
-    defaultProps: { applianceType: 'ac', power: 1200, leakageChassis: false, humanContact: false },
+    defaultProps: { applianceType: 'ac', power: 1200, hasPE: false, leakToCase: false, humanTouch: false },
+  },
+  {
+    type: 'boundary',
+    nameVi: 'Khung phân vùng (nét đứt)',
+    category: 'annotation',
+    refPrefix: 'VÙNG',
+    width: 240,
+    height: 160,
+    pins: [],
+    symbol: BoundarySymbol,
+    propsSchema: [
+      { key: 'title', label: 'Tiêu đề vùng', kind: 'text', default: 'BÊN TRONG NHÀ' },
+      { key: 'width', label: 'Chiều rộng', kind: 'number', min: 80, max: 800, step: 20, unit: 'px', default: 240 },
+      { key: 'height', label: 'Chiều cao', kind: 'number', min: 60, max: 600, step: 20, unit: 'px', default: 160 },
+      {
+        key: 'titlePos',
+        label: 'Vị trí tiêu đề',
+        kind: 'select',
+        options: [
+          { label: 'Phía trên', value: 'top' },
+          { label: 'Phía dưới', value: 'bottom' },
+          { label: 'Không hiện', value: 'none' },
+        ],
+        default: 'top',
+      },
+    ],
+    defaultProps: { title: 'BÊN TRONG NHÀ', width: 240, height: 160, titlePos: 'top' },
+  },
+  {
+    type: 'textbox',
+    nameVi: 'Ghi chú chữ (Note)',
+    category: 'annotation',
+    refPrefix: 'NOTE',
+    width: 120,
+    height: 40,
+    pins: [],
+    symbol: TextBoxSymbol,
+    propsSchema: [
+      { key: 'text', label: 'Nội dung ghi chú', kind: 'text', default: 'Ghi chú...' },
+      { key: 'fontSize', label: 'Cỡ chữ', kind: 'number', min: 9, max: 28, step: 1, unit: 'px', default: 13 },
+      { key: 'showBorder', label: 'Hiện viền nét đứt', kind: 'bool', default: false },
+    ],
+    defaultProps: { text: 'Ghi chú...', fontSize: 13, showBorder: false },
   },
 
   // =================== WORKSPACE: MẠCH ĐIỆN TỬ CƠ BẢN ===================

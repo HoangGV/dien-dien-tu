@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, CheckCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Info, FlaskConical } from 'lucide-react';
 import { useWorkspaceStore } from '../store/workspaceStore';
 import { TopBar } from '../components/layout/TopBar';
 import { Palette } from '../components/ui/Palette';
@@ -17,6 +17,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ slug }) => {
     circuit,
     loadWorkspace,
     lintWarnings,
+    statusMessage,
     fullFrameMode,
     toggleFullFrame,
     undo,
@@ -231,7 +232,25 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ slug }) => {
         }`}
       >
         <div className="flex items-center gap-2 overflow-hidden text-ellipsis whitespace-nowrap">
-          {lintWarnings.length > 0 ? (
+          {slug === '_thu' && (
+            <div className="flex items-center gap-1 bg-[#FFD84D] text-black px-1.5 py-0.5 border border-black font-black text-[10px] uppercase shadow-[1px_1px_0_#000]">
+              <FlaskConical size={11} strokeWidth={3} />
+              <span>CA THỬ NGHIỆM (_THU)</span>
+            </div>
+          )}
+
+          {statusMessage ? (
+            <div
+              className={`flex items-center gap-1 px-1.5 py-0.5 border border-black text-[10px] font-black uppercase ${
+                statusMessage.startsWith('Mạch hở') || statusMessage.startsWith('CẢNH BÁO')
+                  ? 'bg-[#E5322D] text-white shadow-[1px_1px_0_#000]'
+                  : 'bg-[#2DB84D] text-white shadow-[1px_1px_0_#000]'
+              }`}
+            >
+              <Info size={11} strokeWidth={3} />
+              <span>{statusMessage}</span>
+            </div>
+          ) : lintWarnings.length > 0 ? (
             <div className="flex items-center gap-1 text-[#E5322D]">
               <AlertTriangle size={12} strokeWidth={3} />
               <span>{lintWarnings.length} CẢNH BÁO MẠCH</span>

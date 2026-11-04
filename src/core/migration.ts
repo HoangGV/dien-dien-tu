@@ -56,6 +56,11 @@ export function migrateCircuitState(state: CircuitState, workspaceSlug?: string)
       nextProps.poles = 1;
     }
 
+    // 6. Ensure hasPE defaults to false for legacy files
+    if (['ac_source', 'socket', 'lamp', 'lamp_fluorescent', 'ceiling_fan', 'appliance_generic'].includes(nextType)) {
+      nextProps.hasPE = Boolean(nextProps.hasPE);
+    }
+
     return {
       ...c,
       type: nextType,

@@ -149,12 +149,19 @@ export const SymbolLabels: React.FC<{
   );
 };
 
-// 1. NGUỒN ĐIỆN XOAY CHIỀU (TCVN / SGK: 2 cực A - Pha, O - Trung tính trong khung nét chấm mảnh)
+// 1. NGUỒN ĐIỆN XOAY CHIỀU (TCVN / SGK: 2 cực A - Pha, O - Trung tính, tùy chọn PE nối đất)
 export const ACSourceSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPinHover, hoveredPinId }) => {
-  const pins: PinDef[] = [
-    { id: 'O', label: 'O', dx: 2, dy: -1, polarity: 'O' },
-    { id: 'A', label: 'A', dx: 2, dy: 1, polarity: 'A' },
-  ];
+  const hasPE = Boolean(comp.props.hasPE);
+  const pins: PinDef[] = hasPE
+    ? [
+        { id: 'O', label: 'O', dx: 2, dy: -1, polarity: 'O' },
+        { id: 'PE', label: 'PE', dx: 2, dy: 0, polarity: 'PE' },
+        { id: 'A', label: 'A', dx: 2, dy: 1, polarity: 'A' },
+      ]
+    : [
+        { id: 'O', label: 'O', dx: 2, dy: -1, polarity: 'O' },
+        { id: 'A', label: 'A', dx: 2, dy: 1, polarity: 'A' },
+      ];
 
   return (
     <g>
@@ -185,6 +192,26 @@ export const ACSourceSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, 
         O
       </UprightText>
       <line x1={-4} y1={-20} x2={40} y2={-20} stroke="#000000" strokeWidth={2} />
+
+      {/* Point PE (Nối đất bảo vệ nguồn - khi hasPE bật) */}
+      {hasPE && (
+        <>
+          <circle cx={-4} cy={0} r={4} fill="#10B981" />
+          <UprightText
+            x={-14}
+            y={0}
+            rot={comp.rot}
+            flip={comp.flip}
+            flipY={comp.flipY}
+            fontSize={10}
+            fontWeight={900}
+            fill="#10B981"
+          >
+            PE
+          </UprightText>
+          <line x1={-4} y1={0} x2={40} y2={0} stroke="#10B981" strokeWidth={2} strokeDasharray="3 2" />
+        </>
+      )}
 
       {/* Point A (Pha - L) */}
       <circle cx={-4} cy={20} r={4.5} fill="#E5322D" />
@@ -572,13 +599,21 @@ export const Switch3PSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, 
 };
 
 // 7. BÓNG ĐÈN CHIẾU SÁNG (TCVN 1622-75 & SGK: Vòng tròn dấu ×)
-// 7. BÓNG ĐÈN CHIẾU SÁNG (TCVN 1622-75 & SGK: Vòng tròn dấu ×, sáng vàng rực khi hoạt động)
+// 7. BÓNG ĐÈN CHIẾU SÁNG (TCVN 1622-75 & SGK: Vòng tròn dấu ×, tùy chọn chân nối đất PE)
 export const LampSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPinHover, hoveredPinId }) => {
-  const pins: PinDef[] = [
-    { id: '1', label: '', dx: -2, dy: 0 },
-    { id: '2', label: '', dx: 2, dy: 0 },
-  ];
+  const hasPE = Boolean(comp.props.hasPE);
+  const pins: PinDef[] = hasPE
+    ? [
+        { id: '1', label: '', dx: -2, dy: 0 },
+        { id: '2', label: '', dx: 2, dy: 0 },
+        { id: 'PE', label: 'PE', dx: 0, dy: 1, polarity: 'PE' },
+      ]
+    : [
+        { id: '1', label: '', dx: -2, dy: 0 },
+        { id: '2', label: '', dx: 2, dy: 0 },
+      ];
   const isActive = Boolean(comp.props.isOn || comp.props.state);
+  const leakToCase = Boolean(comp.props.leakToCase);
 
   return (
     <g>
@@ -598,6 +633,21 @@ export const LampSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPi
       <line x1={-40} y1={0} x2={-18} y2={0} stroke="#000" strokeWidth={2} />
       <line x1={18} y1={0} x2={40} y2={0} stroke="#000" strokeWidth={2} />
 
+      {/* PE stem if PE active */}
+      {hasPE && (
+        <line x1={0} y1={18} x2={0} y2={20} stroke="#10B981" strokeWidth={2} strokeDasharray="2 2" />
+      )}
+
+      {/* Case leakage warning badge */}
+      {leakToCase && (
+        <g transform="translate(0, -22)">
+          <rect x={-24} y={-7} width={48} height={14} rx={3} fill="#FEF2F2" stroke="#EF4444" strokeWidth={1.5} />
+          <text x={0} y={0} textAnchor="middle" dominantBaseline="central" fontSize="8" fontWeight="900" fill="#DC2626">
+            RÒ VỎ !
+          </text>
+        </g>
+      )}
+
       {pins.map(p => (
         <PinDot
           key={p.id}
@@ -615,13 +665,21 @@ export const LampSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPi
   );
 };
 
-// 8. ĐÈN HUỲNH QUANG (SGK Công nghệ 9, 12: Hình chữ nhật bo tròn có dấu × ở giữa, sáng xanh neon ngọc khi hoạt động)
+// 8. ĐÈN HUỲNH QUANG (SGK Công nghệ 9, 12: Hình chữ nhật bo tròn có dấu × ở giữa, tùy chọn PE)
 export const FluorescentLampSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPinHover, hoveredPinId }) => {
-  const pins: PinDef[] = [
-    { id: '1', label: '', dx: -3, dy: 0 },
-    { id: '2', label: '', dx: 3, dy: 0 },
-  ];
+  const hasPE = Boolean(comp.props.hasPE);
+  const pins: PinDef[] = hasPE
+    ? [
+        { id: '1', label: '', dx: -3, dy: 0 },
+        { id: '2', label: '', dx: 3, dy: 0 },
+        { id: 'PE', label: 'PE', dx: 0, dy: 1, polarity: 'PE' },
+      ]
+    : [
+        { id: '1', label: '', dx: -3, dy: 0 },
+        { id: '2', label: '', dx: 3, dy: 0 },
+      ];
   const isActive = Boolean(comp.props.isOn || comp.props.state);
+  const leakToCase = Boolean(comp.props.leakToCase);
 
   return (
     <g>
@@ -644,6 +702,21 @@ export const FluorescentLampSymbol: React.FC<SymbolProps> = ({ comp, onPinPointe
       <line x1={-60} y1={0} x2={-40} y2={0} stroke="#000" strokeWidth={2} />
       <line x1={40} y1={0} x2={60} y2={0} stroke="#000" strokeWidth={2} />
 
+      {/* PE stem if active */}
+      {hasPE && (
+        <line x1={0} y1={10} x2={0} y2={20} stroke="#10B981" strokeWidth={2} strokeDasharray="2 2" />
+      )}
+
+      {/* Case leakage warning badge */}
+      {leakToCase && (
+        <g transform="translate(0, -18)">
+          <rect x={-24} y={-7} width={48} height={14} rx={3} fill="#FEF2F2" stroke="#EF4444" strokeWidth={1.5} />
+          <text x={0} y={0} textAnchor="middle" dominantBaseline="central" fontSize="8" fontWeight="900" fill="#DC2626">
+            RÒ VỎ !
+          </text>
+        </g>
+      )}
+
       {pins.map(p => (
         <PinDot
           key={p.id}
@@ -661,13 +734,21 @@ export const FluorescentLampSymbol: React.FC<SymbolProps> = ({ comp, onPinPointe
   );
 };
 
-// 9. QUẠT TRẦN (TCVN 1619-75 & SGK: Hình cánh quạt 2 tam giác đối đỉnh có tâm tròn, 2 chân không phân cực, sáng màu xanh khi quay)
+// 9. QUẠT TRẦN (TCVN 1619-75 & SGK: Hình cánh quạt 2 tam giác đối đỉnh có tâm tròn, tùy chọn PE và rò vỏ)
 export const CeilingFanSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPinHover, hoveredPinId }) => {
-  const pins: PinDef[] = [
-    { id: '1', label: '', dx: -2, dy: 0 },
-    { id: '2', label: '', dx: 2, dy: 0 },
-  ];
+  const hasPE = Boolean(comp.props.hasPE);
+  const pins: PinDef[] = hasPE
+    ? [
+        { id: '1', label: '', dx: -2, dy: 0 },
+        { id: '2', label: '', dx: 2, dy: 0 },
+        { id: 'PE', label: 'PE', dx: 0, dy: 1, polarity: 'PE' },
+      ]
+    : [
+        { id: '1', label: '', dx: -2, dy: 0 },
+        { id: '2', label: '', dx: 2, dy: 0 },
+      ];
   const isActive = Boolean(comp.props.isOn || comp.props.state);
+  const leakToCase = Boolean(comp.props.leakToCase);
 
   return (
     <g>
@@ -698,6 +779,21 @@ export const CeilingFanSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown
 
       <line x1={-40} y1={0} x2={-30} y2={0} stroke="#000" strokeWidth={2} />
       <line x1={30} y1={0} x2={40} y2={0} stroke="#000" strokeWidth={2} />
+
+      {/* PE stem if active */}
+      {hasPE && (
+        <line x1={0} y1={0} x2={0} y2={20} stroke="#10B981" strokeWidth={2} strokeDasharray="2 2" />
+      )}
+
+      {/* Case leakage warning badge */}
+      {leakToCase && (
+        <g transform="translate(0, -22)">
+          <rect x={-26} y={-7} width={52} height={14} rx={3} fill="#FEF2F2" stroke="#EF4444" strokeWidth={1.5} />
+          <text x={0} y={0} textAnchor="middle" dominantBaseline="central" fontSize="8" fontWeight="900" fill="#DC2626">
+            RÒ VỎ !
+          </text>
+        </g>
+      )}
 
       {pins.map(p => (
         <PinDot
@@ -751,21 +847,48 @@ export const ElectricBellSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDo
   );
 };
 
-// 11. Ổ LẤY ĐIỆN (Ổ CẮM - TCVN & SGK: Vòng tròn có 2 lỗ cắm, KHÔNG CÓ PE)
+// 11. Ổ LẤY ĐIỆN (Ổ CẮM - TCVN & SGK: Vòng tròn có 2 lỗ cắm, tùy chọn chân nối đất PE)
 export const SocketSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPinHover, hoveredPinId }) => {
-  const pins: PinDef[] = [
-    { id: 'A', label: 'A', dx: -2, dy: 0 },
-    { id: 'O', label: 'O', dx: 2, dy: 0 },
-  ];
+  const hasPE = Boolean(comp.props.hasPE);
+  const pins: PinDef[] = hasPE
+    ? [
+        { id: 'in_A', label: 'A', dx: -2, dy: -1 },
+        { id: 'in_PE', label: 'PE', dx: -2, dy: 0, polarity: 'PE' },
+        { id: 'in_O', label: 'O', dx: -2, dy: 1 },
+        { id: 'out_A', label: 'A\'', dx: 2, dy: -1 },
+        { id: 'out_PE', label: 'PE\'', dx: 2, dy: 0, polarity: 'PE' },
+        { id: 'out_O', label: 'O\'', dx: 2, dy: 1 },
+      ]
+    : [
+        { id: 'in_A', label: 'A', dx: -2, dy: -1 },
+        { id: 'in_O', label: 'O', dx: -2, dy: 1 },
+        { id: 'out_A', label: 'A\'', dx: 2, dy: -1 },
+        { id: 'out_O', label: 'O\'', dx: 2, dy: 1 },
+      ];
 
   return (
     <g>
       <circle cx={0} cy={0} r={18} fill="#FFFFFF" stroke="#000000" strokeWidth={2} />
+      {/* 2 main socket holes */}
       <circle cx={-6} cy={0} r={2.5} fill="#000" />
       <circle cx={6} cy={0} r={2.5} fill="#000" />
+      {/* Ground socket hole if hasPE */}
+      {hasPE && (
+        <circle cx={0} cy={-8} r={2} fill="#10B981" stroke="#000" strokeWidth={1} />
+      )}
 
-      <line x1={-40} y1={0} x2={-18} y2={0} stroke="#000" strokeWidth={2} />
-      <line x1={18} y1={0} x2={40} y2={0} stroke="#000" strokeWidth={2} />
+      {/* Input / output wire stubs */}
+      <line x1={-40} y1={-20} x2={-16} y2={-8} stroke="#000" strokeWidth={2} />
+      <line x1={-40} y1={20} x2={-16} y2={8} stroke="#000" strokeWidth={2} />
+      <line x1={16} y1={-8} x2={40} y2={-20} stroke="#000" strokeWidth={2} />
+      <line x1={16} y1={8} x2={40} y2={20} stroke="#000" strokeWidth={2} />
+
+      {hasPE && (
+        <>
+          <line x1={-40} y1={0} x2={-18} y2={0} stroke="#10B981" strokeWidth={2} strokeDasharray="3 2" />
+          <line x1={18} y1={0} x2={40} y2={0} stroke="#10B981" strokeWidth={2} strokeDasharray="3 2" />
+        </>
+      )}
 
       {pins.map(p => (
         <PinDot
@@ -779,7 +902,7 @@ export const SocketSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, on
           isHovered={hoveredPinId === p.id}
         />
       ))}
-      <SymbolLabels label={comp.label} valueStr="Ổ cắm" rot={comp.rot} flip={comp.flip} flipY={comp.flipY} yOffset={-24} />
+      <SymbolLabels label={comp.label} valueStr={hasPE ? 'Ổ cắm 3 chấu' : 'Ổ cắm'} rot={comp.rot} flip={comp.flip} flipY={comp.flipY} yOffset={-24} />
     </g>
   );
 };
@@ -879,14 +1002,22 @@ export const InstrumentSymbol: React.FC<SymbolProps & { meterKind: 'A' | 'V' | '
   );
 };
 
-// 14. THIẾT BỊ ĐIỆN KHÁC (BẾP, ĐIỀU HÒA, TỦ LẠNH, NỒI CƠM... - 2 chân A và O)
+// 14. THIẾT BỊ ĐIỆN KHÁC (BẾP, ĐIỀU HÒA, TỦ LẠNH, NỒI CƠM... - 2 chân A và O, tùy chọn chân PE)
 export const GenericApplianceSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPinHover, hoveredPinId }) => {
-  const pins: PinDef[] = [
-    { id: 'A', label: 'A', dx: -2, dy: -1 },
-    { id: 'O', label: 'O', dx: -2, dy: 1 },
-  ];
+  const hasPE = Boolean(comp.props.hasPE);
+  const leakToCase = Boolean(comp.props.leakToCase);
+  const pins: PinDef[] = hasPE
+    ? [
+        { id: 'A', label: 'A', dx: -2, dy: -1 },
+        { id: 'O', label: 'O', dx: -2, dy: 1 },
+        { id: 'PE', label: 'PE', dx: 2, dy: 0, polarity: 'PE' },
+      ]
+    : [
+        { id: 'A', label: 'A', dx: -2, dy: -1 },
+        { id: 'O', label: 'O', dx: -2, dy: 1 },
+      ];
 
-  const appLabel = comp.props.applianceType === 'ac' ? 'ĐH' : comp.props.applianceType === 'cooker' ? 'BẾP' : 'M';
+  const appLabel = comp.props.applianceType === 'ac' ? 'ĐH' : comp.props.applianceType === 'cooker' ? 'BẾP' : comp.props.applianceType === 'water_heater' ? 'NL' : 'M';
 
   return (
     <g>
@@ -908,6 +1039,21 @@ export const GenericApplianceSymbol: React.FC<SymbolProps> = ({ comp, onPinPoint
       <line x1={-40} y1={-20} x2={-26} y2={-20} stroke="#000" strokeWidth={2} />
       <line x1={-40} y1={20} x2={-26} y2={20} stroke="#000" strokeWidth={2} />
 
+      {/* PE lead on right side if hasPE */}
+      {hasPE && (
+        <line x1={26} y1={0} x2={40} y2={0} stroke="#10B981" strokeWidth={2} strokeDasharray="3 2" />
+      )}
+
+      {/* Case leakage warning badge */}
+      {leakToCase && (
+        <g transform="translate(0, -32)">
+          <rect x={-24} y={-7} width={48} height={14} rx={3} fill="#FEF2F2" stroke="#EF4444" strokeWidth={1.5} />
+          <text x={0} y={0} textAnchor="middle" dominantBaseline="central" fontSize="8" fontWeight="900" fill="#DC2626">
+            RÒ VỎ !
+          </text>
+        </g>
+      )}
+
       {pins.map(p => (
         <PinDot
           key={p.id}
@@ -924,6 +1070,38 @@ export const GenericApplianceSymbol: React.FC<SymbolProps> = ({ comp, onPinPoint
     </g>
   );
 };
+
+// 15. CỌC TIẾP ĐỊA (NỐI ĐẤT - 1 nét thẳng đứng đi xuống, 3 nét ngang giảm dần độ dài)
+export const EarthGroundSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPinHover, hoveredPinId }) => {
+  const pins: PinDef[] = [{ id: 'pe', label: 'PE', dx: 0, dy: -1, polarity: 'PE' }];
+  const rDat = comp.props.resistance ?? 4;
+
+  return (
+    <g>
+      {/* Vertical connection line down from pin (0, -20) to ground surface (0, 0) */}
+      <line x1={0} y1={-20} x2={0} y2={0} stroke="#10B981" strokeWidth={2.5} />
+      {/* 3 horizontal plates of decreasing width */}
+      <line x1={-16} y1={0} x2={16} y2={0} stroke="#059669" strokeWidth={2.5} />
+      <line x1={-10} y1={6} x2={10} y2={6} stroke="#059669" strokeWidth={2.5} />
+      <line x1={-4} y1={12} x2={4} y2={12} stroke="#059669" strokeWidth={2.5} />
+
+      {pins.map(p => (
+        <PinDot
+          key={p.id}
+          pin={p}
+          rot={comp.rot}
+          flip={comp.flip}
+          flipY={comp.flipY}
+          onPointerDown={onPinPointerDown}
+          onHover={onPinHover}
+          isHovered={hoveredPinId === p.id}
+        />
+      ))}
+      <SymbolLabels label={comp.label} valueStr={`${rDat} Ω`} rot={comp.rot} flip={comp.flip} flipY={comp.flipY} yOffset={-26} />
+    </g>
+  );
+};
+
 
 // 15. LED DUY NHẤT (TCVN: DIODE + 2 MŨI TÊN + TÔ MÀU THEO THUỘC TÍNH)
 export const LEDSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPinHover, hoveredPinId }) => {

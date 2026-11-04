@@ -3,6 +3,7 @@
  */
 
 import { WorkspaceConfig } from './model';
+import { HOUSEHOLD_PRESETS, ELECTRONICS_PRESETS } from './testCircuits';
 
 export const WORKSPACE_HOUSEHOLD: WorkspaceConfig = {
   slug: 'mang-dien-trong-nha',
@@ -22,14 +23,17 @@ export const WORKSPACE_HOUSEHOLD: WorkspaceConfig = {
     'ceiling_fan',
     'electric_bell',
     'socket',
+    'earth_ground',
     'kwh_meter',
     'appliance_generic',
     'ammeter',
     'voltmeter',
     'wattmeter',
     'ohmmeter',
+    'boundary',
+    'textbox',
   ],
-  presets: [],
+  presets: HOUSEHOLD_PRESETS,
   helpText: `HƯỚNG DẪN MẠNG ĐIỆN DÂN DỤNG (TCVN & CHƯƠNG TRÌNH GDPT 2018):
 • Kí hiệu quy chuẩn SGK:
   - Nguồn điện xoay chiều: Đặt trong khung hộp nét chấm mảnh, gồm 2 điểm A (pha) và O (trung tính).
@@ -68,9 +72,11 @@ export const WORKSPACE_ELECTRONICS: WorkspaceConfig = {
     'ammeter',
     'voltmeter',
     'ohmmeter',
+    'boundary',
+    'textbox',
   ],
-  presets: [],
-  helpText: `HƯỚNG DẪN MẠCH ĐIỆN TỬ CƠ BẢN (GDPT 2018):
+  presets: ELECTRONICS_PRESETS,
+  helpText: `HƯỚNG DẪN MẠNG ĐIỆN TỬ CƠ BẢN (GDPT 2018):
 • Nguồn một chiều (DC): Pin / Acquy / Nguồn tổ ong (1.5 V – 24 V).
 • Định luật Ohm: I = U / R. Điện trở vẽ hình chữ nhật rỗng chuẩn TCVN/IEC.
 • LED (Điot phát quang): Kí hiệu tam giác tiếp giáp vạch thẳng kèm 2 mũi tên phát xạ ra ngoài. Màu phát quang chọn linh hoạt trong bảng Thuộc tính.
@@ -81,15 +87,55 @@ export const WORKSPACE_ELECTRONICS: WorkspaceConfig = {
   },
 };
 
+export const WORKSPACE_TEST: WorkspaceConfig = {
+  slug: '_thu',
+  title: 'Khung vẽ thử nghiệm ca kiểm tra',
+  grades: 'Tất cả khối lớp',
+  description: 'Khung vẽ chuyên dụng để xem và kiểm tra trực quan các ca thử nghiệm bộ giải C-1/PE. Dữ liệu lưu trong sessionStorage, không làm ảnh hưởng hay ghi đè mạch chính của bạn.',
+  mode: 'rms',
+  paletteIds: [
+    'ac_source',
+    'dc_source',
+    'gnd',
+    'vcc',
+    'knife_switch',
+    'cb',
+    'fuse',
+    'switch_2p',
+    'switch_3p',
+    'lamp',
+    'lamp_fluorescent',
+    'ceiling_fan',
+    'resistor',
+    'led',
+    'capacitor_ceramic',
+    'capacitor_electrolytic',
+    'earth_ground',
+    'appliance_generic',
+    'ammeter',
+    'voltmeter',
+    'boundary',
+    'textbox',
+  ],
+  presets: [],
+  helpText: 'Khung vẽ chuyên dụng để xem và kiểm tra trực quan các ca thử nghiệm bộ giải C-1/PE. Dữ liệu lưu trong sessionStorage, không làm ảnh hưởng hay ghi đè mạch chính của bạn.',
+  defaultSpecs: {
+    voltage: 220,
+    frequency: 50,
+  },
+};
+
 export const WORKSPACE_REGISTRY: WorkspaceConfig[] = [
   WORKSPACE_HOUSEHOLD,
   WORKSPACE_ELECTRONICS,
+  WORKSPACE_TEST,
 ];
 
 export function getAllWorkspaces(): WorkspaceConfig[] {
-  return WORKSPACE_REGISTRY;
+  return WORKSPACE_REGISTRY.filter(w => w.slug !== '_thu');
 }
 
 export function getWorkspaceBySlug(slug: string): WorkspaceConfig | undefined {
+  if (slug === '_thu') return WORKSPACE_TEST;
   return WORKSPACE_REGISTRY.find(w => w.slug === slug);
 }

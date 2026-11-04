@@ -10,6 +10,8 @@ import {
   GitCommit,
   X,
   Zap,
+  ShieldCheck,
+  AlertTriangle,
 } from 'lucide-react';
 import { useWorkspaceStore } from '../../store/workspaceStore';
 import { COMPONENT_MAP } from '../../core/registry';
@@ -38,6 +40,7 @@ export const PropsPanel: React.FC<PropsPanelProps> = ({ isBottomSheet = false })
     updateWireProps,
     setWireType,
     rerouteWireAuto,
+    setPEForSelected,
   } = useWorkspaceStore();
 
   const selectedComp =
@@ -123,7 +126,7 @@ export const PropsPanel: React.FC<PropsPanelProps> = ({ isBottomSheet = false })
                 />
               </div>
 
-              {selectedComp.isDamaged && (
+              {selectedComp.damaged && (
                 <div className="p-1 bg-[#E5322D] text-white border border-black text-[10px] font-black text-center">
                   Linh kiện đang bị chập / hỏng!
                 </div>
@@ -228,14 +231,29 @@ export const PropsPanel: React.FC<PropsPanelProps> = ({ isBottomSheet = false })
                       )}
 
                       {schema.kind === 'bool' && (
-                        <button
-                          onClick={() => updateComponentProp(selectedComp.id, schema.key, !currentVal)}
-                          className={`w-full h-[24px] border border-black text-[10px] font-black uppercase cursor-pointer transition-colors ${
-                            currentVal ? 'bg-[#2DB84D] text-white' : 'bg-gray-200 text-black'
-                          }`}
-                        >
-                          {currentVal ? 'BẬT / ĐÓNG' : 'TẮT / NGẮT'}
-                        </button>
+                        schema.key === 'isOn' ? (
+                          <div className="space-y-0.5">
+                            <div
+                              className={`w-full h-[24px] border border-black text-[10px] font-black uppercase flex items-center justify-center select-none ${
+                                currentVal ? 'bg-[#2DB84D] text-white' : 'bg-gray-100 text-gray-700'
+                              }`}
+                            >
+                              {currentVal ? '⚡ ĐANG HOẠT ĐỘNG' : '○ CHƯA CẤP ĐIỆN'}
+                            </div>
+                            <p className="text-[9px] text-gray-500 font-bold italic text-center">
+                              (Tự động xác định bởi bộ giải mạch)
+                            </p>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => updateComponentProp(selectedComp.id, schema.key, !currentVal)}
+                            className={`w-full h-[24px] border border-black text-[10px] font-black uppercase cursor-pointer transition-colors ${
+                              currentVal ? 'bg-[#2DB84D] text-white' : 'bg-gray-200 text-black'
+                            }`}
+                          >
+                            {currentVal ? 'BẬT / ĐÓNG' : 'TẮT / NGẮT'}
+                          </button>
+                        )
                       )}
                     </div>
                   );
@@ -462,8 +480,52 @@ export const PropsPanel: React.FC<PropsPanelProps> = ({ isBottomSheet = false })
           </div>
         )}
 
-        {/* CASE 3: NO SELECTION OR MULTIPLE */}
-        {!selectedComp && !selectedWire && (
+        {/* CASE 3: MULTIPLE COMPONENTS SELECTED */}
+        {!selectedComp && selectedComponentIds.length > 1 && (
+          <div className="space-y-3">
+            <div className="border border-black bg-[#EEF2FF] p-2 space-y-2">
+              <div className="text-[10px] font-black uppercase text-[#4169E1] tracking-wider border-b border-black/20 pb-0.5">
+                Đang chọn {selectedComponentIds.length} thiết bị
+              </div>
+              <div className="text-[11px] text-gray-700">
+                Thao tác hàng loạt trên các thiết bị đã chọn:
+              </div>
+
+              <div className="space-y-2 pt-1">
+                <NeoButton
+                  variant="primary"
+                  onClick={() => setPEForSelected(true)}
+                  icon={<ShieldCheck size={12} strokeWidth={3} />}
+                  className="w-full !h-[28px] !text-[10px]"
+                >
+                  HIỆN CHÂN PE CHO CÁC THIẾT BỊ ĐÃ CHỌN
+                </NeoButton>
+
+                <NeoButton
+                  variant="secondary"
+                  onClick={() => setPEForSelected(false)}
+                  className="w-full !h-[26px] !text-[10px]"
+                >
+                  ẨN CHÂN PE
+                </NeoButton>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <NeoButton
+                variant="danger"
+                onClick={deleteSelected}
+                icon={<Trash2 size={12} strokeWidth={3} />}
+                className="w-full !h-[26px] !text-[10px]"
+              >
+                XÓA CÁC ĐỐI TƯỢNG ĐÃ CHỌN
+              </NeoButton>
+            </div>
+          </div>
+        )}
+
+        {/* CASE 4: NO SELECTION */}
+        {!selectedComp && !selectedWire && selectedComponentIds.length <= 1 && (
           <div className="p-3 border-2 border-dashed border-gray-400 bg-gray-50 text-center text-gray-500 text-[11px] space-y-2 mt-4">
             <p>Bấm chọn 1 linh kiện hoặc 1 đoạn dây trên khung vẽ để xem & chỉnh sửa thuộc tính.</p>
             <p className="text-[10px] text-gray-400">

@@ -25,6 +25,7 @@ import {
 } from '../core/wiring';
 import { extractNetlist, lintCircuit, getComponentPins } from '../core/netlist';
 import { migrateCircuitState } from '../core/migration';
+import { solveCircuit } from '../core/solver';
 
 const storage = StorageService.getInstance();
 const history = new HistoryManager(DEFAULT_HISTORY_LIMIT);
@@ -134,6 +135,8 @@ interface WorkspaceStore {
   moveComponents: (compIds: string[], dx: number, dy: number, commitHistory?: boolean) => void;
   updateComponentProp: (compId: string, key: string, value: any) => void;
   updateComponentLabel: (compId: string, label: string) => void;
+  setPEForSelected: (enabled: boolean) => void;
+  toggleAllPE: (enabled?: boolean) => void;
   copySelected: () => void;
   pasteSelected: () => void;
   duplicateSelected: () => void;
@@ -211,7 +214,20 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 
   loadWorkspace: async (slug: string) => {
     const config = getWorkspaceBySlug(slug) || WORKSPACE_HOUSEHOLD;
-    const rawSaved = await storage.loadCircuit(slug);
+    let rawSaved: CircuitState | null = null;
+
+    if (slug === '_thu') {
+      try {
+        const item = sessionStorage.getItem('circuit__thu');
+        if (item) {
+          rawSaved = JSON.parse(item);
+        }
+      } catch (e) {
+        console.warn('Error reading from sessionStorage for _thu:', e);
+      }
+    } else {
+      rawSaved = await storage.loadCircuit(slug);
+    }
 
     history.clear();
 
@@ -255,7 +271,15 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       canUndo: history.canUndo(),
       canRedo: history.canRedo(),
     });
-    autoSaver.schedule(get().activeSlug, state);
+    if (get().activeSlug === '_thu') {
+      try {
+        sessionStorage.setItem('circuit__thu', JSON.stringify(state));
+      } catch (e) {
+        // ignore
+      }
+    } else {
+      autoSaver.schedule(get().activeSlug, state);
+    }
     get().runLint();
   },
 
@@ -265,7 +289,15 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       canUndo: history.canUndo(),
       canRedo: history.canRedo(),
     });
-    autoSaver.schedule(get().activeSlug, get().circuit);
+    if (get().activeSlug === '_thu') {
+      try {
+        sessionStorage.setItem('circuit__thu', JSON.stringify(get().circuit));
+      } catch (e) {
+        // ignore
+      }
+    } else {
+      autoSaver.schedule(get().activeSlug, get().circuit);
+    }
     get().runLint();
   },
 
@@ -295,11 +327,28 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   },
 
   toggleSimulating: () => {
-    set(s => ({ isSimulating: !s.isSimulating }));
+    const isNowSim = !get().isSimulating;
+    if (isNowSim) {
+      const { circuit } = get();
+      const res = solveCircuit(circuit.components, circuit.wires);
+      if (res.openCircuit && res.openCircuit.isOpen) {
+        set({
+          isSimulating: true,
+          statusMessage: res.openCircuit.reason,
+        });
+      } else {
+        set({
+          isSimulating: true,
+          statusMessage: 'Mạch kín. Dòng điện hoạt động danh định bình thường.',
+        });
+      }
+    } else {
+      set({ isSimulating: false, statusMessage: null });
+    }
   },
 
   stopSimulating: () => {
-    set({ isSimulating: false });
+    set({ isSimulating: false, statusMessage: null });
   },
 
   toggleSound: () => {
@@ -835,6 +884,123 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     });
 
     autoSaver.schedule(get().activeSlug, nextState);
+  },
+
+  setPEForSelected: (enabled: boolean) => {
+    const { circuit, selectedComponentIds } = get();
+    if (selectedComponentIds.length === 0) return;
+
+    history.push(circuit);
+
+    const selSet = new Set(selectedComponentIds);
+    let removedWiresCount = 0;
+    const peEligibleTypes = new Set(['ac_source', 'socket', 'lamp', 'lamp_fluorescent', 'ceiling_fan', 'appliance_generic']);
+
+    const nextComponents = circuit.components.map(c => {
+      if (!selSet.has(c.id) || !peEligibleTypes.has(c.type)) return c;
+      return {
+        ...c,
+        props: {
+          ...c.props,
+          hasPE: enabled,
+        },
+      };
+    });
+
+    let nextWires = [...circuit.wires];
+    if (!enabled) {
+      nextWires = circuit.wires.filter(w => {
+        const isFromComp = w.from.compId && selSet.has(w.from.compId);
+        const isToComp = w.to.compId && selSet.has(w.to.compId);
+        const isFromPE = isFromComp && (w.from.pinId === 'PE' || w.from.pinId === 'pe' || w.from.pinId === 'in_PE' || w.from.pinId === 'out_PE');
+        const isToPE = isToComp && (w.to.pinId === 'PE' || w.to.pinId === 'pe' || w.to.pinId === 'in_PE' || w.to.pinId === 'out_PE');
+        if (isFromPE || isToPE) {
+          removedWiresCount++;
+          return false;
+        }
+        return true;
+      });
+    }
+
+    const nextState: CircuitState = {
+      ...circuit,
+      components: nextComponents,
+      wires: nextWires,
+    };
+
+    set({
+      circuit: nextState,
+      canUndo: history.canUndo(),
+      canRedo: history.canRedo(),
+    });
+
+    if (removedWiresCount > 0) {
+      get().setStatusMessage(`Đã gỡ ${removedWiresCount} dây nối vào chân PE.`);
+    } else {
+      get().setStatusMessage(enabled ? 'Đã hiện chân PE cho các thiết bị đã chọn.' : 'Đã ẩn chân PE cho các thiết bị đã chọn.');
+    }
+
+    autoSaver.schedule(get().activeSlug, nextState);
+    get().runLint();
+  },
+
+  toggleAllPE: (enabled?: boolean) => {
+    const { circuit } = get();
+    const peEligibleTypes = new Set(['ac_source', 'socket', 'lamp', 'lamp_fluorescent', 'ceiling_fan', 'appliance_generic']);
+    const eligibleComps = circuit.components.filter(c => peEligibleTypes.has(c.type));
+    if (eligibleComps.length === 0) return;
+
+    const targetState = enabled !== undefined ? enabled : !eligibleComps.some(c => c.props.hasPE);
+
+    history.push(circuit);
+
+    const nextComponents = circuit.components.map(c => {
+      if (!peEligibleTypes.has(c.type)) return c;
+      return {
+        ...c,
+        props: {
+          ...c.props,
+          hasPE: targetState,
+        },
+      };
+    });
+
+    let removedWiresCount = 0;
+    let nextWires = [...circuit.wires];
+    if (!targetState) {
+      nextWires = circuit.wires.filter(w => {
+        const fromComp = circuit.components.find(c => c.id === w.from.compId);
+        const toComp = circuit.components.find(c => c.id === w.to.compId);
+        const isFromPE = fromComp && peEligibleTypes.has(fromComp.type) && (w.from.pinId === 'PE' || w.from.pinId === 'pe' || w.from.pinId === 'in_PE' || w.from.pinId === 'out_PE');
+        const isToPE = toComp && peEligibleTypes.has(toComp.type) && (w.to.pinId === 'PE' || w.to.pinId === 'pe' || w.to.pinId === 'in_PE' || w.to.pinId === 'out_PE');
+        if (isFromPE || isToPE) {
+          removedWiresCount++;
+          return false;
+        }
+        return true;
+      });
+    }
+
+    const nextState: CircuitState = {
+      ...circuit,
+      components: nextComponents,
+      wires: nextWires,
+    };
+
+    set({
+      circuit: nextState,
+      canUndo: history.canUndo(),
+      canRedo: history.canRedo(),
+    });
+
+    if (removedWiresCount > 0) {
+      get().setStatusMessage(`Đã gỡ ${removedWiresCount} dây nối vào chân PE.`);
+    } else {
+      get().setStatusMessage(targetState ? 'Đã hiện chân PE của mọi thiết bị.' : 'Đã ẩn chân PE của mọi thiết bị.');
+    }
+
+    autoSaver.schedule(get().activeSlug, nextState);
+    get().runLint();
   },
 
   copySelected: () => {

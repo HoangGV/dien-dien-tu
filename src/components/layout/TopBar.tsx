@@ -22,6 +22,8 @@ import {
   Tag,
   MoreHorizontal,
   Sliders,
+  ShieldCheck,
+  CheckCircle2,
 } from 'lucide-react';
 import { NeoButton } from '../common/NeoButton';
 import { NeoDropdown, DropdownItem } from '../common/NeoDropdown';
@@ -50,12 +52,14 @@ export const TopBar: React.FC<TopBarProps> = ({ svgRef }) => {
     toggleRightPanel,
     canUndo,
     canRedo,
+    toggleSimulating,
     stopSimulating,
     toggleSound,
     toggleDiagonalWires,
     toggleShowGrid,
     toggleWireLabels,
     toggleFullFrame,
+    toggleAllPE,
     undo,
     redo,
     updateViewport,
@@ -152,6 +156,12 @@ export const TopBar: React.FC<TopBarProps> = ({ svgRef }) => {
       active: fullFrameMode,
       onClick: toggleFullFrame,
     },
+    {
+      id: 'toggle_all_pe',
+      label: 'Hiện / ẩn chân PE của mọi thiết bị',
+      icon: <ShieldCheck size={14} />,
+      onClick: () => toggleAllPE(),
+    },
   ];
 
   // 4. Help Menu
@@ -161,6 +171,14 @@ export const TopBar: React.FC<TopBarProps> = ({ svgRef }) => {
       label: 'Bảng kí hiệu TCVN & SGK GDPT',
       icon: <BookmarkCheck size={14} />,
       onClick: () => setStandardsOpen(true),
+    },
+    {
+      id: 'solver_test',
+      label: 'Kiểm tra bộ giải (C-1 Test Suite)',
+      icon: <CheckCircle2 size={14} />,
+      onClick: () => {
+        window.location.hash = '#/kiem-tra-bo-giai';
+      },
     },
     {
       id: 'guide',
@@ -239,14 +257,15 @@ export const TopBar: React.FC<TopBarProps> = ({ svgRef }) => {
 
           {/* PLAY */}
           <NeoButton
-            variant="primary"
-            onClick={runLint}
-            disabled={true}
+            variant={isSimulating ? 'success' : 'primary'}
+            onClick={toggleSimulating}
             icon={<Play size={13} strokeWidth={3} />}
-            className="!h-[26px] !px-2"
-            title="Mô phỏng dòng điện và linh kiện (Sẽ kích hoạt ở giai đoạn C)"
+            className={`!h-[26px] !px-2 ${
+              isSimulating ? '!bg-[#2DB84D] !text-white' : ''
+            }`}
+            title="Mô phỏng dòng điện và linh kiện (Giải thuật MNA)"
           >
-            CHẠY
+            {isSimulating ? 'ĐANG CHẠY' : 'CHẠY'}
           </NeoButton>
 
           {/* STOP */}
