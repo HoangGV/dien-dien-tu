@@ -71,19 +71,51 @@ export function migrateCircuitState(state: CircuitState, workspaceSlug?: string)
     };
   });
 
-  // Migrate wire endpoints L -> A, N -> O in household workspace
-  const migratedWires: Wire[] = (state.wires || []).map((w) => {
+  // Migrate wire endpoints
+  const rawWires: Wire[] = (state.wires || []).map((w) => {
     let fromPin = w.from.pinId;
     let toPin = w.to.pinId;
 
-    if (isHousehold) {
-      const fromComp = state.components.find(c => c.id === w.from.compId);
-      const toComp = state.components.find(c => c.id === w.to.compId);
+    const fromComp = state.components.find(c => c.id === w.from.compId);
+    const toComp = state.components.find(c => c.id === w.to.compId);
 
+    // Socket migration: in_A/out_A/A' -> A, in_O/out_O/O' -> O, in_PE/out_PE/PE' -> PE
+    if (fromComp?.type === 'socket') {
+      if (fromPin === 'in_A' || fromPin === 'out_A' || fromPin === 'A\'') fromPin = 'A';
+      else if (fromPin === 'in_O' || fromPin === 'out_O' || fromPin === 'O\'') fromPin = 'O';
+      else if (fromPin === 'in_PE' || fromPin === 'out_PE' || fromPin === 'PE\'') fromPin = 'PE';
+    }
+    if (toComp?.type === 'socket') {
+      if (toPin === 'in_A' || toPin === 'out_A' || toPin === 'A\'') toPin = 'A';
+      else if (toPin === 'in_O' || toPin === 'out_O' || toPin === 'O\'') toPin = 'O';
+      else if (toPin === 'in_PE' || toPin === 'out_PE' || toPin === 'PE\'') toPin = 'PE';
+    }
+
+    // Wattmeter migration: pos/1 -> I+, neg/2 -> I-
+    if (fromComp?.type === 'wattmeter') {
+      if (fromPin === 'pos' || fromPin === '1') fromPin = 'I+';
+      else if (fromPin === 'neg' || fromPin === '2') fromPin = 'I-';
+    }
+    if (toComp?.type === 'wattmeter') {
+      if (toPin === 'pos' || toPin === '1') toPin = 'I+';
+      else if (toPin === 'neg' || toPin === '2') toPin = 'I-';
+    }
+
+    // Ohmmeter migration: pos -> 1, neg -> 2
+    if (fromComp?.type === 'ohmmeter') {
+      if (fromPin === 'pos') fromPin = '1';
+      else if (fromPin === 'neg') fromPin = '2';
+    }
+    if (toComp?.type === 'ohmmeter') {
+      if (toPin === 'pos') toPin = '1';
+      else if (toPin === 'neg') toPin = '2';
+    }
+
+    if (isHousehold) {
       if (fromComp?.type === 'ceiling_fan') {
         if (fromPin === 'A') fromPin = '1';
         else if (fromPin === 'O') fromPin = '2';
-      } else {
+      } else if (fromComp?.type !== 'socket') {
         if (fromPin === 'L') fromPin = 'A';
         else if (fromPin === 'N') fromPin = 'O';
       }
@@ -91,7 +123,7 @@ export function migrateCircuitState(state: CircuitState, workspaceSlug?: string)
       if (toComp?.type === 'ceiling_fan') {
         if (toPin === 'A') toPin = '1';
         else if (toPin === 'O') toPin = '2';
-      } else {
+      } else if (toComp?.type !== 'socket') {
         if (toPin === 'L') toPin = 'A';
         else if (toPin === 'N') toPin = 'O';
       }
@@ -112,6 +144,24 @@ export function migrateCircuitState(state: CircuitState, workspaceSlug?: string)
       wireType,
     };
   });
+
+  // Deduplicate wires: eliminate duplicate connections between exact same terminals
+  const seenConnections = new Set<string>();
+  const migratedWires: Wire[] = [];
+
+  for (const w of rawWires) {
+    const endA = w.from.compId ? `${w.from.compId}:${w.from.pinId}` : `j:${w.from.junctionId}`;
+    const endB = w.to.compId ? `${w.to.compId}:${w.to.pinId}` : `j:${w.to.junctionId}`;
+    const key = endA < endB ? `${endA}<->${endB}` : `${endB}<->${endA}`;
+    if (endA === endB) {
+      // Self loop wire -> discard
+      continue;
+    }
+    if (!seenConnections.has(key)) {
+      seenConnections.add(key);
+      migratedWires.push(w);
+    }
+  }
 
   return {
     ...state,

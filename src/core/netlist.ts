@@ -85,6 +85,28 @@ export function extractNetlist(
     for (const pin of pins) {
       dsu.find(`${c.id}:${pin.id}`);
     }
+    // Add alias unions so both '1'/'2' and 'A'/'O' (or 'pos'/'neg' etc) resolve to the same pin net
+    if (c.type === 'appliance_generic') {
+      dsu.union(`${c.id}:A`, `${c.id}:1`);
+      dsu.union(`${c.id}:O`, `${c.id}:2`);
+    } else if (c.type === 'ceiling_fan' || c.type === 'lamp' || c.type === 'lamp_fluorescent' || c.type === 'electric_bell') {
+      dsu.union(`${c.id}:1`, `${c.id}:A`);
+      dsu.union(`${c.id}:2`, `${c.id}:O`);
+    } else if (c.type === 'cb' || c.type === 'knife_switch') {
+      dsu.union(`${c.id}:in`, `${c.id}:in1`);
+      dsu.union(`${c.id}:out`, `${c.id}:out1`);
+    } else if (c.type === 'fuse') {
+      dsu.union(`${c.id}:1`, `${c.id}:in`);
+      dsu.union(`${c.id}:2`, `${c.id}:out`);
+      dsu.union(`${c.id}:1`, `${c.id}:in1`);
+      dsu.union(`${c.id}:2`, `${c.id}:out1`);
+    } else if (c.type === 'ohmmeter') {
+      dsu.union(`${c.id}:1`, `${c.id}:pos`);
+      dsu.union(`${c.id}:2`, `${c.id}:neg`);
+    } else if (c.type === 'ammeter' || c.type === 'voltmeter') {
+      dsu.union(`${c.id}:pos`, `${c.id}:1`);
+      dsu.union(`${c.id}:neg`, `${c.id}:2`);
+    }
   }
 
   for (const j of junctions) {

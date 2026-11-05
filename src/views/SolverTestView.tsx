@@ -22,7 +22,7 @@ interface TestResult {
 export const SolverTestView: React.FC = () => {
   const [results, setResults] = useState<Record<string, TestResult>>({});
   const [isRunning, setIsRunning] = useState<boolean>(false);
-  const [filterGroup, setFilterGroup] = useState<'all' | 'C-1' | 'PE'>('all');
+  const [filterGroup, setFilterGroup] = useState<'all' | 'C-1' | 'PE' | 'C-2' | 'C-3'>('all');
 
   const runAllTests = () => {
     setIsRunning(true);
@@ -138,7 +138,7 @@ export const SolverTestView: React.FC = () => {
       <main className="max-w-7xl mx-auto w-full p-4 flex-1 space-y-4">
         {/* Filter Bar & Notice */}
         <div className="bg-white border-2 border-black p-3 shadow-[3px_3px_0_#000] flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs font-black uppercase text-gray-700">Lọc ca thử:</span>
             <button
               onClick={() => setFilterGroup('all')}
@@ -146,7 +146,7 @@ export const SolverTestView: React.FC = () => {
                 filterGroup === 'all' ? 'bg-[#4169E1] text-white shadow-[1px_1px_0_#000]' : 'bg-gray-100 hover:bg-white'
               }`}
             >
-              TẤT CẢ (18)
+              TẤT CẢ ({totalTests})
             </button>
             <button
               onClick={() => setFilterGroup('C-1')}
@@ -155,7 +155,7 @@ export const SolverTestView: React.FC = () => {
               }`}
             >
               <Cpu size={12} strokeWidth={2.5} />
-              C-1: TẢI &amp; MẠCH CƠ BẢN (8)
+              C-1: TẢI &amp; MẠCH ({ALL_SOLVER_TEST_CASES.filter(t => t.group === 'C-1').length})
             </button>
             <button
               onClick={() => setFilterGroup('PE')}
@@ -164,7 +164,25 @@ export const SolverTestView: React.FC = () => {
               }`}
             >
               <ShieldCheck size={12} strokeWidth={2.5} />
-              PE: AN TOÀN ĐIỆN &amp; RÒ VỎ (10)
+              PE: AN TOÀN ĐIỆN ({ALL_SOLVER_TEST_CASES.filter(t => t.group === 'PE').length})
+            </button>
+            <button
+              onClick={() => setFilterGroup('C-2')}
+              className={`px-2.5 py-1 text-xs font-black border-2 border-black cursor-pointer transition-colors flex items-center gap-1 ${
+                filterGroup === 'C-2' ? 'bg-[#4169E1] text-white shadow-[1px_1px_0_#000]' : 'bg-gray-100 hover:bg-white'
+              }`}
+            >
+              <Zap size={12} strokeWidth={2.5} />
+              C-2: ĐƯỜNG ỐNG GIAO DIỆN ({ALL_SOLVER_TEST_CASES.filter(t => t.group === 'C-2').length})
+            </button>
+            <button
+              onClick={() => setFilterGroup('C-3')}
+              className={`px-2.5 py-1 text-xs font-black border-2 border-black cursor-pointer transition-colors flex items-center gap-1 ${
+                filterGroup === 'C-3' ? 'bg-[#4169E1] text-white shadow-[1px_1px_0_#000]' : 'bg-gray-100 hover:bg-white'
+              }`}
+            >
+              <Zap size={12} strokeWidth={2.5} />
+              C-3: SỰ CỐ &amp; ĐO ĐẠC ({ALL_SOLVER_TEST_CASES.filter(t => t.group === 'C-3').length})
             </button>
           </div>
 

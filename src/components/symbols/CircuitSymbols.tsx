@@ -1,5 +1,7 @@
 import React from 'react';
 import { SymbolProps, PinDef } from '../../core/model';
+import { useWorkspaceStore } from '../../store/workspaceStore';
+import { formatMeasure } from '../../core/measureFormat';
 
 // Text component that counter-transforms so text glyphs are ALWAYS upright & unmirrored
 export const UprightText: React.FC<{
@@ -602,6 +604,12 @@ export const Switch3PSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, 
 // 7. BÓNG ĐÈN CHIẾU SÁNG (TCVN 1622-75 & SGK: Vòng tròn dấu ×, tùy chọn chân nối đất PE)
 export const LampSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPinHover, hoveredPinId }) => {
   const hasPE = Boolean(comp.props.hasPE);
+  const isSimulating = useWorkspaceStore(s => s.isSimulating);
+  const kinetics = useWorkspaceStore(s => s.simulationSnapshot?.componentKinetics[comp.id]);
+  const brightness = isSimulating && kinetics ? (kinetics.brightness ?? 0) : (comp.props.isOn ? 1.0 : 0);
+  const isGlowing = brightness > 0;
+  const glowRadius = Math.max(4, Math.round(brightness * 14));
+
   const pins: PinDef[] = hasPE
     ? [
         { id: '1', label: '', dx: -2, dy: 0 },
@@ -612,7 +620,6 @@ export const LampSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPi
         { id: '1', label: '', dx: -2, dy: 0 },
         { id: '2', label: '', dx: 2, dy: 0 },
       ];
-  const isActive = Boolean(comp.props.isOn || comp.props.state);
   const leakToCase = Boolean(comp.props.leakToCase);
 
   return (
@@ -621,10 +628,10 @@ export const LampSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPi
         cx={0}
         cy={0}
         r={18}
-        fill={isActive ? '#FFD84D' : '#FFFFFF'}
+        fill={isGlowing ? '#FFD84D' : '#FFFFFF'}
         stroke="#000000"
         strokeWidth={2}
-        style={isActive ? { filter: 'drop-shadow(0 0 8px #FFD84D)' } : undefined}
+        style={isGlowing ? { filter: `drop-shadow(0 0 ${glowRadius}px #FFD84D)` } : undefined}
       />
       {/* TCVN cross × */}
       <line x1={-12.7} y1={-12.7} x2={12.7} y2={12.7} stroke="#000" strokeWidth={2.5} />
@@ -668,6 +675,12 @@ export const LampSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPi
 // 8. ĐÈN HUỲNH QUANG (SGK Công nghệ 9, 12: Hình chữ nhật bo tròn có dấu × ở giữa, tùy chọn PE)
 export const FluorescentLampSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPinHover, hoveredPinId }) => {
   const hasPE = Boolean(comp.props.hasPE);
+  const isSimulating = useWorkspaceStore(s => s.isSimulating);
+  const kinetics = useWorkspaceStore(s => s.simulationSnapshot?.componentKinetics[comp.id]);
+  const brightness = isSimulating && kinetics ? (kinetics.brightness ?? 0) : (comp.props.isOn ? 1.0 : 0);
+  const isGlowing = brightness > 0;
+  const glowRadius = Math.max(4, Math.round(brightness * 16));
+
   const pins: PinDef[] = hasPE
     ? [
         { id: '1', label: '', dx: -3, dy: 0 },
@@ -678,7 +691,6 @@ export const FluorescentLampSymbol: React.FC<SymbolProps> = ({ comp, onPinPointe
         { id: '1', label: '', dx: -3, dy: 0 },
         { id: '2', label: '', dx: 3, dy: 0 },
       ];
-  const isActive = Boolean(comp.props.isOn || comp.props.state);
   const leakToCase = Boolean(comp.props.leakToCase);
 
   return (
@@ -690,10 +702,10 @@ export const FluorescentLampSymbol: React.FC<SymbolProps> = ({ comp, onPinPointe
         width={80}
         height={20}
         rx={10}
-        fill={isActive ? '#A5F3FC' : '#FFFFFF'}
+        fill={isGlowing ? '#A5F3FC' : '#FFFFFF'}
         stroke="#000000"
         strokeWidth={2}
-        style={isActive ? { filter: 'drop-shadow(0 0 10px #22D3EE)' } : undefined}
+        style={isGlowing ? { filter: `drop-shadow(0 0 ${glowRadius}px #22D3EE)` } : undefined}
       />
       {/* Center cross mark */}
       <line x1={-8} y1={-8} x2={8} y2={8} stroke="#000" strokeWidth={2} />
@@ -737,6 +749,15 @@ export const FluorescentLampSymbol: React.FC<SymbolProps> = ({ comp, onPinPointe
 // 9. QUẠT TRẦN (TCVN 1619-75 & SGK: Hình cánh quạt 2 tam giác đối đỉnh có tâm tròn, tùy chọn PE và rò vỏ)
 export const CeilingFanSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPinHover, hoveredPinId }) => {
   const hasPE = Boolean(comp.props.hasPE);
+  const isSimulating = useWorkspaceStore(s => s.isSimulating);
+  const kinetics = useWorkspaceStore(s => s.simulationSnapshot?.componentKinetics[comp.id]);
+  const isOperating = isSimulating && kinetics ? kinetics.isOperating : Boolean(comp.props.isOn || comp.props.state);
+  const greenOpacity = kinetics?.greenIntensity ?? 0.6;
+  const thermalStatus = kinetics?.thermalStatus || 'normal';
+  const leakToCase = Boolean(comp.props.leakToCase);
+  const caseStatus = useWorkspaceStore(s => s.simulationSnapshot?.solverResult.caseStatuses[comp.id]);
+  const replaceDamaged = useWorkspaceStore(s => s.replaceDamagedComponent);
+
   const pins: PinDef[] = hasPE
     ? [
         { id: '1', label: '', dx: -2, dy: 0 },
@@ -747,32 +768,51 @@ export const CeilingFanSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown
         { id: '1', label: '', dx: -2, dy: 0 },
         { id: '2', label: '', dx: 2, dy: 0 },
       ];
-  const isActive = Boolean(comp.props.isOn || comp.props.state);
-  const leakToCase = Boolean(comp.props.leakToCase);
+
+  let bladeFill = '#FFFFFF';
+  let bladeStroke = '#000000';
+  let bladeOpacity = 1.0;
+
+  if (thermalStatus === 'damaged') {
+    bladeFill = '#18181B';
+    bladeStroke = '#DC2626';
+  } else if (thermalStatus === 'hot') {
+    bladeFill = '#FED7AA';
+    bladeStroke = '#EA580C';
+  } else if (isOperating) {
+    bladeFill = '#10B981';
+    bladeStroke = '#047857';
+    bladeOpacity = greenOpacity;
+  }
 
   return (
     <g>
-      {/* 2 bow-tie triangles touching at center */}
-      <polygon
-        points="-30,-12 0,0 -30,12"
-        fill={isActive ? '#34D399' : '#FFFFFF'}
-        stroke="#000000"
-        strokeWidth={2}
-        style={isActive ? { filter: 'drop-shadow(0 0 8px #10B981)' } : undefined}
-      />
-      <polygon
-        points="30,-12 0,0 30,12"
-        fill={isActive ? '#34D399' : '#FFFFFF'}
-        stroke="#000000"
-        strokeWidth={2}
-        style={isActive ? { filter: 'drop-shadow(0 0 8px #10B981)' } : undefined}
-      />
-      {/* Center rotor dot */}
+      {/* 2 bow-tie fan blades stationary */}
+      <g>
+        <polygon
+          points="-30,-12 0,0 -30,12"
+          fill={bladeFill}
+          fillOpacity={bladeOpacity}
+          stroke={bladeStroke}
+          strokeWidth={2}
+          style={isOperating && thermalStatus === 'normal' ? { filter: 'drop-shadow(0 0 6px rgba(16, 185, 129, 0.5))' } : undefined}
+        />
+        <polygon
+          points="30,-12 0,0 30,12"
+          fill={bladeFill}
+          fillOpacity={bladeOpacity}
+          stroke={bladeStroke}
+          strokeWidth={2}
+          style={isOperating && thermalStatus === 'normal' ? { filter: 'drop-shadow(0 0 6px rgba(16, 185, 129, 0.5))' } : undefined}
+        />
+      </g>
+
+      {/* Center stationary rotor dot */}
       <circle
         cx={0}
         cy={0}
         r={4.5}
-        fill={isActive ? '#E5322D' : '#4169E1'}
+        fill={thermalStatus === 'damaged' ? '#DC2626' : isOperating ? '#059669' : '#4169E1'}
         stroke="#000"
         strokeWidth={1.5}
       />
@@ -785,12 +825,54 @@ export const CeilingFanSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown
         <line x1={0} y1={0} x2={0} y2={20} stroke="#10B981" strokeWidth={2} strokeDasharray="2 2" />
       )}
 
+      {/* Damaged mark ✕ */}
+      {thermalStatus === 'damaged' && (
+        <g
+          transform="translate(0, 0) scale(1.2)"
+          className="cursor-pointer"
+          onClick={(e) => {
+            e.stopPropagation();
+            replaceDamaged(comp.id);
+          }}
+        >
+          <line x1={-12} y1={-12} x2={12} y2={12} stroke="#DC2626" strokeWidth={3} />
+          <line x1={12} y1={-12} x2={-12} y2={12} stroke="#DC2626" strokeWidth={3} />
+        </g>
+      )}
+
+      {/* Hot warning badge */}
+      {thermalStatus === 'hot' && (
+        <g transform="translate(0, -26)">
+          <rect x={-26} y={-8} width={52} height={16} rx={4} fill="#FFF7ED" stroke="#EA580C" strokeWidth={1.5} />
+          <text x={0} y={1} textAnchor="middle" dominantBaseline="central" fontSize="9" fontWeight="900" fill="#EA580C">
+            🔥 NÓNG !
+          </text>
+        </g>
+      )}
+
       {/* Case leakage warning badge */}
       {leakToCase && (
         <g transform="translate(0, -22)">
-          <rect x={-26} y={-7} width={52} height={14} rx={3} fill="#FEF2F2" stroke="#EF4444" strokeWidth={1.5} />
-          <text x={0} y={0} textAnchor="middle" dominantBaseline="central" fontSize="8" fontWeight="900" fill="#DC2626">
-            RÒ VỎ !
+          <rect
+            x={-34}
+            y={-8}
+            width={68}
+            height={16}
+            rx={4}
+            fill={caseStatus && caseStatus.humanCurrent > 30 ? '#FEE2E2' : caseStatus && caseStatus.humanCurrent > 10 ? '#FFEDD5' : '#FEF3C7'}
+            stroke={caseStatus && caseStatus.humanCurrent > 30 ? '#DC2626' : caseStatus && caseStatus.humanCurrent > 10 ? '#EA580C' : '#D97706'}
+            strokeWidth={1.5}
+          />
+          <text
+            x={0}
+            y={1}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fontSize="8"
+            fontWeight="900"
+            fill={caseStatus && caseStatus.humanCurrent > 30 ? '#B91C1C' : caseStatus && caseStatus.humanCurrent > 10 ? '#C2410C' : '#92400E'}
+          >
+            {caseStatus ? `VỎ: ${caseStatus.caseVoltage}V` : 'RÒ VỎ !'}
           </text>
         </g>
       )}
@@ -814,6 +896,10 @@ export const CeilingFanSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown
 
 // 10. CHUÔNG ĐIỆN (SGK: Vòm chuông úp, đáy phẳng có 2 chân)
 export const ElectricBellSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPinHover, hoveredPinId }) => {
+  const isSimulating = useWorkspaceStore(s => s.isSimulating);
+  const kinetics = useWorkspaceStore(s => s.simulationSnapshot?.componentKinetics[comp.id]);
+  const isRinging = isSimulating && kinetics ? Boolean(kinetics.isOperating) : false;
+
   const pins: PinDef[] = [
     { id: '1', label: '', dx: -1, dy: 2 },
     { id: '2', label: '', dx: 1, dy: 2 },
@@ -821,8 +907,22 @@ export const ElectricBellSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDo
 
   return (
     <g>
+      {/* Sound waves emitted when ringing */}
+      {isRinging && (
+        <g stroke="#4169E1" strokeWidth={1.5} fill="none" opacity={0.85}>
+          <path d="M -24 4 A 26 26 0 0 1 24 4" strokeDasharray="3 2" />
+          <path d="M -28 0 A 30 30 0 0 1 28 0" strokeDasharray="4 2" />
+        </g>
+      )}
+
       {/* Bell dome */}
-      <path d="M -18 10 A 18 18 0 0 1 18 10 Z" fill="#FFFFFF" stroke="#000000" strokeWidth={2} />
+      <path
+        d="M -18 10 A 18 18 0 0 1 18 10 Z"
+        fill={isRinging ? '#FEF08A' : '#FFFFFF'}
+        stroke="#000000"
+        strokeWidth={2}
+        style={isRinging ? { filter: 'drop-shadow(0 0 6px #FACC15)' } : undefined}
+      />
       {/* Top hanger handle */}
       <path d="M -6 -8 L -6 -14 L 6 -14 L 6 -8" fill="none" stroke="#000" strokeWidth={2} />
 
@@ -842,7 +942,7 @@ export const ElectricBellSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDo
           isHovered={hoveredPinId === p.id}
         />
       ))}
-      <SymbolLabels label={comp.label} valueStr="Chuông 220V" rot={comp.rot} flip={comp.flip} flipY={comp.flipY} yOffset={-20} />
+      <SymbolLabels label={comp.label} valueStr={isRinging ? 'ĐANG REO' : 'Chuông'} rot={comp.rot} flip={comp.flip} flipY={comp.flipY} yOffset={-20} />
     </g>
   );
 };
@@ -852,18 +952,13 @@ export const SocketSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, on
   const hasPE = Boolean(comp.props.hasPE);
   const pins: PinDef[] = hasPE
     ? [
-        { id: 'in_A', label: 'A', dx: -2, dy: -1 },
-        { id: 'in_PE', label: 'PE', dx: -2, dy: 0, polarity: 'PE' },
-        { id: 'in_O', label: 'O', dx: -2, dy: 1 },
-        { id: 'out_A', label: 'A\'', dx: 2, dy: -1 },
-        { id: 'out_PE', label: 'PE\'', dx: 2, dy: 0, polarity: 'PE' },
-        { id: 'out_O', label: 'O\'', dx: 2, dy: 1 },
+        { id: 'A', label: 'A', dx: -2, dy: -1 },
+        { id: 'PE', label: 'PE', dx: -2, dy: 0, polarity: 'PE' },
+        { id: 'O', label: 'O', dx: -2, dy: 1 },
       ]
     : [
-        { id: 'in_A', label: 'A', dx: -2, dy: -1 },
-        { id: 'in_O', label: 'O', dx: -2, dy: 1 },
-        { id: 'out_A', label: 'A\'', dx: 2, dy: -1 },
-        { id: 'out_O', label: 'O\'', dx: 2, dy: 1 },
+        { id: 'A', label: 'A', dx: -2, dy: -1 },
+        { id: 'O', label: 'O', dx: -2, dy: 1 },
       ];
 
   return (
@@ -877,17 +972,12 @@ export const SocketSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, on
         <circle cx={0} cy={-8} r={2} fill="#10B981" stroke="#000" strokeWidth={1} />
       )}
 
-      {/* Input / output wire stubs */}
+      {/* Input wire stubs */}
       <line x1={-40} y1={-20} x2={-16} y2={-8} stroke="#000" strokeWidth={2} />
       <line x1={-40} y1={20} x2={-16} y2={8} stroke="#000" strokeWidth={2} />
-      <line x1={16} y1={-8} x2={40} y2={-20} stroke="#000" strokeWidth={2} />
-      <line x1={16} y1={8} x2={40} y2={20} stroke="#000" strokeWidth={2} />
 
       {hasPE && (
-        <>
-          <line x1={-40} y1={0} x2={-18} y2={0} stroke="#10B981" strokeWidth={2} strokeDasharray="3 2" />
-          <line x1={18} y1={0} x2={40} y2={0} stroke="#10B981" strokeWidth={2} strokeDasharray="3 2" />
-        </>
+        <line x1={-40} y1={0} x2={-18} y2={0} stroke="#10B981" strokeWidth={2} strokeDasharray="3 2" />
       )}
 
       {pins.map(p => (
@@ -962,10 +1052,29 @@ export const InstrumentSymbol: React.FC<SymbolProps & { meterKind: 'A' | 'V' | '
   onPinHover,
   hoveredPinId,
 }) => {
-  const pins: PinDef[] = [
-    { id: 'pos', label: '+', dx: -2, dy: 0, polarity: '+' },
-    { id: 'neg', label: '−', dx: 2, dy: 0, polarity: '-' },
-  ];
+  let pins: PinDef[] = [];
+
+  if (meterKind === 'W') {
+    // 4 pins: Current coil I+, I- (horizontal) and Voltage coil U+, U- (vertical)
+    pins = [
+      { id: 'I+', label: 'I+*', dx: -2, dy: 0, polarity: '+' },
+      { id: 'I-', label: 'I−', dx: 2, dy: 0, polarity: '-' },
+      { id: 'U+', label: 'U+*', dx: 0, dy: -2, polarity: '+' },
+      { id: 'U-', label: 'U−', dx: 0, dy: 2, polarity: '-' },
+    ];
+  } else if (meterKind === 'Ω') {
+    // 2 pins: 1 and 2
+    pins = [
+      { id: '1', label: '1', dx: -2, dy: 0 },
+      { id: '2', label: '2', dx: 2, dy: 0 },
+    ];
+  } else {
+    // A and V: pos (+) and neg (−)
+    pins = [
+      { id: 'pos', label: '+', dx: -2, dy: 0, polarity: '+' },
+      { id: 'neg', label: '−', dx: 2, dy: 0, polarity: '-' },
+    ];
+  }
 
   return (
     <g>
@@ -982,8 +1091,38 @@ export const InstrumentSymbol: React.FC<SymbolProps & { meterKind: 'A' | 'V' | '
       >
         {meterKind}
       </UprightText>
+
+      {/* Horizontal leads (All meters) */}
       <line x1={-40} y1={0} x2={-18} y2={0} stroke="#000" strokeWidth={2} />
       <line x1={18} y1={0} x2={40} y2={0} stroke="#000" strokeWidth={2} />
+
+      {/* Vertical leads for Wattmeter U+, U- */}
+      {meterKind === 'W' && (
+        <>
+          <line x1={0} y1={-40} x2={0} y2={-18} stroke="#000" strokeWidth={2} />
+          <line x1={0} y1={18} x2={0} y2={40} stroke="#000" strokeWidth={2} />
+
+          {/* Asterisks (*) on I+ and U+ terminals */}
+          <UprightText x={-26} y={-8} rot={comp.rot} flip={comp.flip} flipY={comp.flipY} fontSize={14} fontWeight={900} fill="#E5322D">
+            *
+          </UprightText>
+          <UprightText x={8} y={-26} rot={comp.rot} flip={comp.flip} flipY={comp.flipY} fontSize={14} fontWeight={900} fill="#E5322D">
+            *
+          </UprightText>
+        </>
+      )}
+
+      {/* Explicit Polarity signs '+' and '−' for A and V */}
+      {(meterKind === 'A' || meterKind === 'V') && (
+        <>
+          <UprightText x={-26} y={-8} rot={comp.rot} flip={comp.flip} flipY={comp.flipY} fontSize={11} fontWeight={900} fill="#E5322D">
+            +
+          </UprightText>
+          <UprightText x={26} y={-8} rot={comp.rot} flip={comp.flip} flipY={comp.flipY} fontSize={12} fontWeight={900} fill="#000000">
+            −
+          </UprightText>
+        </>
+      )}
 
       {pins.map(p => (
         <PinDot
@@ -997,7 +1136,7 @@ export const InstrumentSymbol: React.FC<SymbolProps & { meterKind: 'A' | 'V' | '
           isHovered={hoveredPinId === p.id}
         />
       ))}
-      <SymbolLabels label={comp.label} rot={comp.rot} flip={comp.flip} flipY={comp.flipY} yOffset={-24} />
+      <SymbolLabels label={comp.label} rot={comp.rot} flip={comp.flip} flipY={comp.flipY} yOffset={24} />
     </g>
   );
 };
@@ -1105,6 +1244,9 @@ export const EarthGroundSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDow
 
 // 15. LED DUY NHẤT (TCVN: DIODE + 2 MŨI TÊN + TÔ MÀU THEO THUỘC TÍNH)
 export const LEDSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPinHover, hoveredPinId }) => {
+  const isSimulating = useWorkspaceStore(s => s.isSimulating);
+  const kinetics = useWorkspaceStore(s => s.simulationSnapshot?.componentKinetics[comp.id]);
+
   const pins: PinDef[] = [
     { id: 'A', label: 'A', dx: -2, dy: 0, polarity: '+' },
     { id: 'K', label: 'K', dx: 2, dy: 0, polarity: '-' },
@@ -1118,20 +1260,30 @@ export const LEDSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPin
     white: '#FFFFFF',
     orange: '#FF8800',
   };
-  const fillColor = comp.damaged ? '#333333' : (colorHexMap[comp.props.color || 'red'] || '#E5322D');
+  const baseColor = colorHexMap[comp.props.color || 'red'] || '#E5322D';
+  const brightness = isSimulating && kinetics ? (kinetics.brightness ?? 0) : (comp.props.isOn ? 1.0 : 0);
+  const isLit = brightness > 0;
+  const fillColor = comp.damaged ? '#333333' : isLit ? baseColor : '#F3F4F6';
+  const glowBlur = Math.round(brightness * 12);
 
   return (
     <g>
-      <polygon points="-8,-12 -8,12 8,0" fill={fillColor} stroke="#000000" strokeWidth={2} />
+      <polygon
+        points="-8,-12 -8,12 8,0"
+        fill={fillColor}
+        stroke="#000000"
+        strokeWidth={2}
+        style={isLit && !comp.damaged ? { filter: `drop-shadow(0 0 ${glowBlur}px ${baseColor})` } : undefined}
+      />
       <line x1={8} y1={-12} x2={8} y2={12} stroke="#000000" strokeWidth={2.5} />
       <line x1={-40} y1={0} x2={-8} y2={0} stroke="#000" strokeWidth={2} />
       <line x1={8} y1={0} x2={40} y2={0} stroke="#000" strokeWidth={2} />
 
       {/* TCVN Emission arrows */}
-      <line x1={-2} y1={-12} x2={6} y2={-22} stroke="#000" strokeWidth={1.5} />
-      <polygon points="6,-22 2,-20 4,-16" fill="#000" />
-      <line x1={6} y1={-8} x2={14} y2={-18} stroke="#000" strokeWidth={1.5} />
-      <polygon points="14,-18 10,-16 12,-12" fill="#000" />
+      <line x1={-2} y1={-12} x2={6} y2={-22} stroke={isLit ? baseColor : '#000'} strokeWidth={isLit ? 2 : 1.5} />
+      <polygon points="6,-22 2,-20 4,-16" fill={isLit ? baseColor : '#000'} />
+      <line x1={6} y1={-8} x2={14} y2={-18} stroke={isLit ? baseColor : '#000'} strokeWidth={isLit ? 2 : 1.5} />
+      <polygon points="14,-18 10,-16 12,-12" fill={isLit ? baseColor : '#000'} />
 
       {pins.map(p => (
         <PinDot
@@ -1145,7 +1297,14 @@ export const LEDSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPin
           isHovered={hoveredPinId === p.id}
         />
       ))}
-      <SymbolLabels label={comp.label} valueStr={comp.damaged ? 'ĐÃ CHÁY' : `LED ${comp.props.color || 'đỏ'}`} rot={comp.rot} flip={comp.flip} flipY={comp.flipY} yOffset={-26} />
+      <SymbolLabels
+        label={comp.label}
+        valueStr={comp.damaged ? 'ĐÃ CHÁY' : isLit ? `Sáng ${(brightness * 100).toFixed(0)}%` : `LED ${comp.props.color || 'đỏ'}`}
+        rot={comp.rot}
+        flip={comp.flip}
+        flipY={comp.flipY}
+        yOffset={-26}
+      />
     </g>
   );
 };

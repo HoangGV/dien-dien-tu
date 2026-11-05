@@ -3,7 +3,7 @@
  */
 
 import { WorkspaceConfig } from './model';
-import { HOUSEHOLD_PRESETS, ELECTRONICS_PRESETS } from './testCircuits';
+import { HOUSEHOLD_PRESETS, ELECTRONICS_PRESETS } from './presets';
 
 export const WORKSPACE_HOUSEHOLD: WorkspaceConfig = {
   slug: 'mang-dien-trong-nha',

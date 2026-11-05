@@ -24,6 +24,9 @@ import {
   Sliders,
   ShieldCheck,
   CheckCircle2,
+  RotateCcw,
+  Activity,
+  Cpu,
 } from 'lucide-react';
 import { NeoButton } from '../common/NeoButton';
 import { NeoDropdown, DropdownItem } from '../common/NeoDropdown';
@@ -33,6 +36,7 @@ import { StandardsModal } from '../modals/StandardsModal';
 import { ImportExportModal } from '../modals/ImportExportModal';
 import { StorageModal } from '../modals/StorageModal';
 import { PresetsModal } from '../modals/PresetsModal';
+import { DiagnosticsModal } from '../modals/DiagnosticsModal';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
 
 export interface TopBarProps {
@@ -47,6 +51,7 @@ export const TopBar: React.FC<TopBarProps> = ({ svgRef }) => {
     allowDiagonalWires,
     showGrid,
     showWireLabels,
+    showMeterOverlay,
     fullFrameMode,
     rightPanelOpen,
     toggleRightPanel,
@@ -54,10 +59,12 @@ export const TopBar: React.FC<TopBarProps> = ({ svgRef }) => {
     canRedo,
     toggleSimulating,
     stopSimulating,
+    resetSimulation,
     toggleSound,
     toggleDiagonalWires,
     toggleShowGrid,
     toggleWireLabels,
+    toggleShowMeterOverlay,
     toggleFullFrame,
     toggleAllPE,
     undo,
@@ -74,6 +81,7 @@ export const TopBar: React.FC<TopBarProps> = ({ svgRef }) => {
   const [ioOpen, setIoOpen] = useState(false);
   const [storageOpen, setStorageOpen] = useState(false);
   const [presetsOpen, setPresetsOpen] = useState(false);
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
 
   // Responsive container width tracking for dynamic dropdown overflow
   const barRef = useRef<HTMLDivElement>(null);
@@ -124,7 +132,30 @@ export const TopBar: React.FC<TopBarProps> = ({ svgRef }) => {
     },
   ];
 
-  // 2. Presets Menu
+  // 2. Simulation Menu (MÔ PHỎNG)
+  const simItems: DropdownItem[] = [
+    {
+      id: 'sim_reset',
+      label: 'Đặt lại mô phỏng (t = 0)',
+      icon: <RotateCcw size={14} />,
+      onClick: resetSimulation,
+    },
+    {
+      id: 'sim_restore',
+      label: 'Hồi phục tất cả linh kiện hỏng',
+      icon: <Sparkles size={14} />,
+      onClick: restoreAllDamaged,
+    },
+    {
+      id: 'sim_sound',
+      label: soundEnabled ? 'Âm thanh: ĐANG BẬT' : 'Âm thanh: ĐANG TẮT',
+      icon: soundEnabled ? <Volume2 size={14} /> : <VolumeX size={14} />,
+      active: soundEnabled,
+      onClick: toggleSound,
+    },
+  ];
+
+  // 3. Presets Menu
   const presetItems: DropdownItem[] = [
     {
       id: 'open_presets',
@@ -134,7 +165,7 @@ export const TopBar: React.FC<TopBarProps> = ({ svgRef }) => {
     },
   ];
 
-  // 3. View Menu
+  // 4. View Menu
   const viewItems: DropdownItem[] = [
     {
       id: 'fit_frame',
@@ -164,13 +195,19 @@ export const TopBar: React.FC<TopBarProps> = ({ svgRef }) => {
     },
   ];
 
-  // 4. Help Menu
+  // 5. Help Menu
   const helpItems: DropdownItem[] = [
     {
       id: 'standards',
       label: 'Bảng kí hiệu TCVN & SGK GDPT',
       icon: <BookmarkCheck size={14} />,
       onClick: () => setStandardsOpen(true),
+    },
+    {
+      id: 'diagnostics',
+      label: 'Chẩn đoán mô phỏng (Diagnostics)',
+      icon: <Activity size={14} />,
+      onClick: () => setDiagnosticsOpen(true),
     },
     {
       id: 'solver_test',
@@ -323,6 +360,8 @@ export const TopBar: React.FC<TopBarProps> = ({ svgRef }) => {
 
           <NeoDropdown label="XEM" icon={<Eye size={12} />} items={viewItems} align="right" />
 
+          <NeoDropdown label="MÔ PHỎNG" icon={<Activity size={12} />} items={simItems} align="right" />
+
           {!isCompact && (
             <NeoDropdown label="MẪU" icon={<BookOpen size={12} />} items={presetItems} align="right" />
           )}
@@ -361,6 +400,7 @@ export const TopBar: React.FC<TopBarProps> = ({ svgRef }) => {
       {/* Modals */}
       <HelpModal isOpen={helpOpen} onClose={() => setHelpOpen(false)} />
       <StandardsModal isOpen={standardsOpen} onClose={() => setStandardsOpen(false)} />
+      <DiagnosticsModal isOpen={diagnosticsOpen} onClose={() => setDiagnosticsOpen(false)} />
       <ImportExportModal isOpen={ioOpen} onClose={() => setIoOpen(false)} svgRef={svgRef} />
       <StorageModal isOpen={storageOpen} onClose={() => setStorageOpen(false)} />
       <PresetsModal isOpen={presetsOpen} onClose={() => setPresetsOpen(false)} />

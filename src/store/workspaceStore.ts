@@ -26,6 +26,7 @@ import {
 import { extractNetlist, lintCircuit, getComponentPins } from '../core/netlist';
 import { migrateCircuitState } from '../core/migration';
 import { solveCircuit } from '../core/solver';
+import { simulationService, SimulationSnapshot } from '../core/simulationService';
 
 const storage = StorageService.getInstance();
 const history = new HistoryManager(DEFAULT_HISTORY_LIMIT);
@@ -100,6 +101,12 @@ interface WorkspaceStore {
   statusMessage: string | null;
   storageStats: StorageStats | null;
 
+  // Live Simulation state
+  simTime: number;
+  sourceSummaryStr: string;
+  simulationSnapshot: SimulationSnapshot | null;
+  showMeterOverlay: boolean;
+
   // Actions
   loadWorkspace: (slug: string) => Promise<void>;
   setCircuit: (state: CircuitState, recordHistory?: boolean) => void;
@@ -108,6 +115,8 @@ interface WorkspaceStore {
   setEditorMode: (mode: EditorMode) => void;
   toggleSimulating: () => void;
   stopSimulating: () => void;
+  resetSimulation: () => void;
+  toggleShowMeterOverlay: () => void;
   toggleSound: () => void;
   toggleDiagonalWires: () => void;
   toggleShowGrid: () => void;
@@ -141,6 +150,7 @@ interface WorkspaceStore {
   pasteSelected: () => void;
   duplicateSelected: () => void;
   restoreAllDamaged: () => void;
+  replaceDamagedComponent: (id: string) => void;
 
   // Rotation Handle
   startRotating: (compId: string, pointerAngle: number) => void;
@@ -177,6 +187,8 @@ interface WorkspaceStore {
 }
 
 let clipboard: { components: ComponentInstance[]; wires: Wire[] } | null = null;
+let recompileTimer: any = null;
+let lastUiThrottleTime = 0;
 
 export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   activeSlug: WORKSPACE_HOUSEHOLD.slug,
@@ -211,6 +223,10 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   lintWarnings: [],
   statusMessage: null,
   storageStats: null,
+  simTime: 0,
+  sourceSummaryStr: 'Nguồn: 0 V • 0 A • 0 W',
+  simulationSnapshot: null,
+  showMeterOverlay: true,
 
   loadWorkspace: async (slug: string) => {
     const config = getWorkspaceBySlug(slug) || WORKSPACE_HOUSEHOLD;
@@ -281,6 +297,14 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       autoSaver.schedule(get().activeSlug, state);
     }
     get().runLint();
+
+    // Sửa mạch khi đang chạy: tự biên dịch lại sau 100 ms debounce, giữ trạng thái động học
+    if (get().isSimulating) {
+      if (recompileTimer) clearTimeout(recompileTimer);
+      recompileTimer = setTimeout(() => {
+        simulationService.recompile(state, get().config.mode);
+      }, 100);
+    }
   },
 
   commitHistory: () => {
@@ -329,12 +353,28 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   toggleSimulating: () => {
     const isNowSim = !get().isSimulating;
     if (isNowSim) {
-      const { circuit } = get();
-      const res = solveCircuit(circuit.components, circuit.wires);
-      if (res.openCircuit && res.openCircuit.isOpen) {
+      // 1. Kiểm tra lỗi vi phạm quy tắc mạch (lint)
+      const warnings = get().runLint();
+      const hasErrors = warnings.some(w => w.type === 'error');
+      if (hasErrors) {
+        const firstErr = warnings.find(w => w.type === 'error');
+        set({
+          statusMessage: firstErr ? `Mạch có lỗi: ${firstErr.message}` : 'Mạch điện có lỗi cần sửa trước khi chạy.',
+          selectedComponentIds: firstErr?.targetCompId ? [firstErr.targetCompId] : [],
+          selectedWireIds: firstErr?.targetWireId ? [firstErr.targetWireId] : [],
+          hoveredPin: firstErr?.targetCompId && firstErr?.targetPinId ? { compId: firstErr.targetCompId, pinId: firstErr.targetPinId } : null,
+        });
+        return;
+      }
+
+      const { circuit, config } = get();
+      simulationService.start(circuit, config.mode);
+      const snapshot = simulationService.getSnapshot();
+
+      if (snapshot?.solverResult?.openCircuit?.isOpen) {
         set({
           isSimulating: true,
-          statusMessage: res.openCircuit.reason,
+          statusMessage: snapshot.solverResult.openCircuit.reason,
         });
       } else {
         set({
@@ -343,16 +383,29 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
         });
       }
     } else {
-      set({ isSimulating: false, statusMessage: null });
+      simulationService.pause();
+      set({ isSimulating: false, statusMessage: 'ĐÃ DỪNG MÔ PHỎNG' });
     }
   },
 
   stopSimulating: () => {
-    set({ isSimulating: false, statusMessage: null });
+    simulationService.pause();
+    set({ isSimulating: false, statusMessage: 'ĐÃ DỪNG MÔ PHỎNG' });
+  },
+
+  resetSimulation: () => {
+    simulationService.reset();
+    set({ isSimulating: false, simTime: 0, statusMessage: null });
+  },
+
+  toggleShowMeterOverlay: () => {
+    set(s => ({ showMeterOverlay: !s.showMeterOverlay }));
   },
 
   toggleSound: () => {
-    set(s => ({ soundEnabled: !s.soundEnabled }));
+    const next = !get().soundEnabled;
+    simulationService.setAudioEnabled(next);
+    set({ soundEnabled: next });
   },
 
   toggleDiagonalWires: () => {
@@ -1094,6 +1147,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
         ...c.props,
         isBlown: false,
         isTripped: false,
+        state: true,
       },
     }));
 
@@ -1103,11 +1157,44 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     }));
 
     const nextState = { ...circuit, components: nextComponents, wires: nextWires };
+    simulationService.resetAllDamaged();
     set({
       circuit: nextState,
       canUndo: history.canUndo(),
       canRedo: history.canRedo(),
       statusMessage: 'Đã thay mới và khôi phục toàn bộ linh kiện hỏng.',
+    });
+
+    autoSaver.schedule(get().activeSlug, nextState);
+    get().runLint();
+  },
+
+  replaceDamagedComponent: (compId: string) => {
+    const { circuit } = get();
+    history.push(circuit);
+    const nextComponents = circuit.components.map(c => {
+      if (c.id === compId) {
+        return {
+          ...c,
+          damaged: false,
+          damageReason: undefined,
+          props: {
+            ...c.props,
+            isBlown: false,
+            isTripped: false,
+            state: true,
+          },
+        };
+      }
+      return c;
+    });
+    const nextState = { ...circuit, components: nextComponents };
+    simulationService.replaceDamagedComponent(compId);
+    set({
+      circuit: nextState,
+      canUndo: history.canUndo(),
+      canRedo: history.canRedo(),
+      statusMessage: `Đã thay mới / đóng lại linh kiện ${compId}.`,
     });
 
     autoSaver.schedule(get().activeSlug, nextState);
@@ -1549,3 +1636,16 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     set({ storageStats: stats });
   },
 }));
+
+// Subscribe to live simulation snapshot updates (throttled to <= 10 Hz for React state)
+simulationService.subscribe((snapshot) => {
+  const now = performance.now();
+  if (now - lastUiThrottleTime >= 100) {
+    lastUiThrottleTime = now;
+    useWorkspaceStore.setState({
+      simTime: snapshot.simTime,
+      sourceSummaryStr: snapshot.sourceStats.summaryStr,
+      simulationSnapshot: snapshot,
+    });
+  }
+});

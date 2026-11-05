@@ -5,6 +5,7 @@ import { COMPONENT_MAP, getComponentDef } from '../../core/registry';
 import { snapToGrid, snapPointToGrid, pinWorldPos, isPointInBox, getComponentBoundingBox } from '../../core/geometry';
 import { routeOrthogonal, normalizePolyline } from '../../core/wiring';
 import { Point, Wire, ComponentInstance, Junction, BoundingBox } from '../../core/model';
+import { formatMeasure } from '../../core/measureFormat';
 
 export interface CanvasProps {
   svgRef: React.RefObject<SVGSVGElement | null>;
@@ -13,6 +14,8 @@ export interface CanvasProps {
 export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
   const {
     circuit,
+    isSimulating,
+    simulationSnapshot,
     activeTool,
     editorMode,
     placingType,
@@ -23,6 +26,7 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
     selectedWireIds,
     hoveredNetId,
     hoveredPin,
+    hoveredWireId,
     showGrid,
     showWireLabels,
     allowDiagonalWires,
@@ -35,6 +39,7 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
     placeComponent,
     setPlacingType,
     moveComponents,
+    updateComponentProp,
     startWiring,
     updateWiringPointer,
     addWiringWaypoint,
@@ -55,6 +60,41 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
 
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Live charge particles animation via rAF directly on SVG DOM
+  useEffect(() => {
+    if (!isSimulating) return;
+
+    let animId: number;
+    let lastT = performance.now();
+    const offsets: Record<string, number> = {};
+
+    const animateDots = (now: number) => {
+      const dt = (now - lastT) / 1000;
+      lastT = now;
+
+      const flows = simulationSnapshot?.wireFlows;
+      if (flows) {
+        for (const [wId, flow] of Object.entries(flows)) {
+          if (flow.absCurrent >= 1e-6 && flow.direction !== 0) {
+            const el = document.getElementById(`flow_${wId}`);
+            if (el) {
+              const currentOffset = offsets[wId] || 0;
+              const newOffset = currentOffset - flow.speedPxPerSec * flow.direction * dt;
+              offsets[wId] = newOffset % 1200;
+              el.setAttribute('stroke-dashoffset', String(offsets[wId]));
+              el.style.opacity = '0.95';
+            }
+          }
+        }
+      }
+
+      animId = requestAnimationFrame(animateDots);
+    };
+
+    animId = requestAnimationFrame(animateDots);
+    return () => cancelAnimationFrame(animId);
+  }, [isSimulating, simulationSnapshot]);
+
   // Marquee selection box
   const [marqueeStart, setMarqueeStart] = useState<Point | null>(null);
   const [marqueeEnd, setMarqueeEnd] = useState<Point | null>(null);
@@ -64,6 +104,7 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
   const [isSpacePressed, setIsSpacePressed] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
   const [panOrigin, setPanOrigin] = useState({ x: 0, y: 0 });
+  const activeButtonRef = useRef<string | null>(null);
 
   // Floating cursor in world space
   const [worldCursor, setWorldCursor] = useState<Point>({ x: 0, y: 0 });
@@ -253,6 +294,12 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
   };
 
   const handlePointerUp = (e: React.PointerEvent) => {
+    // Release push button if held during simulation
+    if (activeButtonRef.current) {
+      updateComponentProp(activeButtonRef.current, 'state', false);
+      activeButtonRef.current = null;
+    }
+
     if (isPanning) {
       setIsPanning(false);
       return;
@@ -369,6 +416,32 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
   // Click on a Component
   const handleComponentPointerDown = (compId: string, e: React.PointerEvent) => {
     e.stopPropagation();
+
+    // In simulation mode: interactive switches, CB, push-buttons
+    if (isSimulating) {
+      const comp = circuit.components.find((c) => c.id === compId);
+      if (comp) {
+        if (
+          comp.type === 'switch_2p' ||
+          comp.type === 'cb' ||
+          comp.type === 'knife_switch'
+        ) {
+          updateComponentProp(compId, 'state', !comp.props.state);
+          return;
+        }
+        if (comp.type === 'switch_3p') {
+          updateComponentProp(compId, 'state', !comp.props.state);
+          return;
+        }
+        if (comp.type === 'push_button') {
+          updateComponentProp(compId, 'state', true);
+          activeButtonRef.current = compId;
+          (e.target as HTMLElement)?.setPointerCapture?.(e.pointerId);
+          return;
+        }
+      }
+    }
+
     if (activeTool === 'delete') {
       selectComponent(compId, false);
       deleteSelected();
@@ -436,6 +509,10 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
             const isNetHighlighted = hoveredNetId !== null && false; // Wire net matching handled cleanly
             const pointsStr = w.points.map(p => `${p.x},${p.y}`).join(' ');
 
+            const flow = simulationSnapshot?.wireFlows?.[w.id];
+            const isMelted = flow?.isMelted || w.isBurnt;
+            const isOverheated = flow?.isOverheated;
+
             return (
               <g
                 key={w.id}
@@ -454,7 +531,20 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
                   strokeLinejoin="round"
                 />
 
-                {/* Selection / Net Highlight halo */}
+                {/* Overheated wire glowing halo */}
+                {isOverheated && (
+                  <polyline
+                    points={pointsStr}
+                    fill="none"
+                    stroke="#FF7A00"
+                    strokeWidth={w.crossSection * 2 + 6}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    opacity={0.7}
+                  />
+                )}
+
+                {/* Selection halo */}
                 {isSelected && (
                   <polyline
                     points={pointsStr}
@@ -470,7 +560,7 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
                 <polyline
                   points={pointsStr}
                   fill="none"
-                  stroke="#000000"
+                  stroke={isMelted ? '#374151' : '#000000'}
                   strokeWidth={Math.max(3, w.crossSection + 2)}
                   strokeLinecap="square"
                   strokeLinejoin="miter"
@@ -480,12 +570,28 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
                 <polyline
                   points={pointsStr}
                   fill="none"
-                  stroke={w.isBurnt ? '#555555' : w.color}
+                  stroke={isMelted ? '#1F2937' : isOverheated ? '#EA580C' : w.color}
                   strokeWidth={Math.max(2, w.crossSection)}
-                  strokeDasharray={w.isBurnt ? '4,4' : undefined}
+                  strokeDasharray={isMelted ? '6 4' : undefined}
                   strokeLinecap="square"
                   strokeLinejoin="miter"
                 />
+
+                {/* Animated charge carrier flow dots */}
+                {!isMelted && (
+                  <polyline
+                    id={`flow_${w.id}`}
+                    points={pointsStr}
+                    fill="none"
+                    stroke="#FFD84D"
+                    strokeWidth={Math.max(2, w.crossSection + 1)}
+                    strokeDasharray="4 12"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    opacity={0}
+                    pointerEvents="none"
+                  />
+                )}
 
                 {/* Midpoint segment dragging handles for selected wire */}
                 {isSelected &&
@@ -711,6 +817,22 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
               strokeDasharray="4,3"
             />
           )}
+
+          {/* 7. PARTICLES LAYER (Smoke & Sparks) */}
+          {simulationSnapshot?.particles && simulationSnapshot.particles.length > 0 && (
+            <g pointerEvents="none">
+              {simulationSnapshot.particles.map((p) => (
+                <circle
+                  key={p.id}
+                  cx={p.x}
+                  cy={p.y}
+                  r={p.size}
+                  fill={p.color}
+                  opacity={p.opacity}
+                />
+              ))}
+            </g>
+          )}
         </g>
       </svg>
 
@@ -745,6 +867,60 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
           VỪA
         </button>
       </div>
+
+      {/* Floating Simulation Tooltips for Wire Hover */}
+      {hoveredWireId && (() => {
+        const wire = circuit.wires.find((w) => w.id === hoveredWireId);
+        if (!wire) return null;
+        const flow = simulationSnapshot?.wireFlows?.[hoveredWireId];
+        const mid = getPolylineMidpoint(wire.points);
+        const screenX = mid.x * circuit.viewport.zoom + circuit.viewport.x;
+        const screenY = mid.y * circuit.viewport.zoom + circuit.viewport.y;
+
+        const currentVal = flow ? Math.abs(flow.current) : 0;
+        const text = isSimulating
+          ? currentVal >= 1e-6
+            ? `Dòng: ${formatMeasure(currentVal, 'current')} ${flow?.direction ? (flow.direction > 0 ? '→' : '←') : ''}`
+            : 'Dòng: 0 A'
+          : `Dây điện (${wire.color})`;
+
+        return (
+          <div
+            className="absolute z-30 pointer-events-none bg-black text-[#FFD84D] font-mono text-[11px] font-black px-2 py-0.5 border border-white shadow-[2px_2px_0_#000]"
+            style={{ left: Math.max(10, screenX - 45), top: Math.max(10, screenY - 28) }}
+          >
+            {text}
+          </div>
+        );
+      })()}
+
+      {/* Floating Simulation Tooltips for Pin Hover */}
+      {hoveredPin && (() => {
+        const comp = circuit.components.find((c) => c.id === hoveredPin.compId);
+        if (!comp) return null;
+        const pinKey = `${hoveredPin.compId}:${hoveredPin.pinId}`;
+        const volt = simulationSnapshot?.pinVoltages?.[pinKey];
+        const netId = simulationSnapshot?.diagnostics?.pinNetMap?.[pinKey];
+        const def = COMPONENT_MAP.get(comp.type);
+        const pins = typeof def?.pins === 'function' ? def.pins(comp.props) : def?.pins || [];
+        const pDef = pins.find((p) => p.id === hoveredPin.pinId);
+        const pinPos = pinWorldPos(comp, hoveredPin.pinId, def);
+        const screenX = pinPos.x * circuit.viewport.zoom + circuit.viewport.x;
+        const screenY = pinPos.y * circuit.viewport.zoom + circuit.viewport.y;
+
+        const text = isSimulating && volt !== undefined
+          ? `Nút N${netId ?? 0}: ${formatMeasure(volt, 'voltage')} (so với nút chuẩn)`
+          : `Chân ${pDef?.label || hoveredPin.pinId}`;
+
+        return (
+          <div
+            className="absolute z-30 pointer-events-none bg-white text-black font-mono text-[11px] font-black px-2 py-0.5 border-2 border-black shadow-[2px_2px_0_#000]"
+            style={{ left: Math.max(10, screenX - 35), top: Math.max(10, screenY - 32) }}
+          >
+            {text}
+          </div>
+        );
+      })()}
     </div>
   );
 };

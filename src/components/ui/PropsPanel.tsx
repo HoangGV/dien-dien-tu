@@ -12,11 +12,15 @@ import {
   Zap,
   ShieldCheck,
   AlertTriangle,
+  Gauge,
+  Activity,
 } from 'lucide-react';
 import { useWorkspaceStore } from '../../store/workspaceStore';
 import { COMPONENT_MAP } from '../../core/registry';
 import { NeoButton } from '../common/NeoButton';
 import { WireType } from '../../core/model';
+import { formatMeasure } from '../../core/measureFormat';
+import { solveOhmmeterResistance } from '../../core/solver';
 
 export interface PropsPanelProps {
   isBottomSheet?: boolean;
@@ -25,6 +29,8 @@ export interface PropsPanelProps {
 export const PropsPanel: React.FC<PropsPanelProps> = ({ isBottomSheet = false }) => {
   const {
     circuit,
+    isSimulating,
+    simulationSnapshot,
     selectedComponentIds,
     selectedWireIds,
     rightPanelOpen,
@@ -37,6 +43,7 @@ export const PropsPanel: React.FC<PropsPanelProps> = ({ isBottomSheet = false })
     deleteSelected,
     duplicateSelected,
     restoreAllDamaged,
+    replaceDamagedComponent,
     updateWireProps,
     setWireType,
     rerouteWireAuto,
@@ -54,6 +61,9 @@ export const PropsPanel: React.FC<PropsPanelProps> = ({ isBottomSheet = false })
       : null;
 
   const def = selectedComp ? COMPONENT_MAP.get(selectedComp.type) : null;
+  const kinetics = selectedComp && simulationSnapshot?.componentKinetics
+    ? simulationSnapshot.componentKinetics[selectedComp.id]
+    : null;
 
   // Local state for label and rotation input to avoid jitter
   const [localLabel, setLocalLabel] = useState('');
@@ -96,6 +106,40 @@ export const PropsPanel: React.FC<PropsPanelProps> = ({ isBottomSheet = false })
         {/* CASE 1: COMPONENT SELECTED */}
         {selectedComp && def && (
           <div className="space-y-3">
+            {/* BIG MEASUREMENT DISPLAY FOR METERS */}
+            {(selectedComp.type === 'ammeter' || selectedComp.type === 'voltmeter' || selectedComp.type === 'wattmeter') && (
+              <div className="border-2 border-black bg-[#FFD84D] p-2 text-center shadow-[2px_2px_0_#000]">
+                <div className="text-[10px] font-black uppercase text-black tracking-wider flex items-center justify-center gap-1">
+                  <Gauge size={12} strokeWidth={3} />
+                  {selectedComp.type === 'ammeter' ? 'SỐ ĐO DÒNG ĐIỆN (I)' : selectedComp.type === 'voltmeter' ? 'SỐ ĐO ĐIỆN ÁP (U)' : 'SỐ ĐO CÔNG SUẤT (P)'}
+                </div>
+                <div className="text-[20px] font-black font-mono tracking-tight text-black my-0.5">
+                  {isSimulating ? (
+                    selectedComp.type === 'ammeter' ? (
+                      formatMeasure(kinetics?.current ?? 0, 'current')
+                    ) : selectedComp.type === 'voltmeter' ? (
+                      formatMeasure(kinetics?.voltage ?? 0, 'voltage')
+                    ) : (
+                      formatMeasure(kinetics?.power ?? 0, 'power')
+                    )
+                  ) : (
+                    '—'
+                  )}
+                </div>
+                <div className="text-[9px] font-bold text-gray-800">
+                  {isSimulating ? (
+                    kinetics?.stateStr === 'Ngược chiều' ? (
+                      <span className="text-[#E5322D] font-black">⚠ Dòng điện ngược chiều quy ước</span>
+                    ) : (
+                      <span>Đang đo trực tiếp</span>
+                    )
+                  ) : (
+                    <span>Bấm CHẠY để có số đo</span>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* NHÓM 1: CHUNG */}
             <div className="border border-black bg-[#EEF2FF] p-2 space-y-2">
               <div className="text-[10px] font-black uppercase text-[#4169E1] tracking-wider border-b border-black/20 pb-0.5">
@@ -260,10 +304,237 @@ export const PropsPanel: React.FC<PropsPanelProps> = ({ isBottomSheet = false })
                 })}
             </div>
 
-            {/* NHÓM 3: VỊ TRÍ & HƯỚNG */}
+            {/* NHÓM 3: ĐO ĐẠC & TRẠNG THÁI HOẠT ĐỘNG */}
+            <div className="border border-black bg-[#F8FAFC] p-2 space-y-2">
+              <div className="text-[10px] font-black uppercase text-[#4169E1] tracking-wider border-b border-black/20 pb-0.5 flex items-center justify-between">
+                <span className="flex items-center gap-1">
+                  <Activity size={11} strokeWidth={3} />
+                  3. Đo đạc & Hoạt động
+                </span>
+                {isSimulating && (
+                  <span className="flex items-center gap-1 text-[9px] text-[#059669] font-black uppercase">
+                    <span className="inline-block w-2 h-2 rounded-full bg-[#2DB84D] animate-ping" />
+                    LIVE
+                  </span>
+                )}
+              </div>
+
+              {/* 1. ĐO ĐẠC DỤNG CỤ ĐO (AMPE KẾ, VÔN KẾ, OÁT KẾ, ÔM KẾ) */}
+              {['ammeter', 'voltmeter', 'wattmeter', 'ohmmeter'].includes(selectedComp.type) ? (
+                <div className="space-y-2">
+                  {/* ÔM KẾ: Tự động đo kể cả khi chưa bấm CHẠY */}
+                  {selectedComp.type === 'ohmmeter' && (() => {
+                    const ohmRes = solveOhmmeterResistance(circuit.components, circuit.wires, circuit.junctions, selectedComp.id);
+                    const rStr = formatMeasure(ohmRes.resistance, 'resistance');
+                    return (
+                      <div className="space-y-1.5">
+                        <div className="bg-white border-2 border-black p-2 text-center rounded">
+                          <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                            Điện trở đo được (R)
+                          </div>
+                          <div className="text-[20px] font-mono font-black text-[#4169E1] leading-tight my-0.5">
+                            {rStr}
+                          </div>
+                        </div>
+
+                        {ohmRes.hasLiveVoltageWarning && isSimulating && (
+                          <div className="p-1.5 bg-[#FFFBEB] border border-[#F59E0B] text-[#B45309] text-[9.5px] font-bold rounded">
+                            ⚠️ Mạch đang có điện — ôm kế chỉ đo đúng khi ngắt nguồn; số đo đã coi nguồn bị tắt.
+                          </div>
+                        )}
+
+                        <div className="p-1 bg-[#EEF2FF] border border-[#C7D2FE] text-[#3730A3] text-[9px] rounded italic">
+                          ℹ️ Hướng dẫn: Mắc hai đầu vào hai đầu của linh kiện cần đo; không cần cấp điện.
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* OÁT KẾ: Cuộn dòng mắc nối tiếp, cuộn áp mắc song song */}
+                  {selectedComp.type === 'wattmeter' && (() => {
+                    const meterData = simulationSnapshot?.meters[selectedComp.id];
+                    const isCoilConnected = meterData?.isVoltageCoilConnected ?? false;
+                    const pVal = meterData?.power ?? 0;
+                    const isRev = meterData?.isReversePolarity ?? false;
+
+                    return (
+                      <div className="space-y-1.5">
+                        <div className="bg-white border-2 border-black p-2 text-center rounded">
+                          <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                            Công suất tiêu thụ (P)
+                          </div>
+                          <div className="text-[20px] font-mono font-black text-[#4169E1] leading-tight my-0.5">
+                            {isSimulating ? (
+                              <span>
+                                {formatMeasure(pVal, 'power')}
+                                {isRev && <span className="text-[11px] text-[#DC2626] ml-1">(ngược chiều)</span>}
+                              </span>
+                            ) : (
+                              '—'
+                            )}
+                          </div>
+                          {!isSimulating && (
+                            <p className="text-[9px] text-gray-500 italic mt-0.5">Bấm CHẠY để có số đo</p>
+                          )}
+                        </div>
+
+                        {isSimulating && (
+                          <div className="space-y-1 text-[10px] font-mono bg-white p-1.5 border border-black/10 rounded">
+                            <div className="flex justify-between">
+                              <span className="text-gray-600 font-sans">Điện áp cuộn áp (U):</span>
+                              <span className="font-bold">{formatMeasure(meterData?.voltage ?? 0, 'voltage')}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-600 font-sans">Dòng điện cuộn dòng (I):</span>
+                              <span className="font-bold">{formatMeasure(meterData?.current ?? 0, 'current')}</span>
+                            </div>
+                            <div className="text-[9px] text-gray-500 italic pt-1 border-t border-black/10">
+                              * Tải thuần trở nên cosφ = 1 (mô hình hiệu dụng).
+                            </div>
+                          </div>
+                        )}
+
+                        {isSimulating && !isCoilConnected && (
+                          <div className="p-1.5 bg-[#FEF2F2] border border-[#EF4444] text-[#DC2626] text-[9.5px] font-bold rounded">
+                            ⚠️ Chưa nối cuộn áp (U+, U-).
+                          </div>
+                        )}
+
+                        <div className="p-1 bg-[#EEF2FF] border border-[#C7D2FE] text-[#3730A3] text-[9px] rounded italic">
+                          ℹ️ Hướng dẫn: Cuộn dòng I+→I− mắc nối tiếp vào dây A; cuộn áp U+, U− mắc song song với tải (U+ cùng điểm với I−, U− nối vào dây O của tải).
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* AMPE KẾ */}
+                  {selectedComp.type === 'ammeter' && (
+                    <div className="space-y-1.5">
+                      <div className="bg-white border-2 border-black p-2 text-center rounded">
+                        <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                          Dòng điện qua mạch (I)
+                        </div>
+                        <div className="text-[20px] font-mono font-black text-[#4169E1] leading-tight my-0.5">
+                          {isSimulating ? formatMeasure(kinetics?.current ?? 0, 'current') : '—'}
+                        </div>
+                        {!isSimulating && (
+                          <p className="text-[9px] text-gray-500 italic mt-0.5">Bấm CHẠY để có số đo</p>
+                        )}
+                      </div>
+                      {isSimulating && kinetics?.stateStr === 'Ngược chiều' && (
+                        <div className="text-center text-[10px] font-bold text-[#DC2626]">
+                          Dòng điện chạy ngược chiều quy ước (vào cực − ra cực +)
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* VÔN KẾ */}
+                  {selectedComp.type === 'voltmeter' && (
+                    <div className="space-y-1.5">
+                      <div className="bg-white border-2 border-black p-2 text-center rounded">
+                        <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                          Điện áp giữa hai đầu (U)
+                        </div>
+                        <div className="text-[20px] font-mono font-black text-[#4169E1] leading-tight my-0.5">
+                          {isSimulating ? formatMeasure(kinetics?.voltage ?? 0, 'voltage') : '—'}
+                        </div>
+                        {!isSimulating && (
+                          <p className="text-[9px] text-gray-500 italic mt-0.5">Bấm CHẠY để có số đo</p>
+                        )}
+                      </div>
+                      {isSimulating && kinetics?.stateStr === 'Ngược chiều' && (
+                        <div className="text-center text-[10px] font-bold text-[#DC2626]">
+                          Cực tính đo ngược (V+ nhỏ hơn V−)
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* 2. ĐO ĐẠC CHO PHỤ TẢI VÀ THIẾT BỊ KHÁC */
+                <div className="space-y-2">
+                  {isSimulating ? (
+                    <div className="space-y-1 text-[11px] font-mono">
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-600 font-sans text-[10px]">Điện áp hai đầu:</span>
+                        <span className="font-bold text-black">{formatMeasure(kinetics?.voltage ?? 0, 'voltage')}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-600 font-sans text-[10px]">Dòng điện:</span>
+                        <span className="font-bold text-black">{formatMeasure(kinetics?.current ?? 0, 'current')}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-600 font-sans text-[10px]">Công suất:</span>
+                        <span className="font-bold text-black">{formatMeasure(kinetics?.power ?? 0, 'power')}</span>
+                      </div>
+
+                      {selectedComp.type === 'ceiling_fan' && (
+                        <div className="flex items-center justify-between pt-1 border-t border-black/10">
+                          <span className="text-gray-600 font-sans text-[10px]">Công suất tải:</span>
+                          <span className="font-bold text-black">{Math.round(kinetics?.power ?? 0)} / {selectedComp.props.power || 60} W</span>
+                        </div>
+                      )}
+
+                      {/* Nhiệt tích lũy & Trạng thái hỏng hóc */}
+                      <div className="pt-1 border-t border-black/10 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-600 font-sans text-[10px]">% Nhiệt tích lũy:</span>
+                          <span className={`font-bold ${kinetics && kinetics.heatPercent > 50 ? 'text-[#DC2626]' : 'text-black'}`}>
+                            {kinetics?.heatPercent ?? 0}%
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-600 font-sans text-[10px]">Trạng thái:</span>
+                          <span className={`font-black text-[10px] ${
+                            kinetics?.thermalStatus === 'damaged' ? 'text-[#DC2626]' :
+                            kinetics?.thermalStatus === 'tripped' ? 'text-[#DC2626]' :
+                            kinetics?.thermalStatus === 'blown' ? 'text-[#DC2626]' :
+                            kinetics?.thermalStatus === 'hot' ? 'text-[#EA580C]' :
+                            kinetics?.isOperating ? 'text-[#059669]' : 'text-gray-500'
+                          }`}>
+                            {kinetics?.thermalStatus === 'damaged' ? 'ĐÃ HỎNG / CHÁY' :
+                             kinetics?.thermalStatus === 'tripped' ? 'ĐÃ NHẢY' :
+                             kinetics?.thermalStatus === 'blown' ? 'ĐÃ ĐỨT' :
+                             kinetics?.thermalStatus === 'hot' ? 'NÓNG (QUÁ TẢI)' :
+                             kinetics?.isOperating ? 'Đang hoạt động' : 'Đang dừng'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="py-2 text-center space-y-1">
+                      <div className="text-[14px] font-mono font-bold text-gray-400">—</div>
+                      <p className="text-[9px] text-gray-500 italic">Bấm CHẠY để có số đo</p>
+                    </div>
+                  )}
+
+                  {/* Nút thao tác phục hồi / đóng lại */}
+                  {(kinetics?.thermalStatus === 'tripped' || selectedComp.props.isTripped) && (
+                    <button
+                      onClick={() => replaceDamagedComponent(selectedComp.id)}
+                      className="w-full h-7 bg-[#2DB84D] text-white border-2 border-black font-black text-[10px] uppercase shadow-[2px_2px_0_#000] cursor-pointer hover:bg-[#25A244]"
+                    >
+                      ĐÓNG LẠI APTOMAT
+                    </button>
+                  )}
+
+                  {(kinetics?.thermalStatus === 'damaged' || kinetics?.thermalStatus === 'blown' || selectedComp.damaged || selectedComp.props.isBlown) && (
+                    <button
+                      onClick={() => replaceDamagedComponent(selectedComp.id)}
+                      className="w-full h-7 bg-[#E5322D] text-white border-2 border-black font-black text-[10px] uppercase shadow-[2px_2px_0_#000] cursor-pointer hover:bg-[#C8231E]"
+                    >
+                      THAY LINH KIỆN MỚI
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* NHÓM 4: VỊ TRÍ & HƯỚNG */}
             <div className="border border-black bg-white p-2 space-y-2">
               <div className="text-[10px] font-black uppercase text-[#4169E1] tracking-wider border-b border-black/20 pb-0.5">
-                3. Hướng xoay & Lật
+                4. Hướng xoay & Lật
               </div>
 
               {/* Exact angle input */}

@@ -10,6 +10,8 @@ import { HistoryManager } from './history';
 import { getComponentPins } from './netlist';
 import { createWorkspaceExportPackage, validateCircuitJson } from './io';
 import { migrateCircuitState } from './migration';
+import { SimulationService } from './simulationService';
+import { formatMeasure } from './measureFormat';
 
 // Helper to make a wire
 function makeWire(
@@ -35,7 +37,7 @@ function makeWire(
 export interface SolverTestCase {
   id: string;
   stt: number;
-  group: 'C-1' | 'PE';
+  group: 'C-1' | 'PE' | 'C-2' | 'C-3';
   name: string;
   expectedStr: string;
   toleranceStr: string;
@@ -585,90 +587,776 @@ export const ALL_SOLVER_TEST_CASES: SolverTestCase[] = [
       return { actualStr: 'Thông mạch nội bộ 1 mΩ ĐẠT', passed };
     },
   },
-];
 
-// ----------------------------------------------------
-// 2. PRESETS CHO MENU "MẪU ▾" (9 mạch thử sẵn)
-// ----------------------------------------------------
-export const HOUSEHOLD_PRESETS: Preset[] = [
-  {
-    id: 'hh_a',
-    title: 'a) Nguồn lưới → Aptomat 1P 16A → Ampe kế → Quạt trần 60W',
-    description: 'Mạch khép kín đầy đủ dây về O, đo dòng tiêu thụ qua quạt trần 60 W (I ≈ 0.273 A).',
-    state: ALL_SOLVER_TEST_CASES[1].createCircuit(),
-  },
-  {
-    id: 'hh_b',
-    title: 'b) Mạch (a) có thêm Vôn kế song song quạt',
-    description: 'Đo đồng thời điện áp 220 V trên tải bằng Vôn kế và dòng điện qua mạch bằng Ampe kế.',
-    state: ALL_SOLVER_TEST_CASES[3].createCircuit(),
-  },
-  {
-    id: 'hh_c',
-    title: 'c) Sự cố rò vỏ: Chân PE TẮT, có người chạm vào vỏ',
-    description: 'Minh họa sự cố nguy hiểm: điện áp vỏ 217.8 V, dòng qua người 217.8 mA gây nguy hiểm đến tính mạng.',
-    state: ALL_SOLVER_TEST_CASES[8].createCircuit(),
-  },
-  {
-    id: 'hh_d',
-    title: 'd) Sự cố rò vỏ: Chân PE nối Cọc tiếp địa 4 Ω, có người chạm',
-    description: 'Bảo vệ tiếp địa: dòng sự cố đi vào cọc đất, điện áp tiếp xúc giảm từ 218 V xuống 62.7 V.',
-    state: ALL_SOLVER_TEST_CASES[9].createCircuit(),
-  },
-  {
-    id: 'hh_e',
-    title: 'e) Mạch (d) có thêm Aptomat chống rò (ELCB 30 mA)',
-    description: 'Aptomat chống rò phát hiện chênh lệch dòng pha và trung tính (> 30 mA) và nhảy ngắt mạch tức thì.',
-    state: ALL_SOLVER_TEST_CASES[12].createCircuit(),
-  },
-];
+  // ==========================================
+  // GIAI ĐOẠN C-2: NỐI BỘ GIẢI VÀO GIAO DIỆN (E1–E7)
+  // ==========================================
 
-export const ELECTRONICS_PRESETS: Preset[] = [
+  // E1. Mẫu (a) nhà ở chạy 1 s mô phỏng: ampe kế = 272,7 mA (±2 mA); quạt: trạng thái Đang hoạt động (độ xanh ≈ 100% ± 2%)
   {
-    id: 'el_f',
-    title: 'f) Pin 9 V + Điện trở 470 Ω + LED đỏ',
-    description: 'Mạch chiếu sáng LED cơ bản có trở hạn dòng (I ≈ 14.6 mA, điện áp LED ≈ 2.0 V).',
-    state: ALL_SOLVER_TEST_CASES[4].createCircuit(),
+    id: 'e1_sample_a_running',
+    stt: 19,
+    group: 'C-2',
+    name: 'E1: Mẫu (a) nhà ở chạy 1 s (Ampe kế = 272,7 mA, Quạt sáng xanh 100%)',
+    expectedStr: 'Ampe kế = 272,7 mA (±2 mA), Quạt: Đang hoạt động (Độ xanh = 100% ±2%)',
+    toleranceStr: 'I: ±2 mA, Độ xanh: ±2%',
+    createCircuit: () => {
+      const u: ComponentInstance = { id: 'u1', type: 'ac_source', x: 80, y: 140, rot: 0, flip: false, label: 'U', props: { voltage: 220, hasPE: false } };
+      const mcb: ComponentInstance = { id: 'mcb1', type: 'cb', x: 200, y: 140, rot: 0, flip: false, label: 'MCB1', props: { poles: 1, ratedCurrent: 16, state: true } };
+      const am: ComponentInstance = { id: 'a1', type: 'ammeter', x: 300, y: 140, rot: 0, flip: false, label: 'A1', props: {} };
+      const fan: ComponentInstance = { id: 'fan1', type: 'ceiling_fan', x: 420, y: 140, rot: 0, flip: false, label: 'QT1', props: { power: 60, hasPE: false } };
+      const w1 = makeWire('w1', 'u1', 'A', 'mcb1', 'in', [{ x: 120, y: 140 }, { x: 160, y: 140 }], 'phase');
+      const w2 = makeWire('w2', 'mcb1', 'out', 'a1', 'pos', [{ x: 240, y: 140 }, { x: 260, y: 140 }], 'phase');
+      const w3 = makeWire('w3', 'a1', 'neg', 'fan1', '1', [{ x: 340, y: 140 }, { x: 380, y: 140 }], 'phase');
+      const w4 = makeWire('w4', 'fan1', '2', 'u1', 'O', [{ x: 460, y: 140 }, { x: 460, y: 60 }, { x: 120, y: 60 }, { x: 120, y: 100 }], 'neutral');
+      return { components: [u, mcb, am, fan], wires: [w1, w2, w3, w4], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+    },
+    evaluate: () => {
+      const circ = ALL_SOLVER_TEST_CASES[18].createCircuit();
+      const sim = new SimulationService();
+      sim.compile(circ, 'rms');
+      // Run 1 second in simulation
+      let snap = sim.step(1.0);
+      const iValMa = (snap.elementMeasures['a1']?.current || 0) * 1000;
+      const fanKin = snap.componentKinetics['fan1'];
+      const greenPct = (fanKin?.greenIntensity ?? 0) * 100;
+      const passed = Math.abs(iValMa - 272.7) <= 2.0 && Math.abs(greenPct - 100) <= 2.0 && fanKin?.isOperating === true;
+      return {
+        actualStr: `Ampe kế: ${iValMa.toFixed(1).replace('.', ',')} mA, Quạt: ${fanKin?.stateStr || 'Tắt'} (Xanh: ${Math.round(greenPct)}%)`,
+        passed,
+      };
+    },
   },
+
+  // E2. Mẫu (b): vôn kế = 220 V (±0,5 V)
   {
-    id: 'el_g',
-    title: 'g) LED nối thẳng pin 9 V (không trở hạn dòng)',
-    description: 'Mạch báo động quá dòng: dòng điện chạy thẳng qua LED mà không có điện trở cản trở.',
-    state: (() => {
+    id: 'e2_sample_b_voltmeter',
+    stt: 20,
+    group: 'C-2',
+    name: 'E2: Mẫu (b) nhà ở có Vôn kế song song quạt (Vôn kế = 220,0 V)',
+    expectedStr: 'Vôn kế = 220,0 V (±0,5 V)',
+    toleranceStr: '±0,5 V',
+    createCircuit: () => {
+      const u: ComponentInstance = { id: 'u1', type: 'ac_source', x: 80, y: 120, rot: 0, flip: false, label: 'U', props: { voltage: 220, hasPE: false } };
+      const amp: ComponentInstance = { id: 'a1', type: 'ammeter', x: 200, y: 140, rot: 0, flip: false, label: 'A1', props: {} };
+      const fan: ComponentInstance = { id: 'fan1', type: 'ceiling_fan', x: 340, y: 140, rot: 0, flip: false, label: 'QT1', props: { power: 60, hasPE: false } };
+      const volt: ComponentInstance = { id: 'v1', type: 'voltmeter', x: 340, y: 240, rot: 0, flip: false, label: 'V1', props: {} };
+      const w1 = makeWire('w1', 'u1', 'A', 'a1', 'pos', [{ x: 120, y: 140 }, { x: 160, y: 140 }], 'phase');
+      const w2 = makeWire('w2', 'a1', 'neg', 'fan1', '1', [{ x: 240, y: 140 }, { x: 300, y: 140 }], 'phase');
+      const w3 = makeWire('w3', 'fan1', '2', 'u1', 'O', [{ x: 380, y: 140 }, { x: 380, y: 60 }, { x: 120, y: 60 }, { x: 120, y: 100 }], 'neutral');
+      const wv1 = makeWire('wv1', 'fan1', '1', 'v1', 'pos', [{ x: 300, y: 140 }, { x: 300, y: 240 }], 'phase');
+      const wv2 = makeWire('wv2', 'fan1', '2', 'v1', 'neg', [{ x: 380, y: 140 }, { x: 380, y: 240 }], 'neutral');
+      return { components: [u, amp, fan, volt], wires: [w1, w2, w3, wv1, wv2], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+    },
+    evaluate: () => {
+      const circ = ALL_SOLVER_TEST_CASES[19].createCircuit();
+      const sim = new SimulationService();
+      sim.compile(circ, 'rms');
+      const snap = sim.step(0.1);
+      const vVal = snap.elementMeasures['v1']?.voltage ?? 0;
+      const passed = Math.abs(vVal - 220) <= 0.5;
+      return {
+        actualStr: `Vôn kế = ${formatMeasure(vVal, 'voltage')}`,
+        passed,
+      };
+    },
+  },
+
+  // E3. Mẫu (a) sau khi NGẮT aptomat: dòng = 0 và quạt dừng
+  {
+    id: 'e3_sample_a_trip',
+    stt: 21,
+    group: 'C-2',
+    name: 'E3: Mẫu (a) sau khi NGẮT aptomat (Dòng = 0 A, Quạt dừng)',
+    expectedStr: 'Dòng = 0 A, Quạt dừng (Độ xanh = 0%)',
+    toleranceStr: 'Chính xác',
+    createCircuit: () => {
+      const u: ComponentInstance = { id: 'u1', type: 'ac_source', x: 80, y: 140, rot: 0, flip: false, label: 'U', props: { voltage: 220, hasPE: false } };
+      const mcb: ComponentInstance = { id: 'mcb1', type: 'cb', x: 200, y: 140, rot: 0, flip: false, label: 'MCB1', props: { poles: 1, ratedCurrent: 16, state: false } };
+      const am: ComponentInstance = { id: 'a1', type: 'ammeter', x: 300, y: 140, rot: 0, flip: false, label: 'A1', props: {} };
+      const fan: ComponentInstance = { id: 'fan1', type: 'ceiling_fan', x: 420, y: 140, rot: 0, flip: false, label: 'QT1', props: { power: 60, hasPE: false } };
+      const w1 = makeWire('w1', 'u1', 'A', 'mcb1', 'in', [{ x: 120, y: 140 }, { x: 160, y: 140 }], 'phase');
+      const w2 = makeWire('w2', 'mcb1', 'out', 'a1', 'pos', [{ x: 240, y: 140 }, { x: 260, y: 140 }], 'phase');
+      const w3 = makeWire('w3', 'a1', 'neg', 'fan1', '1', [{ x: 340, y: 140 }, { x: 380, y: 140 }], 'phase');
+      const w4 = makeWire('w4', 'fan1', '2', 'u1', 'O', [{ x: 460, y: 140 }, { x: 460, y: 60 }, { x: 120, y: 60 }, { x: 120, y: 100 }], 'neutral');
+      return { components: [u, mcb, am, fan], wires: [w1, w2, w3, w4], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+    },
+    evaluate: () => {
+      const circ = ALL_SOLVER_TEST_CASES[20].createCircuit();
+      const sim = new SimulationService();
+      sim.compile(circ, 'rms');
+      const snap = sim.step(0.1);
+      const iVal = snap.elementMeasures['a1']?.current ?? 0;
+      const fanKin = snap.componentKinetics['fan1'];
+      const isStopped = !fanKin?.isOperating && (fanKin?.greenIntensity ?? 0) === 0;
+      const passed = Math.abs(iVal) < 1e-6 && isStopped;
+      return {
+        actualStr: `Dòng: ${formatMeasure(iVal, 'current')}, Quạt: ${fanKin?.stateStr || 'Đang dừng'}`,
+        passed,
+      };
+    },
+  },
+
+  // E4. Mẫu (f) điện tử (pin 9 V + 470 Ω + LED đỏ): ampe kế/dòng = 14,9 mA (±0,4 mA); độ sáng LED ≈ 0,86 (±0,05)
+  {
+    id: 'e4_sample_f_led',
+    stt: 22,
+    group: 'C-2',
+    name: 'E4: Mẫu (f) điện tử (Dòng = 14,9 mA, Độ sáng LED ≈ 0,86)',
+    expectedStr: 'Dòng = 14,9 mA (±0,4 mA), Độ sáng LED = 0,86 (±0,05)',
+    toleranceStr: 'I: ±0,4 mA, Độ sáng: ±0,05',
+    createCircuit: () => {
+      const v: ComponentInstance = { id: 'v1', type: 'dc_source', x: 80, y: 120, rot: 0, flip: false, label: 'V1', props: { voltage: 9 } };
+      const r: ComponentInstance = { id: 'r1', type: 'resistor', x: 200, y: 80, rot: 0, flip: false, label: 'R1', props: { resistance: 470 } };
+      const am: ComponentInstance = { id: 'a1', type: 'ammeter', x: 300, y: 80, rot: 0, flip: false, label: 'A1', props: {} };
+      const led: ComponentInstance = { id: 'led1', type: 'led', x: 420, y: 80, rot: 0, flip: false, label: 'D1', props: { color: 'red' } };
+      const w1 = makeWire('w1', 'v1', 'pos', 'r1', '1', [{ x: 80, y: 80 }, { x: 160, y: 80 }], 'phase');
+      const w2 = makeWire('w2', 'r1', '2', 'a1', 'pos', [{ x: 240, y: 80 }, { x: 260, y: 80 }], 'phase');
+      const w3 = makeWire('w3', 'a1', 'neg', 'led1', 'A', [{ x: 340, y: 80 }, { x: 380, y: 80 }], 'phase');
+      const w4 = makeWire('w4', 'led1', 'K', 'v1', 'neg', [{ x: 460, y: 80 }, { x: 460, y: 160 }, { x: 80, y: 160 }], 'neutral');
+      return { components: [v, r, am, led], wires: [w1, w2, w3, w4], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+    },
+    evaluate: () => {
+      const circ = ALL_SOLVER_TEST_CASES[21].createCircuit();
+      const sim = new SimulationService();
+      sim.compile(circ, 'dc');
+      const snap = sim.step(0.1);
+      const iValMa = (snap.elementMeasures['a1']?.current ?? 0) * 1000;
+      const brightnessVal = snap.componentKinetics['led1']?.brightness ?? 0;
+      const passed = Math.abs(iValMa - 14.9) <= 0.4 && Math.abs(brightnessVal - 0.86) <= 0.05;
+      return {
+        actualStr: `Dòng: ${iValMa.toFixed(1).replace('.', ',')} mA, Độ sáng: ${brightnessVal.toFixed(2).replace('.', ',')}`,
+        passed,
+      };
+    },
+  },
+
+  // E5. Mạch hở (bỏ dây về O): CHẠY báo đúng nguyên nhân bằng chữ rõ ràng, dòng = 0
+  {
+    id: 'e5_open_circuit_report',
+    stt: 23,
+    group: 'C-2',
+    name: 'E5: Mạch hở bỏ dây về O (Báo đúng nguyên nhân, Dòng = 0 A)',
+    expectedStr: 'Báo nguyên nhân rõ ràng "chưa nối về chân O", Dòng = 0 A',
+    toleranceStr: 'Chính xác',
+    createCircuit: () => {
+      const u: ComponentInstance = { id: 'u1', type: 'ac_source', x: 100, y: 140, rot: 0, flip: false, label: 'U', props: { voltage: 220, hasPE: false } };
+      const fan: ComponentInstance = { id: 'fan1', type: 'ceiling_fan', x: 300, y: 140, rot: 0, flip: false, label: 'QT1', props: { power: 60, hasPE: false } };
+      // Only phase wire connected to pin 1, pin 2 is left disconnected
+      const w1 = makeWire('w1', 'u1', 'A', 'fan1', '1', [{ x: 140, y: 160 }, { x: 260, y: 140 }], 'phase');
+      return { components: [u, fan], wires: [w1], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+    },
+    evaluate: () => {
+      const circ = ALL_SOLVER_TEST_CASES[22].createCircuit();
+      const sim = new SimulationService();
+      sim.compile(circ, 'rms');
+      const snap = sim.step(0.1);
+      const iVal = snap.elementMeasures['fan1']?.current ?? 0;
+      const openInfo = snap.solverResult.openCircuit;
+      const hasProperReason = openInfo?.isOpen === true && Boolean(openInfo.reason.toLowerCase().includes('o'));
+      const passed = Math.abs(iVal) < 1e-6 && hasProperReason;
+      return {
+        actualStr: `Dòng: ${formatMeasure(iVal, 'current')}, Báo lỗi: "${openInfo?.reason || 'Không phát hiện'}"`,
+        passed,
+      };
+    },
+  },
+
+  // E6. Mọi linh kiện trong palette đều có model và pinId khớp registry
+  {
+    id: 'e6_palette_model_registry_check',
+    stt: 24,
+    group: 'C-2',
+    name: 'E6: Kiểm tra toàn bộ palette có model và pinId khớp registry',
+    expectedStr: '100% linh kiện có model, 0 linh kiện sai chân pinId',
+    toleranceStr: '0 linh kiện thiếu/sai',
+    createCircuit: () => {
+      const u: ComponentInstance = { id: 'u1', type: 'ac_source', x: 80, y: 120, rot: 0, flip: false, label: 'U', props: { voltage: 220, hasPE: false } };
+      const fan: ComponentInstance = { id: 'fan1', type: 'ceiling_fan', x: 200, y: 120, rot: 0, flip: false, label: 'QT1', props: { power: 60, hasPE: false } };
+      const w1 = makeWire('w1', 'u1', 'A', 'fan1', '1', [{ x: 80, y: 80 }, { x: 160, y: 120 }], 'phase');
+      const w2 = makeWire('w2', 'fan1', '2', 'u1', 'O', [{ x: 240, y: 120 }, { x: 80, y: 160 }], 'neutral');
+      return { components: [u, fan], wires: [w1, w2], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+    },
+    evaluate: () => {
+      const sim = new SimulationService();
+      const check = sim.checkRegistryIntegrity();
+      const passed = check.allValid && check.missing.length === 0 && check.pinMismatches.length === 0;
+      return {
+        actualStr: check.allValid
+          ? 'ĐẠT 100% (Tất cả linh kiện đều có model và pinId khớp)'
+          : `Thiếu: [${check.missing.join(', ')}], Lệch chân: [${check.pinMismatches.join(', ')}]`,
+        passed,
+      };
+    },
+  },
+
+  // E7. formatMeasure quy chuẩn TCVN
+  {
+    id: 'e7_tcvn_format_check',
+    stt: 25,
+    group: 'C-2',
+    name: 'E7: Quy chuẩn số đo formatMeasure TCVN dấu phẩy thập phân',
+    expectedStr: '272,7 mA • 1,50 A • 50,0 µA • 500 mV',
+    toleranceStr: 'Chính xác 100 %',
+    createCircuit: () => {
+      const u: ComponentInstance = { id: 'u1', type: 'ac_source', x: 80, y: 120, rot: 0, flip: false, label: 'U', props: { voltage: 220, hasPE: false } };
+      const fan: ComponentInstance = { id: 'fan1', type: 'ceiling_fan', x: 260, y: 120, rot: 0, flip: false, label: 'QT1', props: { power: 60, hasPE: false } };
+      const w1 = makeWire('w1', 'u1', 'A', 'fan1', '1', [{ x: 80, y: 80 }, { x: 220, y: 120 }], 'phase');
+      const w2 = makeWire('w2', 'fan1', '2', 'u1', 'O', [{ x: 300, y: 120 }, { x: 300, y: 160 }, { x: 80, y: 160 }], 'neutral');
+      return { components: [u, fan], wires: [w1, w2], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+    },
+    evaluate: () => {
+      const s1 = formatMeasure(0.2727, 'current');
+      const s2 = formatMeasure(1.5, 'current');
+      const s3 = formatMeasure(0.00005, 'current');
+      const s4 = formatMeasure(0.5, 'voltage');
+
+      const passed =
+        s1 === '272,7 mA' &&
+        s2 === '1,50 A' &&
+        s3 === '50,0 µA' &&
+        s4 === '500 mV';
+
+      return {
+        actualStr: `${s1} • ${s2} • ${s3} • ${s4}`,
+        passed,
+      };
+    },
+  },
+
+  // ==========================================
+  // GIAI ĐOẠN C-3: SỰ CỐ, HỎNG HÓC & DỤNG CỤ ĐO (26–43)
+  // ==========================================
+
+  // Ca 9: Quá tải MCB 10A với tải 3000W
+  {
+    id: 'c3_overload_mcb',
+    stt: 26,
+    group: 'C-3',
+    name: 'Ca 9: Quá tải MCB 10A với tải 3000W (I ≈ 13.6A > In=10A, nhảy sau ~8s)',
+    expectedStr: 'I ≈ 13.6 A, MCB nhảy khi t = 8.5 s (status = tripped)',
+    toleranceStr: '± 2 %',
+    createCircuit: () => {
+      const u: ComponentInstance = { id: 'u1', type: 'ac_source', x: 80, y: 140, rot: 0, flip: false, label: 'U', props: { voltage: 220, hasPE: false } };
+      const mcb: ComponentInstance = { id: 'mcb1', type: 'cb', x: 200, y: 140, rot: 0, flip: false, label: 'MCB1', props: { poles: 1, ratedCurrent: 10, state: true } };
+      const am: ComponentInstance = { id: 'a1', type: 'ammeter', x: 300, y: 140, rot: 0, flip: false, label: 'A1', props: {} };
+      const app: ComponentInstance = { id: 'app1', type: 'appliance_generic', x: 440, y: 140, rot: 0, flip: false, label: 'TB1', props: { power: 3000, hasPE: false } };
+      const w1 = makeWire('w1', 'u1', 'A', 'mcb1', 'in', [{ x: 120, y: 140 }, { x: 160, y: 140 }], 'phase');
+      const w2 = makeWire('w2', 'mcb1', 'out', 'a1', 'pos', [{ x: 240, y: 140 }, { x: 260, y: 140 }], 'phase');
+      const w3 = makeWire('w3', 'a1', 'neg', 'app1', '1', [{ x: 340, y: 140 }, { x: 400, y: 140 }], 'phase');
+      const w4 = makeWire('w4', 'app1', '2', 'u1', 'O', [{ x: 480, y: 140 }, { x: 480, y: 60 }, { x: 120, y: 60 }, { x: 120, y: 100 }], 'neutral');
+      return { components: [u, mcb, am, app], wires: [w1, w2, w3, w4], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+    },
+    evaluate: () => {
+      const circ = ALL_SOLVER_TEST_CASES[25].createCircuit();
+      const sim = new SimulationService();
+      sim.compile(circ, 'rms');
+      const snapEarly = sim.step(1.0);
+      const notTripped = snapEarly.thermalStates?.['mcb1']?.status !== 'tripped';
+      const iVal = snapEarly.elementMeasures['a1']?.current || 0;
+      const snapLate = sim.step(9.5);
+      const isTripped = snapLate.thermalStates?.['mcb1']?.status === 'tripped';
+      const passed = Math.abs(iVal - 13.6) <= 0.4 && notTripped && isTripped;
+      return {
+        actualStr: `I = ${iVal.toFixed(2)} A, t=1s: ${notTripped ? 'CHƯA NHẢY' : 'NHẢY'}, t=10.5s: ${isTripped ? 'ĐÃ NHẢY' : 'CHƯA NHẢY'}`,
+        passed,
+      };
+    },
+  },
+
+  // Ca 10: Ngắn mạch qua MCB 16A nhảy tức thì
+  {
+    id: 'c3_short_circuit_mcb',
+    stt: 27,
+    group: 'C-3',
+    name: 'Ca 10: Ngắn mạch qua Aptomat 16A (Chập A với O, nhảy tức thì ≤ 20 ms)',
+    expectedStr: 'Dòng ngắn mạch cực lớn, MCB nhảy tại t = 0.02 s',
+    toleranceStr: 'Chính xác',
+    createCircuit: () => {
+      const u: ComponentInstance = { id: 'u1', type: 'ac_source', x: 100, y: 140, rot: 0, flip: false, label: 'U', props: { voltage: 220, hasPE: false } };
+      const mcb: ComponentInstance = { id: 'mcb1', type: 'cb', x: 240, y: 140, rot: 0, flip: false, label: 'MCB1', props: { poles: 1, ratedCurrent: 16, state: true } };
+      const w1 = makeWire('w1', 'u1', 'A', 'mcb1', 'in', [{ x: 140, y: 140 }, { x: 200, y: 140 }], 'phase');
+      const w2 = makeWire('w2', 'mcb1', 'out', 'u1', 'O', [{ x: 280, y: 140 }, { x: 320, y: 140 }, { x: 320, y: 60 }, { x: 140, y: 60 }, { x: 140, y: 100 }], 'neutral');
+      return { components: [u, mcb], wires: [w1, w2], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+    },
+    evaluate: () => {
+      const circ = ALL_SOLVER_TEST_CASES[26].createCircuit();
+      const sim = new SimulationService();
+      sim.compile(circ, 'rms');
+      const snap = sim.step(0.02);
+      const isTripped = snap.thermalStates?.['mcb1']?.status === 'tripped';
+      return {
+        actualStr: `MCB: ${isTripped ? 'NHẢY TỨC THÌ (≤ 20 ms)' : 'CHƯA NHẢY'}`,
+        passed: isTripped,
+      };
+    },
+  },
+
+  // Ca 11: Chập mạch không aptomat, dây 1.5mm2 cháy đứt
+  {
+    id: 'c3_short_circuit_no_mcb',
+    stt: 28,
+    group: 'C-3',
+    name: 'Ca 11: Chập mạch không có Aptomat (Dây 1.5 mm² bị nóng chảy/cháy đứt)',
+    expectedStr: 'Dây dẫn 1.5 mm² cháy đứt tại t = 6.5 s (status = damaged)',
+    toleranceStr: 'Chính xác',
+    createCircuit: () => {
+      const u: ComponentInstance = { id: 'u1', type: 'ac_source', x: 120, y: 140, rot: 0, flip: false, label: 'U', props: { voltage: 220, hasPE: false } };
+      const w1 = makeWire('w1', 'u1', 'A', 'u1', 'O', [{ x: 160, y: 140 }, { x: 300, y: 140 }, { x: 300, y: 60 }, { x: 160, y: 60 }, { x: 160, y: 100 }], 'phase');
+      w1.crossSection = 1.5;
+      return { components: [u], wires: [w1], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+    },
+    evaluate: () => {
+      const circ = ALL_SOLVER_TEST_CASES[27].createCircuit();
+      const sim = new SimulationService();
+      sim.compile(circ, 'rms');
+      const snap = sim.step(6.5);
+      const wTherm = snap.wireThermalStates?.['w1'];
+      const isDamaged = wTherm?.status === 'damaged';
+      return {
+        actualStr: `Dây dẫn w1: ${isDamaged ? 'ĐÃ CHÁY HỎNG' : 'Bình thường (h=' + wTherm?.heat + ')'}`,
+        passed: isDamaged,
+      };
+    },
+  },
+
+  // Ca 12a: LED không trở hạn dòng cháy đứt
+  {
+    id: 'c3_led_burn',
+    stt: 29,
+    group: 'C-3',
+    name: 'Ca 12a: LED đỏ cắm thẳng pin 9V (không có trở hạn dòng) bị cháy đứt',
+    expectedStr: 'LED cháy đứt (status = damaged)',
+    toleranceStr: 'Chính xác',
+    createCircuit: () => {
       const v: ComponentInstance = { id: 'v1', type: 'dc_source', x: 100, y: 120, rot: 0, flip: false, label: 'V1', props: { voltage: 9 } };
       const led: ComponentInstance = { id: 'led1', type: 'led', x: 260, y: 120, rot: 0, flip: false, label: 'D1', props: { color: 'red' } };
       const w1 = makeWire('w1', 'v1', 'pos', 'led1', 'A', [{ x: 100, y: 80 }, { x: 220, y: 120 }], 'phase');
       const w2 = makeWire('w2', 'led1', 'K', 'v1', 'neg', [{ x: 300, y: 120 }, { x: 300, y: 160 }, { x: 100, y: 160 }], 'neutral');
       return { components: [v, led], wires: [w1, w2], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
-    })(),
+    },
+    evaluate: () => {
+      const circ = ALL_SOLVER_TEST_CASES[28].createCircuit();
+      const sim = new SimulationService();
+      sim.compile(circ, 'dc');
+      const snap = sim.step(0.5);
+      const isDamaged = snap.thermalStates?.['led1']?.status === 'damaged';
+      return {
+        actualStr: `LED: ${isDamaged ? 'ĐÃ CHÁY HỞ MẠCH' : 'Bình thường'}`,
+        passed: isDamaged,
+      };
+    },
   },
+
+  // Ca 12b: Điện trở quá công suất
   {
-    id: 'el_h',
-    title: 'h) Mạch RC: 1 kΩ + 100 µF + Công tắc',
-    description: 'Khảo sát nạp xả tụ điện: công tắc đóng cấp nguồn nạp điện áp 9 V lên tụ.',
-    state: (() => {
-      const v: ComponentInstance = { id: 'v1', type: 'dc_source', x: 80, y: 120, rot: 0, flip: false, label: 'V1', props: { voltage: 9 } };
-      const sw: ComponentInstance = { id: 'ct1', type: 'switch_2p', x: 180, y: 80, rot: 0, flip: false, label: 'CT1', props: { state: true } };
-      const r: ComponentInstance = { id: 'r1', type: 'resistor', x: 280, y: 80, rot: 0, flip: false, label: 'R1', props: { resistance: 1000 } };
-      const c: ComponentInstance = { id: 'c1', type: 'capacitor_ceramic', x: 380, y: 120, rot: 0, flip: false, label: 'C1', props: { capacitance: 100 } };
-      const w1 = makeWire('w1', 'v1', 'pos', 'ct1', '1', [{ x: 80, y: 80 }, { x: 140, y: 80 }], 'phase');
-      const w2 = makeWire('w2', 'ct1', '2', 'r1', '1', [{ x: 220, y: 80 }, { x: 240, y: 80 }], 'phase');
-      const w3 = makeWire('w3', 'r1', '2', 'c1', '1', [{ x: 320, y: 80 }, { x: 340, y: 120 }], 'phase');
-      const w4 = makeWire('w4', 'c1', '2', 'v1', 'neg', [{ x: 420, y: 120 }, { x: 420, y: 160 }, { x: 80, y: 160 }], 'neutral');
-      return { components: [v, sw, r, c], wires: [w1, w2, w3, w4], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
-    })(),
+    id: 'c3_resistor_overpower',
+    stt: 30,
+    group: 'C-3',
+    name: 'Ca 12b: Điện trở 10 Ω cắm điện 220V quá công suất (P = 4840W >> 0.25W) bị cháy',
+    expectedStr: 'R1 bị cháy hỏng (status = damaged)',
+    toleranceStr: 'Chính xác',
+    createCircuit: () => {
+      const u: ComponentInstance = { id: 'u1', type: 'ac_source', x: 100, y: 120, rot: 0, flip: false, label: 'U', props: { voltage: 220, hasPE: false } };
+      const r: ComponentInstance = { id: 'r1', type: 'resistor', x: 260, y: 120, rot: 0, flip: false, label: 'R1', props: { resistance: 10 } };
+      const w1 = makeWire('w1', 'u1', 'A', 'r1', '1', [{ x: 140, y: 120 }, { x: 220, y: 120 }], 'phase');
+      const w2 = makeWire('w2', 'r1', '2', 'u1', 'O', [{ x: 300, y: 120 }, { x: 300, y: 60 }, { x: 140, y: 60 }, { x: 140, y: 100 }], 'neutral');
+      return { components: [u, r], wires: [w1, w2], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+    },
+    evaluate: () => {
+      const circ = ALL_SOLVER_TEST_CASES[29].createCircuit();
+      const sim = new SimulationService();
+      sim.compile(circ, 'rms');
+      const snap = sim.step(2.5);
+      const isDamaged = snap.thermalStates?.['r1']?.status === 'damaged';
+      return {
+        actualStr: `Điện trở R1: ${isDamaged ? 'ĐÃ CHÁY ĐỨT' : 'Bình thường'}`,
+        passed: isDamaged,
+      };
+    },
   },
+
+  // Ca 12c: Tụ hóa 16V đấu ngược cực trên nguồn 9V phát nổ
   {
-    id: 'el_i',
-    title: 'i) Tụ hóa 16 V đấu ngược cực',
-    description: 'Cực dương nguồn 9 V đấu vào cực âm (−) của tụ hóa, phát tín hiệu cảnh báo đấu ngược cực.',
-    state: (() => {
+    id: 'c3_capacitor_reverse_polarity',
+    stt: 31,
+    group: 'C-3',
+    name: 'Ca 12c: Tụ hóa 16V đấu ngược cực trên nguồn 9V phát nổ',
+    expectedStr: 'Tụ hóa nổ tức thì do đấu ngược cực (status = damaged)',
+    toleranceStr: 'Chính xác',
+    createCircuit: () => {
       const v: ComponentInstance = { id: 'v1', type: 'dc_source', x: 100, y: 120, rot: 0, flip: false, label: 'V1', props: { voltage: 9 } };
       const c: ComponentInstance = { id: 'c1', type: 'capacitor_electrolytic', x: 260, y: 120, rot: 0, flip: false, label: 'C1', props: { capacitance: 100, ratedVoltage: 16 } };
-      // Reverse connected: pos of source to neg of capacitor
       const w1 = makeWire('w1', 'v1', 'pos', 'c1', 'neg', [{ x: 100, y: 80 }, { x: 300, y: 80 }, { x: 300, y: 120 }], 'phase');
       const w2 = makeWire('w2', 'c1', 'pos', 'v1', 'neg', [{ x: 220, y: 120 }, { x: 220, y: 160 }, { x: 100, y: 160 }], 'neutral');
       return { components: [v, c], wires: [w1, w2], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
-    })(),
+    },
+    evaluate: () => {
+      const circ = ALL_SOLVER_TEST_CASES[30].createCircuit();
+      const sim = new SimulationService();
+      sim.compile(circ, 'dc');
+      const snap = sim.step(0.2);
+      const isDamaged = snap.thermalStates?.['c1']?.status === 'damaged';
+      return {
+        actualStr: `Tụ hóa C1: ${isDamaged ? 'ĐÃ PHÁT NỔ' : 'Bình thường'}`,
+        passed: isDamaged,
+      };
+    },
+  },
+
+  // Ca 12d: Tụ hóa 16V cắm nguồn 30V quá áp phát nổ
+  {
+    id: 'c3_capacitor_overvoltage',
+    stt: 32,
+    group: 'C-3',
+    name: 'Ca 12d: Tụ hóa 16V cắm nguồn 30V quá áp phát nổ',
+    expectedStr: 'Tụ hóa nổ do quá áp 30V > 1.2·16V (status = damaged)',
+    toleranceStr: 'Chính xác',
+    createCircuit: () => {
+      const v: ComponentInstance = { id: 'v1', type: 'dc_source', x: 100, y: 120, rot: 0, flip: false, label: 'V1', props: { voltage: 30 } };
+      const c: ComponentInstance = { id: 'c1', type: 'capacitor_electrolytic', x: 260, y: 120, rot: 0, flip: false, label: 'C1', props: { capacitance: 100, ratedVoltage: 16 } };
+      const w1 = makeWire('w1', 'v1', 'pos', 'c1', 'pos', [{ x: 100, y: 80 }, { x: 220, y: 80 }, { x: 220, y: 120 }], 'phase');
+      const w2 = makeWire('w2', 'c1', 'neg', 'v1', 'neg', [{ x: 300, y: 120 }, { x: 300, y: 160 }, { x: 100, y: 160 }], 'neutral');
+      return { components: [v, c], wires: [w1, w2], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+    },
+    evaluate: () => {
+      const circ = ALL_SOLVER_TEST_CASES[31].createCircuit();
+      const sim = new SimulationService();
+      sim.compile(circ, 'dc');
+      const snap = sim.step(0.2);
+      const isDamaged = snap.thermalStates?.['c1']?.status === 'damaged';
+      return {
+        actualStr: `Tụ hóa C1: ${isDamaged ? 'ĐÃ PHÁT NỔ DO QUÁ ÁP' : 'Bình thường'}`,
+        passed: isDamaged,
+      };
+    },
+  },
+
+  // Ca 12e: Nguồn DC bị nối tắt cực (+) với (−) quá tải
+  {
+    id: 'c3_dc_source_short',
+    stt: 33,
+    group: 'C-3',
+    name: 'Ca 12e: Nguồn DC bị nối tắt cực (+) với (−) quá dòng định mức 5A',
+    expectedStr: 'Nguồn DC bị hỏng (status = damaged)',
+    toleranceStr: 'Chính xác',
+    createCircuit: () => {
+      const v: ComponentInstance = { id: 'v1', type: 'dc_source', x: 100, y: 120, rot: 0, flip: false, label: 'V1', props: { voltage: 9, ratedCurrent: 5 } };
+      const w1 = makeWire('w1', 'v1', 'pos', 'v1', 'neg', [{ x: 100, y: 80 }, { x: 200, y: 80 }, { x: 200, y: 160 }, { x: 100, y: 160 }], 'phase');
+      return { components: [v], wires: [w1], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+    },
+    evaluate: () => {
+      const circ = ALL_SOLVER_TEST_CASES[32].createCircuit();
+      const sim = new SimulationService();
+      sim.compile(circ, 'dc');
+      const snap = sim.step(2.5);
+      const isDamaged = snap.thermalStates?.['v1']?.status === 'damaged';
+      return {
+        actualStr: `Nguồn V1: ${isDamaged ? 'ĐÃ HỎNG DO QUÁ DÒNG' : 'Bình thường'}`,
+        passed: isDamaged,
+      };
+    },
+  },
+
+  // Ca 12f: Đèn 220V cắm điện áp 380V cháy tim đèn
+  {
+    id: 'c3_lamp_overvoltage',
+    stt: 34,
+    group: 'C-3',
+    name: 'Ca 12f: Đèn 220V cắm điện áp cao 380V (> 1.25·220V) bị cháy tim đèn',
+    expectedStr: 'Bóng đèn bị cháy đứt (status = damaged)',
+    toleranceStr: 'Chính xác',
+    createCircuit: () => {
+      const u: ComponentInstance = { id: 'u1', type: 'ac_source', x: 100, y: 120, rot: 0, flip: false, label: 'U', props: { voltage: 380, hasPE: false } };
+      const lamp: ComponentInstance = { id: 'l1', type: 'lamp', x: 260, y: 120, rot: 0, flip: false, label: 'Đ1', props: { power: 60, voltage: 220, hasPE: false } };
+      const w1 = makeWire('w1', 'u1', 'A', 'l1', '1', [{ x: 140, y: 120 }, { x: 220, y: 120 }], 'phase');
+      const w2 = makeWire('w2', 'l1', '2', 'u1', 'O', [{ x: 300, y: 120 }, { x: 300, y: 60 }, { x: 140, y: 60 }, { x: 140, y: 100 }], 'neutral');
+      return { components: [u, lamp], wires: [w1, w2], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+    },
+    evaluate: () => {
+      const circ = ALL_SOLVER_TEST_CASES[33].createCircuit();
+      const sim = new SimulationService();
+      sim.compile(circ, 'rms');
+      const snap = sim.step(1.5);
+      const isDamaged = snap.thermalStates?.['l1']?.status === 'damaged';
+      return {
+        actualStr: `Bóng đèn: ${isDamaged ? 'ĐÃ CHÁY TÓC' : 'Bình thường'}`,
+        passed: isDamaged,
+      };
+    },
+  },
+
+  // Ca 13: Cầu chì 5A + tải 2000W đứt sau ~2s
+  {
+    id: 'c3_fuse_overload',
+    stt: 35,
+    group: 'C-3',
+    name: 'Ca 13: Cầu chì 5A + Tải 2000W (I ≈ 9.1A > In=5A, đứt sau ~2s)',
+    expectedStr: 'Cầu chì đứt tại t = 2.2 s (status = blown)',
+    toleranceStr: '± 2 %',
+    createCircuit: () => {
+      const u: ComponentInstance = { id: 'u1', type: 'ac_source', x: 80, y: 140, rot: 0, flip: false, label: 'U', props: { voltage: 220, hasPE: false } };
+      const f: ComponentInstance = { id: 'f1', type: 'fuse', x: 200, y: 140, rot: 0, flip: false, label: 'CC1', props: { ratedCurrent: 5 } };
+      const app: ComponentInstance = { id: 'app1', type: 'appliance_generic', x: 360, y: 140, rot: 0, flip: false, label: 'TB1', props: { power: 2000, hasPE: false } };
+      const w1 = makeWire('w1', 'u1', 'A', 'f1', '1', [{ x: 120, y: 140 }, { x: 160, y: 140 }], 'phase');
+      const w2 = makeWire('w2', 'f1', '2', 'app1', '1', [{ x: 240, y: 140 }, { x: 320, y: 140 }], 'phase');
+      const w3 = makeWire('w3', 'app1', '2', 'u1', 'O', [{ x: 400, y: 140 }, { x: 400, y: 60 }, { x: 120, y: 60 }, { x: 120, y: 100 }], 'neutral');
+      return { components: [u, f, app], wires: [w1, w2, w3], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+    },
+    evaluate: () => {
+      const circ = ALL_SOLVER_TEST_CASES[34].createCircuit();
+      const sim = new SimulationService();
+      sim.compile(circ, 'rms');
+      const snap = sim.step(2.2);
+      const isBlown = snap.thermalStates?.['f1']?.status === 'blown';
+      return {
+        actualStr: `Cầu chì CC1: ${isBlown ? 'ĐÃ ĐỨT (blown)' : 'Chưa đứt'}`,
+        passed: isBlown,
+      };
+    },
+  },
+
+  // Ca 14: Cầu chì 10A ngắn mạch đứt tức thì
+  {
+    id: 'c3_fuse_short',
+    stt: 36,
+    group: 'C-3',
+    name: 'Ca 14: Cầu chì 10A ngắn mạch (chập trực tiếp A với O, đứt tức thì)',
+    expectedStr: 'Cầu chì đứt tức thì tại t = 0.05 s (status = blown)',
+    toleranceStr: 'Chính xác',
+    createCircuit: () => {
+      const u: ComponentInstance = { id: 'u1', type: 'ac_source', x: 80, y: 140, rot: 0, flip: false, label: 'U', props: { voltage: 220, hasPE: false } };
+      const f: ComponentInstance = { id: 'f1', type: 'fuse', x: 200, y: 140, rot: 0, flip: false, label: 'CC1', props: { ratedCurrent: 10 } };
+      const w1 = makeWire('w1', 'u1', 'A', 'f1', '1', [{ x: 120, y: 140 }, { x: 160, y: 140 }], 'phase');
+      const w2 = makeWire('w2', 'f1', '2', 'u1', 'O', [{ x: 240, y: 140 }, { x: 280, y: 140 }, { x: 280, y: 60 }, { x: 120, y: 60 }, { x: 120, y: 100 }], 'neutral');
+      return { components: [u, f], wires: [w1, w2], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+    },
+    evaluate: () => {
+      const circ = ALL_SOLVER_TEST_CASES[35].createCircuit();
+      const sim = new SimulationService();
+      sim.compile(circ, 'rms');
+      const snap = sim.step(0.05);
+      const isBlown = snap.thermalStates?.['f1']?.status === 'blown';
+      return {
+        actualStr: `Cầu chì CC1: ${isBlown ? 'ĐÃ ĐỨT TỨC THÌ' : 'Chưa đứt'}`,
+        passed: isBlown,
+      };
+    },
+  },
+
+  // Ca 15: ELCB 30mA nhảy tức thì khi rò vỏ có người chạm
+  {
+    id: 'c3_elcb_leak_touch',
+    stt: 37,
+    group: 'C-3',
+    name: 'Ca 15: ELCB 30mA nhảy tức thì khi rò vỏ có người chạm đất',
+    expectedStr: 'Dòng rò người ~218 mA > 30 mA, ELCB nhảy tức thì',
+    toleranceStr: 'Chính xác',
+    createCircuit: () => {
+      const u: ComponentInstance = { id: 'u1', type: 'ac_source', x: 80, y: 120, rot: 0, flip: false, label: 'U', props: { voltage: 220, hasPE: false } };
+      const elcb: ComponentInstance = { id: 'elcb1', type: 'cb', x: 200, y: 120, rot: 0, flip: false, label: 'ELCB1', props: { poles: 2, isELCB: true, state: true } };
+      const app: ComponentInstance = { id: 'app1', type: 'appliance_generic', x: 360, y: 120, rot: 0, flip: false, label: 'TB1', props: { power: 500, leakToCase: true, humanTouch: true, hasPE: false } };
+      const w1 = makeWire('w1', 'u1', 'A', 'elcb1', 'in1', [{ x: 120, y: 140 }, { x: 160, y: 100 }], 'phase');
+      const w2 = makeWire('w2', 'elcb1', 'out1', 'app1', '1', [{ x: 240, y: 100 }, { x: 320, y: 120 }], 'phase');
+      const w3 = makeWire('w3', 'u1', 'O', 'elcb1', 'in2', [{ x: 120, y: 100 }, { x: 160, y: 140 }], 'neutral');
+      const w4 = makeWire('w4', 'elcb1', 'out2', 'app1', '2', [{ x: 240, y: 140 }, { x: 400, y: 120 }], 'neutral');
+      return { components: [u, elcb, app], wires: [w1, w2, w3, w4], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+    },
+    evaluate: () => {
+      const circ = ALL_SOLVER_TEST_CASES[36].createCircuit();
+      const sim = new SimulationService();
+      sim.compile(circ, 'rms');
+      const snap = sim.step(0.05);
+      const isTripped = snap.thermalStates?.['elcb1']?.status === 'tripped';
+      return {
+        actualStr: `ELCB: ${isTripped ? 'ĐÃ NHẢY TỨC THÌ (dòng rò người)' : 'Chưa nhảy'}`,
+        passed: isTripped,
+      };
+    },
+  },
+
+  // Ca 16: Dây 1.0mm2 cháy trước MCB 20A khi tải 15A
+  {
+    id: 'c3_wrong_wire_mcb20',
+    stt: 38,
+    group: 'C-3',
+    name: 'Ca 16: Chọn sai dây: Dây 1.0 mm² cháy trước khi MCB 20A kịp nhảy',
+    expectedStr: 'Dây 1.0 mm² cháy tại t ≈ 6.5 s, MCB 20A chưa nhảy',
+    toleranceStr: 'Chính xác',
+    createCircuit: () => {
+      const u: ComponentInstance = { id: 'u1', type: 'ac_source', x: 80, y: 140, rot: 0, flip: false, label: 'U', props: { voltage: 220, hasPE: false } };
+      const mcb: ComponentInstance = { id: 'mcb1', type: 'cb', x: 200, y: 140, rot: 0, flip: false, label: 'MCB1', props: { poles: 1, ratedCurrent: 20, state: true } };
+      const app: ComponentInstance = { id: 'app1', type: 'appliance_generic', x: 400, y: 140, rot: 0, flip: false, label: 'TB1', props: { power: 3300, hasPE: false } };
+      const w1 = makeWire('w1', 'u1', 'A', 'mcb1', 'in', [{ x: 120, y: 140 }, { x: 160, y: 140 }], 'phase');
+      const w2 = makeWire('w2', 'mcb1', 'out', 'app1', '1', [{ x: 240, y: 140 }, { x: 360, y: 140 }], 'phase');
+      w2.crossSection = 1.0;
+      const w3 = makeWire('w3', 'app1', '2', 'u1', 'O', [{ x: 440, y: 140 }, { x: 440, y: 60 }, { x: 120, y: 60 }, { x: 120, y: 100 }], 'neutral');
+      w3.crossSection = 1.0;
+      return { components: [u, mcb, app], wires: [w1, w2, w3], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+    },
+    evaluate: () => {
+      const circ = ALL_SOLVER_TEST_CASES[37].createCircuit();
+      const sim = new SimulationService();
+      sim.compile(circ, 'rms');
+      const snap = sim.step(10.5);
+      const isWireDamaged = snap.wireThermalStates?.['w2']?.status === 'damaged';
+      const isMcbTripped = snap.thermalStates?.['mcb1']?.status === 'tripped';
+      const passed = isWireDamaged && !isMcbTripped;
+      return {
+        actualStr: `Dây 1.0 mm²: ${isWireDamaged ? 'ĐÃ CHÁY' : 'Chưa cháy'}, MCB 20A: ${isMcbTripped ? 'Đã nhảy' : 'CHƯA NHẢY (tải 15A < 20A)'}`,
+        passed,
+      };
+    },
+  },
+
+  // Ca O1: Ôm kế 2 chân đo điện trở đơn 1 kΩ
+  {
+    id: 'c3_ohmmeter_single',
+    stt: 39,
+    group: 'C-3',
+    name: 'Ca O1: Ôm kế 2 chân đo điện trở đơn 1 kΩ',
+    expectedStr: 'R = 1,00 kΩ',
+    toleranceStr: '± 0.5 %',
+    createCircuit: () => {
+      const ohm: ComponentInstance = { id: 'ohm1', type: 'ohmmeter', x: 100, y: 120, rot: 0, flip: false, label: 'Ω1', props: {} };
+      const r: ComponentInstance = { id: 'r1', type: 'resistor', x: 260, y: 120, rot: 0, flip: false, label: 'R1', props: { resistance: 1000 } };
+      const w1 = makeWire('w1', 'ohm1', '1', 'r1', '1', [{ x: 140, y: 120 }, { x: 220, y: 120 }], 'phase');
+      const w2 = makeWire('w2', 'r1', '2', 'ohm1', '2', [{ x: 300, y: 120 }, { x: 300, y: 160 }, { x: 140, y: 160 }], 'neutral');
+      return { components: [ohm, r], wires: [w1, w2], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+    },
+    evaluate: () => {
+      const circ = ALL_SOLVER_TEST_CASES[38].createCircuit();
+      const res = solveCircuit(circ.components, circ.wires);
+      const rVal = res.meterMeasurements?.['ohm1']?.resistance ?? 0;
+      const formatted = res.meterMeasurements?.['ohm1']?.formatted || '';
+      const passed = Math.abs(rVal - 1000) <= 5 && formatted === '1,00 kΩ';
+      return {
+        actualStr: `Số đo: ${formatted} (${rVal.toFixed(1)} Ω)`,
+        passed,
+      };
+    },
+  },
+
+  // Ca O2: Ôm kế đo 1k + 2k nối tiếp
+  {
+    id: 'c3_ohmmeter_series',
+    stt: 40,
+    group: 'C-3',
+    name: 'Ca O2: Ôm kế 2 chân đo cụm 1 kΩ nối tiếp 2 kΩ',
+    expectedStr: 'R_tổng = 3,00 kΩ',
+    toleranceStr: '± 0.5 %',
+    createCircuit: () => {
+      const ohm: ComponentInstance = { id: 'ohm1', type: 'ohmmeter', x: 100, y: 140, rot: 0, flip: false, label: 'Ω1', props: {} };
+      const r1: ComponentInstance = { id: 'r1', type: 'resistor', x: 260, y: 100, rot: 0, flip: false, label: 'R1', props: { resistance: 1000 } };
+      const r2: ComponentInstance = { id: 'r2', type: 'resistor', x: 400, y: 100, rot: 0, flip: false, label: 'R2', props: { resistance: 2000 } };
+      const w1 = makeWire('w1', 'ohm1', '1', 'r1', '1', [{ x: 140, y: 140 }, { x: 200, y: 140 }, { x: 200, y: 100 }, { x: 220, y: 100 }], 'phase');
+      const w2 = makeWire('w2', 'r1', '2', 'r2', '1', [{ x: 300, y: 100 }, { x: 360, y: 100 }], 'phase');
+      const w3 = makeWire('w3', 'r2', '2', 'ohm1', '2', [{ x: 440, y: 100 }, { x: 480, y: 100 }, { x: 480, y: 180 }, { x: 140, y: 180 }, { x: 140, y: 160 }], 'neutral');
+      return { components: [ohm, r1, r2], wires: [w1, w2, w3], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+    },
+    evaluate: () => {
+      const circ = ALL_SOLVER_TEST_CASES[39].createCircuit();
+      const res = solveCircuit(circ.components, circ.wires);
+      const rVal = res.meterMeasurements?.['ohm1']?.resistance ?? 0;
+      const formatted = res.meterMeasurements?.['ohm1']?.formatted || '';
+      const passed = Math.abs(rVal - 3000) <= 15 && formatted === '3,00 kΩ';
+      return {
+        actualStr: `Số đo: ${formatted} (${rVal.toFixed(1)} Ω)`,
+        passed,
+      };
+    },
+  },
+
+  // Ca O3: Ôm kế đo 1k || 1k
+  {
+    id: 'c3_ohmmeter_parallel',
+    stt: 41,
+    group: 'C-3',
+    name: 'Ca O3: Ôm kế 2 chân đo cụm song song 1 kΩ || 1 kΩ',
+    expectedStr: 'R_tổng = 500 Ω',
+    toleranceStr: '± 0.5 %',
+    createCircuit: () => {
+      const ohm: ComponentInstance = { id: 'ohm1', type: 'ohmmeter', x: 100, y: 140, rot: 0, flip: false, label: 'Ω1', props: {} };
+      const r1: ComponentInstance = { id: 'r1', type: 'resistor', x: 260, y: 100, rot: 0, flip: false, label: 'R1', props: { resistance: 1000 } };
+      const r2: ComponentInstance = { id: 'r2', type: 'resistor', x: 260, y: 180, rot: 0, flip: false, label: 'R2', props: { resistance: 1000 } };
+      const w1 = makeWire('w1', 'ohm1', '1', 'r1', '1', [{ x: 140, y: 140 }, { x: 200, y: 140 }, { x: 200, y: 100 }, { x: 220, y: 100 }], 'phase');
+      const w2 = makeWire('w2', 'ohm1', '1', 'r2', '1', [{ x: 140, y: 140 }, { x: 200, y: 140 }, { x: 200, y: 180 }, { x: 220, y: 180 }], 'phase');
+      const w3 = makeWire('w3', 'r1', '2', 'ohm1', '2', [{ x: 300, y: 100 }, { x: 340, y: 100 }, { x: 340, y: 160 }, { x: 140, y: 160 }], 'neutral');
+      const w4 = makeWire('w4', 'r2', '2', 'ohm1', '2', [{ x: 300, y: 180 }, { x: 340, y: 180 }, { x: 340, y: 160 }, { x: 140, y: 160 }], 'neutral');
+      return { components: [ohm, r1, r2], wires: [w1, w2, w3, w4], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+    },
+    evaluate: () => {
+      const circ = ALL_SOLVER_TEST_CASES[40].createCircuit();
+      const res = solveCircuit(circ.components, circ.wires);
+      const rVal = res.meterMeasurements?.['ohm1']?.resistance ?? 0;
+      const formatted = res.meterMeasurements?.['ohm1']?.formatted || '';
+      const passed = Math.abs(rVal - 500) <= 2.5 && formatted === '500 Ω';
+      return {
+        actualStr: `Số đo: ${formatted} (${rVal.toFixed(1)} Ω)`,
+        passed,
+      };
+    },
+  },
+
+  // Ca O4: Ôm kế hở mạch
+  {
+    id: 'c3_ohmmeter_open',
+    stt: 42,
+    group: 'C-3',
+    name: 'Ca O4: Ôm kế 2 chân khi hở mạch (không nối gì)',
+    expectedStr: 'R = ∞ (hở)',
+    toleranceStr: 'Chính xác',
+    createCircuit: () => {
+      const ohm: ComponentInstance = { id: 'ohm1', type: 'ohmmeter', x: 100, y: 140, rot: 0, flip: false, label: 'Ω1', props: {} };
+      return { components: [ohm], wires: [], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+    },
+    evaluate: () => {
+      const circ = ALL_SOLVER_TEST_CASES[41].createCircuit();
+      const res = solveCircuit(circ.components, circ.wires);
+      const formatted = res.meterMeasurements?.['ohm1']?.formatted || '';
+      const passed = formatted === '∞ (hở)';
+      return {
+        actualStr: `Số đo: ${formatted}`,
+        passed,
+      };
+    },
+  },
+
+  // Ca O5: Oát kế 4 chân đo công suất Đèn sợi đốt 60 W (220 V)
+  {
+    id: 'c3_wattmeter_4pin',
+    stt: 43,
+    group: 'C-3',
+    name: 'Ca O5: Oát kế 4 chân đo công suất Đèn sợi đốt 60 W (220 V)',
+    expectedStr: 'P = 60,0 W (Cuộn dòng I+, I- nối tiếp; Cuộn áp U+, U- song song)',
+    toleranceStr: '± 0.5 W',
+    createCircuit: () => {
+      const u: ComponentInstance = { id: 'u1', type: 'ac_source', x: 80, y: 140, rot: 0, flip: false, label: 'U', props: { voltage: 220, hasPE: false } };
+      const wtt: ComponentInstance = { id: 'w1', type: 'wattmeter', x: 240, y: 140, rot: 0, flip: false, label: 'W1', props: {} };
+      const lamp: ComponentInstance = { id: 'l1', type: 'lamp', x: 420, y: 140, rot: 0, flip: false, label: 'Đ1', props: { power: 60, hasPE: false } };
+      const w1 = makeWire('w1', 'u1', 'A', 'w1', 'I+', [{ x: 120, y: 140 }, { x: 190, y: 140 }], 'phase');
+      const w2 = makeWire('w2', 'w1', 'I-', 'l1', '1', [{ x: 290, y: 140 }, { x: 380, y: 140 }], 'phase');
+      const w3 = makeWire('w3', 'l1', '2', 'u1', 'O', [{ x: 460, y: 140 }, { x: 460, y: 60 }, { x: 120, y: 60 }, { x: 120, y: 100 }], 'neutral');
+      const w4 = makeWire('w4', 'u1', 'A', 'w1', 'U+', [{ x: 120, y: 140 }, { x: 160, y: 140 }, { x: 160, y: 90 }, { x: 240, y: 90 }], 'phase');
+      const w5 = makeWire('w5', 'u1', 'O', 'w1', 'U-', [{ x: 120, y: 100 }, { x: 120, y: 60 }, { x: 240, y: 60 }, { x: 240, y: 190 }], 'neutral');
+      return { components: [u, wtt, lamp], wires: [w1, w2, w3, w4, w5], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+    },
+    evaluate: () => {
+      const circ = ALL_SOLVER_TEST_CASES[42].createCircuit();
+      const res = solveCircuit(circ.components, circ.wires);
+      const pVal = res.meterMeasurements?.['w1']?.power ?? 0;
+      const formatted = res.meterMeasurements?.['w1']?.formatted || '';
+      const passed = Math.abs(pVal - 60) <= 0.5 && formatted === '60,0 W';
+      return {
+        actualStr: `Số đo: ${formatted} (P = ${pVal.toFixed(1)} W, U = 220 V, I ≈ 0.273 A)`,
+        passed,
+      };
+    },
   },
 ];
+
+// ----------------------------------------------------
+// 2. PRESETS CHO MENU "MẪU ▾" (9 mạch thử sẵn)
+// ----------------------------------------------------
+export { HOUSEHOLD_PRESETS, ELECTRONICS_PRESETS } from './presets';
+

@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { ALL_SOLVER_TEST_CASES } from '../src/core/testCircuits';
 
-describe('C-1 and PE 18 Solver Test Cases', () => {
-  it('has exactly 18 test cases', () => {
-    expect(ALL_SOLVER_TEST_CASES.length).toBe(18);
+describe('Solver Self-Test Suite (C-1, PE, C-2, and C-3)', () => {
+  it('has exactly 43 test cases', () => {
+    expect(ALL_SOLVER_TEST_CASES.length).toBe(43);
   });
 
   for (const tc of ALL_SOLVER_TEST_CASES) {

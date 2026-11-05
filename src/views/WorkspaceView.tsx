@@ -37,6 +37,11 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ slug }) => {
     toggleRightPanel,
     editorMode,
     cancelWiring,
+    isSimulating,
+    simTime,
+    sourceSummaryStr,
+    timeSpeed,
+    setTimeSpeed,
   } = useWorkspaceStore();
 
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -236,6 +241,49 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ slug }) => {
             <div className="flex items-center gap-1 bg-[#FFD84D] text-black px-1.5 py-0.5 border border-black font-black text-[10px] uppercase shadow-[1px_1px_0_#000]">
               <FlaskConical size={11} strokeWidth={3} />
               <span>CA THỬ NGHIỆM (_THU)</span>
+            </div>
+          )}
+
+          {/* Simulation Status & Time */}
+          {isSimulating ? (
+            <div className="flex items-center gap-1.5 bg-[#2DB84D] text-white border border-black px-1.5 py-0.5 text-[10px] font-black uppercase shadow-[1px_1px_0_#000]">
+              <span className="animate-pulse">●</span>
+              <span>ĐANG CHẠY</span>
+              <span className="font-mono ml-1 font-bold">t = {simTime.toFixed(2).replace('.', ',')} s</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1 bg-gray-100 text-black border border-black px-1.5 py-0.5 text-[10px] font-black uppercase">
+              <span>○ ĐÃ DỪNG</span>
+              {simTime > 0 && <span className="font-mono ml-0.5 text-gray-600">({simTime.toFixed(2).replace('.', ',')} s)</span>}
+            </div>
+          )}
+
+          {/* Source Summary string */}
+          {isSimulating && sourceSummaryStr && (
+            <div className="hidden md:flex items-center gap-1 bg-[#EEF2FF] text-black border border-black px-2 py-0.5 text-[10px] font-bold font-mono shadow-[1px_1px_0_#000]">
+              <span>{sourceSummaryStr}</span>
+            </div>
+          )}
+
+          {/* Speed Buttons [x0.1] [x1] [x10] */}
+          {isSimulating && (
+            <div className="flex items-center border border-black bg-white overflow-hidden text-[9px] font-black">
+              {[0.1, 1.0, 10.0].map((spd) => {
+                const label = spd === 0.1 ? '×0,1' : spd === 1.0 ? '×1' : '×10';
+                const isActive = Math.abs(timeSpeed - spd) < 0.01;
+                return (
+                  <button
+                    key={spd}
+                    onClick={() => setTimeSpeed(spd)}
+                    className={`px-1.5 py-0.5 border-r last:border-r-0 border-black transition-colors ${
+                      isActive ? 'bg-[#FFD84D] text-black font-extrabold' : 'bg-white hover:bg-gray-100 text-gray-700'
+                    }`}
+                    title={`Tốc độ mô phỏng ${label}`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
             </div>
           )}
 

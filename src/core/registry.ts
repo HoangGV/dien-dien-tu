@@ -394,18 +394,13 @@ export const COMPONENT_DEFINITIONS: ComponentDef[] = [
       const hasPE = Boolean(props.hasPE);
       return hasPE
         ? [
-            { id: 'in_A', label: 'A', dx: -2, dy: -1 },
-            { id: 'in_PE', label: 'PE', dx: -2, dy: 0, polarity: 'PE' },
-            { id: 'in_O', label: 'O', dx: -2, dy: 1 },
-            { id: 'out_A', label: 'A\'', dx: 2, dy: -1 },
-            { id: 'out_PE', label: 'PE\'', dx: 2, dy: 0, polarity: 'PE' },
-            { id: 'out_O', label: 'O\'', dx: 2, dy: 1 },
+            { id: 'A', label: 'A', dx: -2, dy: -1 },
+            { id: 'PE', label: 'PE', dx: -2, dy: 0, polarity: 'PE' },
+            { id: 'O', label: 'O', dx: -2, dy: 1 },
           ]
         : [
-            { id: 'in_A', label: 'A', dx: -2, dy: -1 },
-            { id: 'in_O', label: 'O', dx: -2, dy: 1 },
-            { id: 'out_A', label: 'A\'', dx: 2, dy: -1 },
-            { id: 'out_O', label: 'O\'', dx: 2, dy: 1 },
+            { id: 'A', label: 'A', dx: -2, dy: -1 },
+            { id: 'O', label: 'O', dx: -2, dy: 1 },
           ];
     },
     symbol: SocketSymbol,
@@ -801,10 +796,12 @@ export const COMPONENT_DEFINITIONS: ComponentDef[] = [
     category: 'meter',
     refPrefix: 'W',
     width: 80,
-    height: 60,
+    height: 80,
     pins: [
-      { id: 'pos', label: '+', dx: -2, dy: 0, polarity: '+' },
-      { id: 'neg', label: '−', dx: 2, dy: 0, polarity: '-' },
+      { id: 'I+', label: 'I+*', dx: -2, dy: 0, polarity: '+' },
+      { id: 'I-', label: 'I−', dx: 2, dy: 0, polarity: '-' },
+      { id: 'U+', label: 'U+*', dx: 0, dy: -2, polarity: '+' },
+      { id: 'U-', label: 'U−', dx: 0, dy: 2, polarity: '-' },
     ],
     symbol: (props) => React.createElement(InstrumentSymbol, { ...props, meterKind: 'W' }),
     propsSchema: [],
@@ -818,14 +815,16 @@ export const COMPONENT_DEFINITIONS: ComponentDef[] = [
     width: 80,
     height: 60,
     pins: [
-      { id: 'pos', label: '+', dx: -2, dy: 0, polarity: '+' },
-      { id: 'neg', label: '−', dx: 2, dy: 0, polarity: '-' },
+      { id: '1', label: '1', dx: -2, dy: 0 },
+      { id: '2', label: '2', dx: 2, dy: 0 },
     ],
     symbol: (props) => React.createElement(InstrumentSymbol, { ...props, meterKind: 'Ω' }),
     propsSchema: [],
     defaultProps: {},
   },
 ];
+
+export const COMPONENT_REGISTRY = COMPONENT_DEFINITIONS;
 
 export const COMPONENT_MAP = new Map<string, ComponentDef>(
   COMPONENT_DEFINITIONS.map(def => [def.type, def])

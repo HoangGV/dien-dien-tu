@@ -1,5 +1,5 @@
 {
-  "name": "Mạch điện – Điện tử (GDPT 2018)",
+  "name": "Điện – Điện tử",
   "description": "Ứng dụng mô phỏng mạch điện và điện tử chuẩn TCVN/IEC dành cho học sinh lớp 8–12 môn Công nghệ.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

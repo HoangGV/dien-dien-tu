@@ -5,8 +5,9 @@
  * - Voltage sources: AC 220V, DC 9V/1.5-24V, VCC
  * - Passive components: Resistor, Potentiometer, Capacitors (DC steady state)
  * - Semiconductors: Diode (0.7V), LED (2.0V-3.0V forward drop by color)
- * - Meters: Ammeter (1 mΩ), Voltmeter (10 MΩ)
+ * - Meters: Ammeter (1 mΩ), Voltmeter (10 MΩ), Wattmeter (4 pins: I+, I-, U+, U-), Ohmmeter (secondary offline solver)
  * - Protection & Switching: MCB/CB, Knife Switch, ELCB (30mA residual), Fuse, Switch 2P/3P, Push Button
+ * - Thermal accumulation & damage curves (LED burn, Resistor burn, Cap explosion, Wire melt, Breaker trip, Fuse blow)
  * - PE ground connection with source PE (0.1 Ω) and Earth Ground rod (R_đất)
  * - Metal chassis (vỏ) with 10 Ω leakage, 1000 Ω human touch
  * - Open Circuit & reverse polarity detection
@@ -21,6 +22,12 @@ import {
 } from './model';
 import { extractNetlist, getComponentPins } from './netlist';
 import { COMPONENT_MAP } from './registry';
+import {
+  COMPONENT_THERMAL_SPECS,
+  calculateWireStress,
+  DEFAULT_TAU_COOL,
+} from './componentSpecs';
+import { formatMeasure } from './measureFormat';
 
 export interface OpenCircuitInfo {
   isOpen: boolean;
@@ -29,15 +36,42 @@ export interface OpenCircuitInfo {
   missingPinId?: string;
 }
 
+export interface MeterMeasurement {
+  kind: 'A' | 'V' | 'W' | 'Ω';
+  value: number;
+  formatted: string;
+  voltage?: number;
+  current?: number;
+  power?: number;
+  resistance?: number;
+  isReversePolarity?: boolean;
+  isVoltageCoilConnected?: boolean;
+  hasLiveVoltageWarning?: boolean;
+}
+
+export interface ThermalState {
+  heat: number;         // h: 0 to > 2 (h > 1: HOT, h > 2: DAMAGED)
+  stress: number;       // s: load ratio
+  status: 'normal' | 'hot' | 'damaged' | 'tripped' | 'blown';
+  damageType?: 'burn' | 'trip' | 'blow' | 'explode' | 'melt';
+}
+
 export interface SolverStepResult {
   nodeVoltages: Record<string, number>;
   componentCurrents: Record<string, number>;
   componentVoltages: Record<string, number>;
+  componentPowers: Record<string, number>;
   operatingStates: Record<string, boolean>;
   caseStatuses: Record<string, CaseStatus>;
   earthCurrents: Record<string, number>;
   faultCurrents: Record<string, number>;
   trippedComponents: string[];
+  blownComponents: string[];
+  damagedComponents: string[];
+  thermalStates: Record<string, ThermalState>;
+  wireCurrents: Record<string, number>;
+  wireThermalStates: Record<string, ThermalState>;
+  meterMeasurements: Record<string, MeterMeasurement>;
   statusMessages: string[];
   openCircuit?: OpenCircuitInfo;
 }
@@ -88,12 +122,171 @@ export function solveLinearSystem(A: number[][], b: number[]): number[] {
   return x;
 }
 
+/**
+ * Secondary solver: calculates resistance measured by an Ohmmeter.
+ * Runs on a clone of the circuit with all power sources disabled (V=0 with internal resistance),
+ * capacitors open, diodes/LEDs open, other meters detached, and an injected 1 mA test current.
+ */
+export function solveOhmmeterResistance(
+  components: ComponentInstance[],
+  wires: Wire[],
+  junctions: Junction[],
+  ohmmeterId: string,
+  defMap: Map<string, ComponentDef> = COMPONENT_MAP
+): { resistance: number; hasLiveVoltageWarning: boolean } {
+  const ohmComp = components.find(c => c.id === ohmmeterId);
+  if (!ohmComp) {
+    return { resistance: Infinity, hasLiveVoltageWarning: false };
+  }
+
+  // Check if live sources are present and wired in the main circuit
+  const hasLiveSources = components.some(c =>
+    (c.type === 'ac_source' && (Number(c.props.voltage) || 220) > 0) ||
+    (c.type === 'dc_source' && (Number(c.props.voltage) || 9) > 0)
+  );
+
+  const { pinToNetId, nets } = extractNetlist(components, wires, junctions, defMap);
+  const net1 = pinToNetId.get(`${ohmmeterId}:1`) || pinToNetId.get(`${ohmmeterId}:pos`);
+  const net2 = pinToNetId.get(`${ohmmeterId}:2`) || pinToNetId.get(`${ohmmeterId}:neg`);
+
+  if (!net1 || !net2) {
+    return { resistance: Infinity, hasLiveVoltageWarning: hasLiveSources };
+  }
+  if (net1 === net2) {
+    return { resistance: 0, hasLiveVoltageWarning: hasLiveSources };
+  }
+
+  // Build secondary MNA with net2 as reference ground (0V)
+  const nodeMap = new Map<string, number>();
+  let nextIdx = 0;
+  nodeMap.set(net2, -1); // Ground ref
+
+  for (const net of nets) {
+    if (net.id !== net2 && !nodeMap.has(net.id)) {
+      nodeMap.set(net.id, nextIdx++);
+    }
+  }
+
+  const numNodes = nextIdx;
+  if (numNodes === 0) {
+    return { resistance: Infinity, hasLiveVoltageWarning: hasLiveSources };
+  }
+
+  const G: number[][] = Array.from({ length: numNodes }, () => new Array(numNodes).fill(0));
+  const I: number[] = new Array(numNodes).fill(0);
+
+  const addResistor = (u: number, v: number, r: number) => {
+    if (r <= 0) r = 1e-6;
+    const g = 1 / r;
+    if (u >= 0 && u < numNodes) G[u][u] += g;
+    if (v >= 0 && v < numNodes) G[v][v] += g;
+    if (u >= 0 && v >= 0 && u < numNodes && v < numNodes) {
+      G[u][v] -= g;
+      G[v][u] -= g;
+    }
+  };
+
+  // Small gmin shunt to prevent singular matrices on floating parts
+  for (let i = 0; i < numNodes; i++) {
+    G[i][i] += 1e-9;
+  }
+
+  for (const c of components) {
+    if (c.id === ohmmeterId) {
+      // Skip the ohmmeter itself in passive mesh
+      continue;
+    }
+
+    if (c.type === 'ac_source') {
+      // Voltage source OFF -> internal resistance 0.001 Ω
+      const aNet = pinToNetId.get(`${c.id}:A`);
+      const oNet = pinToNetId.get(`${c.id}:O`);
+      if (aNet && oNet) {
+        addResistor(nodeMap.get(aNet) ?? -1, nodeMap.get(oNet) ?? -1, 0.001);
+      }
+    } else if (c.type === 'dc_source') {
+      const posNet = pinToNetId.get(`${c.id}:pos`);
+      const negNet = pinToNetId.get(`${c.id}:neg`);
+      if (posNet && negNet) {
+        addResistor(nodeMap.get(posNet) ?? -1, nodeMap.get(negNet) ?? -1, 0.001);
+      }
+    } else if (c.type === 'resistor') {
+      const n1 = pinToNetId.get(`${c.id}:1`);
+      const n2 = pinToNetId.get(`${c.id}:2`);
+      if (n1 && n2) {
+        const rVal = Number(c.props.resistance ?? 1000) || 1000;
+        addResistor(nodeMap.get(n1) ?? -1, nodeMap.get(n2) ?? -1, rVal);
+      }
+    } else if (['ceiling_fan', 'appliance_generic', 'lamp_fluorescent', 'lamp'].includes(c.type)) {
+      const n1 = pinToNetId.get(`${c.id}:A`) || pinToNetId.get(`${c.id}:1`);
+      const n2 = pinToNetId.get(`${c.id}:O`) || pinToNetId.get(`${c.id}:2`);
+      if (n1 && n2) {
+        const power = Number(c.props.power) || (c.type === 'ceiling_fan' ? 60 : c.type === 'lamp_fluorescent' ? 36 : 60);
+        const rLoad = Math.max((220 * 220) / power, 10);
+        addResistor(nodeMap.get(n1) ?? -1, nodeMap.get(n2) ?? -1, rLoad);
+      }
+    } else if (c.type === 'ammeter' || c.type === 'cb' || c.type === 'switch_2p' || c.type === 'push_button') {
+      const isClosed = c.type === 'ammeter' || (c.props.state !== false && !c.props.isTripped);
+      if (isClosed) {
+        const n1 = pinToNetId.get(`${c.id}:1`) || pinToNetId.get(`${c.id}:pos`) || pinToNetId.get(`${c.id}:in`) || pinToNetId.get(`${c.id}:in1`);
+        const n2 = pinToNetId.get(`${c.id}:2`) || pinToNetId.get(`${c.id}:neg`) || pinToNetId.get(`${c.id}:out`) || pinToNetId.get(`${c.id}:out1`);
+        if (n1 && n2) {
+          addResistor(nodeMap.get(n1) ?? -1, nodeMap.get(n2) ?? -1, 0.001);
+        }
+      }
+    } else if (c.type === 'wattmeter') {
+      // Current coil is shorted (1 mΩ), voltage coil is open (10 MΩ)
+      const ni1 = pinToNetId.get(`${c.id}:I+`);
+      const ni2 = pinToNetId.get(`${c.id}:I-`);
+      if (ni1 && ni2) {
+        addResistor(nodeMap.get(ni1) ?? -1, nodeMap.get(ni2) ?? -1, 0.001);
+      }
+      const nu1 = pinToNetId.get(`${c.id}:U+`);
+      const nu2 = pinToNetId.get(`${c.id}:U-`);
+      if (nu1 && nu2) {
+        addResistor(nodeMap.get(nu1) ?? -1, nodeMap.get(nu2) ?? -1, 1e7);
+      }
+    } else if (c.type === 'socket') {
+      // Socket pins A and O are wired natively
+    }
+  }
+
+  // Inject 1 mA test current into net1 (positive node)
+  const idx1 = nodeMap.get(net1) ?? -1;
+  if (idx1 < 0) {
+    return { resistance: Infinity, hasLiveVoltageWarning: hasLiveSources };
+  }
+
+  I[idx1] += 0.001; // 1 mA injected into pin 1
+
+  const solution = solveLinearSystem(G, I);
+  const v1 = solution[idx1];
+
+  // R = V1 / 1 mA = V1 / 0.001
+  const rMeasured = v1 / 0.001;
+
+  if (rMeasured >= 1e8 || rMeasured < 0 || !isFinite(rMeasured)) {
+    return { resistance: Infinity, hasLiveVoltageWarning: hasLiveSources };
+  }
+
+  return {
+    resistance: Math.round(rMeasured * 100) / 100,
+    hasLiveVoltageWarning: hasLiveSources,
+  };
+}
+
+/**
+ * Main Circuit Solver
+ */
 export function solveCircuit(
   components: ComponentInstance[],
   wires: Wire[],
   junctionsOrTime?: Junction[] | number,
   compDefMap?: Map<string, ComponentDef>,
-  simTimeSeconds: number = 0
+  simTimeSeconds: number = 0,
+  prevThermalStates: Record<string, ThermalState> = {},
+  prevWireThermalStates: Record<string, ThermalState> = {},
+  dtSeconds: number = 0.05
 ): SolverStepResult {
   const junctions: Junction[] = Array.isArray(junctionsOrTime) ? junctionsOrTime : [];
   const timeSec = typeof junctionsOrTime === 'number' ? junctionsOrTime : simTimeSeconds;
@@ -122,7 +315,6 @@ export function solveCircuit(
   if (!refNetId) {
     const vcc = components.find(c => c.type === 'vcc');
     if (vcc) {
-      // Find what other net is connected, else use arbitrary
       const otherNets = nets.filter(n => !n.pinKeys.includes(`${vcc.id}:vcc`));
       if (otherNets.length > 0) refNetId = otherNets[0].id;
     }
@@ -165,31 +357,52 @@ export function solveCircuit(
   }
   const vSources: VSourceBranch[] = [];
 
+  const deadShortSources: Record<string, number> = {};
+
   for (const src of acSources) {
-    const vPosNet = pinToNetId.get(`${src.id}:A`);
-    const vNegNet = pinToNetId.get(`${src.id}:O`);
-    const posIdx = vPosNet ? (nodeMap.get(vPosNet) ?? -1) : -1;
-    const negIdx = vNegNet ? (nodeMap.get(vNegNet) ?? -1) : -1;
-    vSources.push({
-      id: src.id,
-      posNode: posIdx,
-      negNode: negIdx,
-      voltage: Number(src.props.voltage) || 220,
-    });
+    // Check if source is burned/damaged
+    const isDamaged = prevThermalStates[src.id]?.status === 'damaged';
+    if (!isDamaged) {
+      const vPosNet = pinToNetId.get(`${src.id}:A`);
+      const vNegNet = pinToNetId.get(`${src.id}:O`);
+      if (vPosNet && vNegNet && vPosNet === vNegNet) {
+        // Direct dead short across source terminals!
+        const vVal = Number(src.props.voltage) || 220;
+        deadShortSources[src.id] = vVal / 0.05;
+      } else {
+        const posIdx = vPosNet ? (nodeMap.get(vPosNet) ?? -1) : -1;
+        const negIdx = vNegNet ? (nodeMap.get(vNegNet) ?? -1) : -1;
+        vSources.push({
+          id: src.id,
+          posNode: posIdx,
+          negNode: negIdx,
+          voltage: Number(src.props.voltage) || 220,
+        });
+      }
+    }
   }
 
   const dcSources = components.filter(c => c.type === 'dc_source');
   for (const src of dcSources) {
-    const vPosNet = pinToNetId.get(`${src.id}:pos`);
-    const vNegNet = pinToNetId.get(`${src.id}:neg`);
-    const posIdx = vPosNet ? (nodeMap.get(vPosNet) ?? -1) : -1;
-    const negIdx = vNegNet ? (nodeMap.get(vNegNet) ?? -1) : -1;
-    vSources.push({
-      id: src.id,
-      posNode: posIdx,
-      negNode: negIdx,
-      voltage: Number(src.props.voltage) || 9,
-    });
+    const isDamaged = prevThermalStates[src.id]?.status === 'damaged';
+    if (!isDamaged) {
+      const vPosNet = pinToNetId.get(`${src.id}:pos`);
+      const vNegNet = pinToNetId.get(`${src.id}:neg`);
+      if (vPosNet && vNegNet && vPosNet === vNegNet) {
+        // Direct dead short across source terminals!
+        const vVal = Number(src.props.voltage) || 9;
+        deadShortSources[src.id] = vVal / 0.1;
+      } else {
+        const posIdx = vPosNet ? (nodeMap.get(vPosNet) ?? -1) : -1;
+        const negIdx = vNegNet ? (nodeMap.get(vNegNet) ?? -1) : -1;
+        vSources.push({
+          id: src.id,
+          posNode: posIdx,
+          negNode: negIdx,
+          voltage: Number(src.props.voltage) || 9,
+        });
+      }
+    }
   }
 
   const vccSources = components.filter(c => c.type === 'vcc');
@@ -233,6 +446,12 @@ export function solveCircuit(
     }
 
     for (const c of components) {
+      const isDamaged = prevThermalStates[c.id]?.status === 'damaged';
+      if (isDamaged) {
+        // Burned/blown components become open circuit (1 GΩ)
+        continue;
+      }
+
       if (c.type === 'ac_source') {
         if (c.props.hasPE) {
           const peNet = pinToNetId.get(`${c.id}:PE`) || pinToNetId.get(`${c.id}:pe`);
@@ -251,23 +470,7 @@ export function solveCircuit(
           addResistor(peIdx, -1, rDat);
         }
       } else if (c.type === 'socket') {
-        const inANet = pinToNetId.get(`${c.id}:in_A`) || pinToNetId.get(`${c.id}:A`);
-        const outANet = pinToNetId.get(`${c.id}:out_A`);
-        if (inANet && outANet) {
-          addResistor(nodeMap.get(inANet) ?? -1, nodeMap.get(outANet) ?? -1, 0.001);
-        }
-        const inONet = pinToNetId.get(`${c.id}:in_O`) || pinToNetId.get(`${c.id}:O`);
-        const outONet = pinToNetId.get(`${c.id}:out_O`);
-        if (inONet && outONet) {
-          addResistor(nodeMap.get(inONet) ?? -1, nodeMap.get(outONet) ?? -1, 0.001);
-        }
-        if (c.props.hasPE) {
-          const inPENet = pinToNetId.get(`${c.id}:in_PE`) || pinToNetId.get(`${c.id}:PE`);
-          const outPENet = pinToNetId.get(`${c.id}:out_PE`);
-          if (inPENet && outPENet) {
-            addResistor(nodeMap.get(inPENet) ?? -1, nodeMap.get(outPENet) ?? -1, 0.001);
-          }
-        }
+        // Socket terminals A, O, PE connect directly
       } else if (c.type === 'resistor') {
         const net1 = pinToNetId.get(`${c.id}:1`);
         const net2 = pinToNetId.get(`${c.id}:2`);
@@ -301,6 +504,26 @@ export function solveCircuit(
         if (net1 && net2) {
           addResistor(nodeMap.get(net1) ?? -1, nodeMap.get(net2) ?? -1, 1e7);
         }
+      } else if (c.type === 'wattmeter') {
+        // Current coil I+ -> I- (1 mΩ)
+        const nI1 = pinToNetId.get(`${c.id}:I+`);
+        const nI2 = pinToNetId.get(`${c.id}:I-`);
+        if (nI1 && nI2) {
+          addResistor(nodeMap.get(nI1) ?? -1, nodeMap.get(nI2) ?? -1, 0.001);
+        }
+        // Voltage coil U+ -> U- (10 MΩ)
+        const nU1 = pinToNetId.get(`${c.id}:U+`);
+        const nU2 = pinToNetId.get(`${c.id}:U-`);
+        if (nU1 && nU2) {
+          addResistor(nodeMap.get(nU1) ?? -1, nodeMap.get(nU2) ?? -1, 1e7);
+        }
+      } else if (c.type === 'ohmmeter') {
+        // In main circuit, ohmmeter is open (1 GΩ)
+        const net1 = pinToNetId.get(`${c.id}:1`) || pinToNetId.get(`${c.id}:pos`);
+        const net2 = pinToNetId.get(`${c.id}:2`) || pinToNetId.get(`${c.id}:neg`);
+        if (net1 && net2) {
+          addResistor(nodeMap.get(net1) ?? -1, nodeMap.get(net2) ?? -1, 1e9);
+        }
       } else if (c.type === 'switch_2p') {
         const isClosed = Boolean(c.props.state);
         const net1 = pinToNetId.get(`${c.id}:1`);
@@ -323,7 +546,8 @@ export function solveCircuit(
           addResistor(nodeMap.get(netCom) ?? -1, nodeMap.get(netTarget) ?? -1, 0.001);
         }
       } else if (c.type === 'cb' || c.type === 'knife_switch') {
-        const isClosed = Boolean(c.props.state) && !c.props.isTripped;
+        const isTripped = Boolean(c.props.isTripped) || prevThermalStates[c.id]?.status === 'tripped';
+        const isClosed = Boolean(c.props.state) && !isTripped;
         const poles = c.props.poles || (c.type === 'knife_switch' ? 2 : 1);
         if (isClosed) {
           if (poles === 1) {
@@ -343,7 +567,7 @@ export function solveCircuit(
           }
         }
       } else if (c.type === 'fuse') {
-        const isBlown = Boolean(c.props.isBlown);
+        const isBlown = Boolean(c.props.isBlown) || prevThermalStates[c.id]?.status === 'blown';
         if (!isBlown) {
           const poles = c.props.poles || 1;
           if (poles === 1) {
@@ -362,8 +586,8 @@ export function solveCircuit(
             }
           }
         }
-      } else if (['ceiling_fan', 'appliance_generic', 'lamp_fluorescent', 'lamp'].includes(c.type)) {
-        const power = Number(c.props.power) || (c.type === 'ceiling_fan' ? 60 : c.type === 'lamp_fluorescent' ? 36 : 60);
+      } else if (['ceiling_fan', 'appliance_generic', 'lamp_fluorescent', 'lamp', 'electric_bell'].includes(c.type)) {
+        const power = Number(c.props.power) || (c.type === 'ceiling_fan' ? 60 : c.type === 'lamp_fluorescent' ? 36 : c.type === 'electric_bell' ? 25 : 60);
         const rLoad = Math.max((220 * 220) / power, 10);
 
         const netA = pinToNetId.get(`${c.id}:A`) || pinToNetId.get(`${c.id}:1`);
@@ -395,8 +619,6 @@ export function solveCircuit(
         if (netA && netK) {
           const isConducting = ledConduction[c.id] ?? true;
           if (isConducting) {
-            // Forward biased equivalent resistance: (Vf / If) + Rdyn
-            // For LED: approx (2.0V / 14.5mA) + 10 = ~147.9 ohm; with R=470 gives exactly 14.6 mA!
             const vf = c.type === 'diode' ? 0.7 : (c.props.color === 'blue' || c.props.color === 'white' ? 3.0 : 2.0);
             const rEq = (vf / 0.0146) + 10;
             addResistor(nodeMap.get(netA) ?? -1, nodeMap.get(netK) ?? -1, rEq);
@@ -432,7 +654,13 @@ export function solveCircuit(
         nodeVoltages[key] = 0;
       }
     }
-    return nodeVoltages;
+
+    const sourceCurrents: Record<string, number> = {};
+    vSources.forEach((src, vIdx) => {
+      sourceCurrents[src.id] = Math.abs(solution[numNodes + vIdx] || 0);
+    });
+
+    return { nodeVoltages, sourceCurrents };
   };
 
   // Pass 1 solve
@@ -440,7 +668,9 @@ export function solveCircuit(
   for (const c of components) {
     if (c.type === 'led' || c.type === 'diode') initialConduction[c.id] = true;
   }
-  let nodeVoltages = buildAndSolve(initialConduction);
+  let solveOutput = buildAndSolve(initialConduction);
+  let nodeVoltages = solveOutput.nodeVoltages;
+  let sourceCurrents = solveOutput.sourceCurrents;
 
   // Check diode bias direction and re-solve if needed
   let needsResolve = false;
@@ -458,34 +688,66 @@ export function solveCircuit(
     }
   }
   if (needsResolve) {
-    nodeVoltages = buildAndSolve(refinedConduction);
+    solveOutput = buildAndSolve(refinedConduction);
+    nodeVoltages = solveOutput.nodeVoltages;
+    sourceCurrents = solveOutput.sourceCurrents;
   }
 
   // 6. Post-processing calculations
   const componentVoltages: Record<string, number> = {};
   const componentCurrents: Record<string, number> = {};
+  const componentPowers: Record<string, number> = {};
+  const signedCapVoltages: Record<string, number> = {};
+
+  // Populate source currents
+  for (const src of acSources) {
+    const iSrc = deadShortSources[src.id] ?? (sourceCurrents[src.id] ?? 0);
+    componentCurrents[src.id] = Math.round(iSrc * 100) / 100;
+    componentVoltages[src.id] = Number(src.props.voltage) || 220;
+    componentPowers[src.id] = Math.round(componentVoltages[src.id] * iSrc * 100) / 100;
+  }
+  for (const src of dcSources) {
+    const iSrc = deadShortSources[src.id] ?? (sourceCurrents[src.id] ?? 0);
+    componentCurrents[src.id] = Math.round(iSrc * 100) / 100;
+    componentVoltages[src.id] = Number(src.props.voltage) || 9;
+    componentPowers[src.id] = Math.round(componentVoltages[src.id] * iSrc * 100) / 100;
+  }
+  for (const src of vccSources) {
+    const iSrc = sourceCurrents[src.id] ?? 0;
+    componentCurrents[src.id] = Math.round(iSrc * 100) / 100;
+    componentVoltages[src.id] = Number(src.props.voltage) || 5;
+    componentPowers[src.id] = Math.round(componentVoltages[src.id] * iSrc * 100) / 100;
+  }
   const operatingStates: Record<string, boolean> = {};
   const caseStatuses: Record<string, CaseStatus> = {};
   const earthCurrents: Record<string, number> = {};
   const faultCurrents: Record<string, number> = {};
   const trippedComponents: string[] = [];
+  const blownComponents: string[] = [];
+  const damagedComponents: string[] = [];
+  const thermalStates: Record<string, ThermalState> = {};
+  const wireCurrents: Record<string, number> = {};
+  const wireThermalStates: Record<string, ThermalState> = {};
+  const meterMeasurements: Record<string, MeterMeasurement> = {};
   const statusMessages: string[] = [];
 
   // Calculate per-component V, I, and operating state
   for (const c of components) {
-    if (['ceiling_fan', 'lamp', 'lamp_fluorescent', 'appliance_generic'].includes(c.type)) {
+    if (['ceiling_fan', 'lamp', 'lamp_fluorescent', 'appliance_generic', 'electric_bell'].includes(c.type)) {
       const netA = pinToNetId.get(`${c.id}:A`) || pinToNetId.get(`${c.id}:1`);
       const netO = pinToNetId.get(`${c.id}:O`) || pinToNetId.get(`${c.id}:2`);
       const vA = netA ? (nodeVoltages[netA] ?? 0) : 0;
       const vO = netO ? (nodeVoltages[netO] ?? 0) : 0;
       const vDrop = Math.abs(vA - vO);
-      const power = Number(c.props.power) || (c.type === 'ceiling_fan' ? 60 : c.type === 'lamp_fluorescent' ? 36 : 60);
+      const power = Number(c.props.power) || (c.type === 'ceiling_fan' ? 60 : c.type === 'lamp_fluorescent' ? 36 : c.type === 'electric_bell' ? 25 : 60);
       const rLoad = Math.max((220 * 220) / power, 10);
       const iLoad = vDrop / rLoad;
+      const pReal = vDrop * iLoad;
 
       componentVoltages[c.id] = Math.round(vDrop * 100) / 100;
       componentCurrents[c.id] = Math.round(iLoad * 1000) / 1000;
-      operatingStates[c.id] = vDrop > 50; // operates if voltage > 50V
+      componentPowers[c.id] = Math.round(pReal * 100) / 100;
+      operatingStates[c.id] = pReal >= 0.05 * power; // operates if power >= 5% rated
     } else if (c.type === 'resistor') {
       const net1 = pinToNetId.get(`${c.id}:1`);
       const net2 = pinToNetId.get(`${c.id}:2`);
@@ -497,22 +759,84 @@ export function solveCircuit(
 
       componentVoltages[c.id] = Math.round(vDrop * 100) / 100;
       componentCurrents[c.id] = Math.round(iRes * 10000) / 10000;
+      componentPowers[c.id] = Math.round((vDrop * iRes) * 1000) / 1000;
     } else if (c.type === 'ammeter') {
       const net1 = pinToNetId.get(`${c.id}:pos`) || pinToNetId.get(`${c.id}:1`);
       const net2 = pinToNetId.get(`${c.id}:neg`) || pinToNetId.get(`${c.id}:2`);
       const v1 = net1 ? (nodeVoltages[net1] ?? 0) : 0;
       const v2 = net2 ? (nodeVoltages[net2] ?? 0) : 0;
-      const iAmp = Math.abs(v1 - v2) / 0.001;
-      componentCurrents[c.id] = Math.round(iAmp * 1000) / 1000;
+      const iAmp = (v1 - v2) / 0.001;
+      const absIAmp = Math.abs(iAmp);
+
+      componentCurrents[c.id] = Math.round(absIAmp * 1000) / 1000;
       componentVoltages[c.id] = Math.round(Math.abs(v1 - v2) * 1000) / 1000;
+      meterMeasurements[c.id] = {
+        kind: 'A',
+        value: absIAmp,
+        current: absIAmp,
+        formatted: formatMeasure(absIAmp, 'current'),
+        isReversePolarity: iAmp < 0,
+      };
     } else if (c.type === 'voltmeter') {
       const net1 = pinToNetId.get(`${c.id}:pos`) || pinToNetId.get(`${c.id}:1`);
       const net2 = pinToNetId.get(`${c.id}:neg`) || pinToNetId.get(`${c.id}:2`);
       const v1 = net1 ? (nodeVoltages[net1] ?? 0) : 0;
       const v2 = net2 ? (nodeVoltages[net2] ?? 0) : 0;
-      const vMeter = Math.abs(v1 - v2);
-      componentVoltages[c.id] = Math.round(vMeter * 100) / 100;
+      const vMeter = v1 - v2;
+      const absVMeter = Math.abs(vMeter);
+
+      componentVoltages[c.id] = Math.round(absVMeter * 100) / 100;
       componentCurrents[c.id] = 0;
+      meterMeasurements[c.id] = {
+        kind: 'V',
+        value: absVMeter,
+        voltage: absVMeter,
+        formatted: formatMeasure(absVMeter, 'voltage'),
+        isReversePolarity: vMeter < 0,
+      };
+    } else if (c.type === 'wattmeter') {
+      const nI1 = pinToNetId.get(`${c.id}:I+`);
+      const nI2 = pinToNetId.get(`${c.id}:I-`);
+      const nU1 = pinToNetId.get(`${c.id}:U+`);
+      const nU2 = pinToNetId.get(`${c.id}:U-`);
+
+      const vI1 = nI1 ? (nodeVoltages[nI1] ?? 0) : 0;
+      const vI2 = nI2 ? (nodeVoltages[nI2] ?? 0) : 0;
+      const vU1 = nU1 ? (nodeVoltages[nU1] ?? 0) : 0;
+      const vU2 = nU2 ? (nodeVoltages[nU2] ?? 0) : 0;
+
+      const iVal = (vI1 - vI2) / 0.001;
+      const uVal = vU1 - vU2;
+      const isVoltageCoilConnected = Boolean(nU1 && nU2);
+      const pReal = isVoltageCoilConnected ? uVal * iVal : 0;
+
+      componentVoltages[c.id] = Math.round(Math.abs(uVal) * 100) / 100;
+      componentCurrents[c.id] = Math.round(Math.abs(iVal) * 1000) / 1000;
+      componentPowers[c.id] = Math.round(pReal * 100) / 100;
+
+      meterMeasurements[c.id] = {
+        kind: 'W',
+        value: Math.abs(pReal),
+        power: Math.abs(pReal),
+        voltage: Math.abs(uVal),
+        current: Math.abs(iVal),
+        formatted: formatMeasure(Math.abs(pReal), 'power'),
+        isReversePolarity: pReal < 0,
+        isVoltageCoilConnected,
+      };
+    } else if (c.type === 'ohmmeter') {
+      const resResult = solveOhmmeterResistance(components, wires, junctions, c.id, defMap);
+      const rVal = resResult.resistance;
+      componentVoltages[c.id] = 0;
+      componentCurrents[c.id] = 0;
+
+      meterMeasurements[c.id] = {
+        kind: 'Ω',
+        value: rVal,
+        resistance: rVal,
+        formatted: formatMeasure(rVal, 'resistance'),
+        hasLiveVoltageWarning: resResult.hasLiveVoltageWarning,
+      };
     } else if (c.type === 'led' || c.type === 'diode') {
       const netA = pinToNetId.get(`${c.id}:A`) || pinToNetId.get(`${c.id}:1`) || pinToNetId.get(`${c.id}:pos`);
       const netK = pinToNetId.get(`${c.id}:K`) || pinToNetId.get(`${c.id}:2`) || pinToNetId.get(`${c.id}:neg`);
@@ -526,6 +850,7 @@ export function solveCircuit(
 
       componentVoltages[c.id] = Math.round(Math.max(0, vAK) * 100) / 100;
       componentCurrents[c.id] = Math.round(iLed * 10000) / 10000;
+      componentPowers[c.id] = Math.round((vAK * iLed) * 1000) / 1000;
       operatingStates[c.id] = isConducting && iLed > 0.001;
     } else if (c.type === 'capacitor_ceramic' || c.type === 'capacitor_electrolytic') {
       const net1 = pinToNetId.get(`${c.id}:1`) || pinToNetId.get(`${c.id}:pos`);
@@ -533,6 +858,7 @@ export function solveCircuit(
       const v1 = net1 ? (nodeVoltages[net1] ?? 0) : 0;
       const v2 = net2 ? (nodeVoltages[net2] ?? 0) : 0;
       const vCap = v1 - v2;
+      signedCapVoltages[c.id] = vCap;
       componentVoltages[c.id] = Math.round(Math.abs(vCap) * 100) / 100;
       componentCurrents[c.id] = 0; // DC steady state
 
@@ -582,10 +908,10 @@ export function solveCircuit(
     earthCurrents[eg.id] = Math.round(iEarth * 1000) / 1000;
   }
 
-  // Check MCB / ELCB / CB currents & trips
+  // Check Breakers and Fuses
   const breakers = components.filter(c => c.type === 'cb' || c.type === 'knife_switch');
   for (const brk of breakers) {
-    if (brk.props.isTripped) {
+    if (brk.props.isTripped || prevThermalStates[brk.id]?.status === 'tripped') {
       trippedComponents.push(brk.id);
       continue;
     }
@@ -616,22 +942,168 @@ export function solveCircuit(
 
     if ((isELCB || brk.props.isELCB) && iResidual > 0.030) {
       trippedComponents.push(brk.id);
-      statusMessages.push(`ELCB NHẢY: Phát hiện dòng rò đất ${(iResidual * 1000).toFixed(1)} mA > 30 mA.`);
-    } else {
-      const ratedIn = Number(brk.props.ratedCurrent ?? 16);
-      if (iMax > ratedIn) {
-        faultCurrents[brk.id] = Math.round(iMax * 100) / 100;
-        const ratio = iMax / ratedIn;
-        const tripTimeSeconds = 8 / (ratio * ratio - 1);
-        if (timeSec >= tripTimeSeconds) {
-          trippedComponents.push(brk.id);
-          statusMessages.push(`CB NHẢY: Quá tải ${(iMax).toFixed(1)} A > ${ratedIn} A (nhảy sau ${tripTimeSeconds.toFixed(1)} s).`);
-        }
-      }
+      statusMessages.push(`ELCB NHẢY do dòng rò: ${(iResidual * 1000).toFixed(1)} mA > 30 mA.`);
     }
   }
 
-  // 7. Open Circuit Analysis
+  // Calculate Fuses
+  const fuses = components.filter(c => c.type === 'fuse');
+  for (const f of fuses) {
+    if (f.props.isBlown || prevThermalStates[f.id]?.status === 'blown') {
+      blownComponents.push(f.id);
+      continue;
+    }
+    const inNet = pinToNetId.get(`${f.id}:1`) || pinToNetId.get(`${f.id}:in`);
+    const outNet = pinToNetId.get(`${f.id}:2`) || pinToNetId.get(`${f.id}:out`);
+    const vIn = inNet ? (nodeVoltages[inNet] ?? 0) : 0;
+    const vOut = outNet ? (nodeVoltages[outNet] ?? 0) : 0;
+    const iFuse = Math.abs(vIn - vOut) / 0.001;
+    componentCurrents[f.id] = Math.round(iFuse * 100) / 100;
+    componentVoltages[f.id] = Math.round(Math.abs(vIn - vOut) * 1000) / 1000;
+  }
+
+  // 7. Thermal accumulation & damage updates (dt step)
+  const effectiveDt = (timeSec > 0 && Object.keys(prevThermalStates).length === 0) ? timeSec : dtSeconds;
+
+  for (const c of components) {
+    const spec = COMPONENT_THERMAL_SPECS[c.type];
+    const prev = prevThermalStates[c.id] || { heat: 0, stress: 0, status: 'normal' };
+
+    if (prev.status === 'damaged' || prev.status === 'tripped' || prev.status === 'blown') {
+      thermalStates[c.id] = { ...prev };
+      if (prev.status === 'tripped') trippedComponents.push(c.id);
+      if (prev.status === 'blown') blownComponents.push(c.id);
+      if (prev.status === 'damaged') damagedComponents.push(c.id);
+      continue;
+    }
+
+    if (trippedComponents.includes(c.id)) {
+      thermalStates[c.id] = { heat: 2.5, stress: 1.0, status: 'tripped', damageType: 'trip' };
+      continue;
+    }
+
+    if (!spec) {
+      thermalStates[c.id] = { heat: 0, stress: 0, status: 'normal' };
+      continue;
+    }
+
+    const cur = componentCurrents[c.id] || 0;
+    const volt = componentVoltages[c.id] || 0;
+    const pwr = componentPowers[c.id] || 0;
+
+    const stressInfo = spec.calculateStress({
+      voltage: volt,
+      current: cur,
+      power: pwr,
+      ratedVoltage: Number(c.props.voltage || c.props.ratedVoltage),
+      ratedCurrent: Number(c.props.ratedCurrent),
+      ratedPower: Number(c.props.power || c.props.ratedPower),
+      isReversePolarity: c.type === 'capacitor_electrolytic' && ((signedCapVoltages[c.id] !== undefined ? signedCapVoltages[c.id] : volt) < -0.5),
+    });
+
+    let h = prev.heat;
+    if (stressInfo.instantExplode || (stressInfo.instantTrip && stressInfo.damageType === 'explode')) {
+      h = 2.5; // Instant explosion
+    } else if (stressInfo.instantTrip && stressInfo.damageType === 'trip') {
+      // Instant breaker magnetic trip
+      trippedComponents.push(c.id);
+      thermalStates[c.id] = { heat: 2.5, stress: stressInfo.stress, status: 'tripped', damageType: 'trip' };
+      statusMessages.push(`Aptomat ${c.label} NHẢY do ngắn mạch (dòng > 5·In).`);
+      continue;
+    } else if (stressInfo.instantTrip && stressInfo.damageType === 'blow') {
+      // Instant fuse blow
+      blownComponents.push(c.id);
+      thermalStates[c.id] = { heat: 2.5, stress: stressInfo.stress, status: 'blown', damageType: 'blow' };
+      statusMessages.push(`Cầu chì ${c.label} ĐỨT do ngắn mạch (dòng > 5·In).`);
+      continue;
+    } else if (stressInfo.stress > 1.0) {
+      // Heating up: dh = overloadRate * dt / tauHeat
+      h += (stressInfo.overloadRate * effectiveDt) / spec.tauHeatSec;
+    } else {
+      // Cooling down: dh = -h * dt / tauCool
+      h -= (h * effectiveDt) / (spec.tauCoolSec || DEFAULT_TAU_COOL);
+      if (h < 0) h = 0;
+    }
+
+    let status: 'normal' | 'hot' | 'damaged' | 'tripped' | 'blown' = 'normal';
+    if (stressInfo.damageType === 'trip' && h >= 1.0) {
+      status = 'tripped';
+      trippedComponents.push(c.id);
+      statusMessages.push(`Aptomat ${c.label} NHẢY do quá tải nhiệt.`);
+    } else if (stressInfo.damageType === 'blow' && h >= 1.0) {
+      status = 'blown';
+      blownComponents.push(c.id);
+      statusMessages.push(`Cầu chì ${c.label} ĐỨT do quá tải nhiệt.`);
+    } else if (h > 2.0) {
+      status = 'damaged';
+      damagedComponents.push(c.id);
+      statusMessages.push(`Linh kiện ${c.label} (${c.type}) ĐÃ BỊ HỎNG / CHÁY do quá tải.`);
+    } else if (h > 1.0) {
+      status = 'hot';
+    }
+
+    thermalStates[c.id] = {
+      heat: Math.round(h * 1000) / 1000,
+      stress: Math.round(stressInfo.stress * 100) / 100,
+      status,
+      damageType: stressInfo.damageType,
+    };
+  }
+
+  // 8. Wire current & thermal accumulation
+  for (const w of wires) {
+    const fromCompId = w.from.compId;
+    const toCompId = w.to.compId;
+    let iWire = 0;
+
+    // Approximate wire current from connected components
+    if (fromCompId && toCompId && fromCompId === toCompId && deadShortSources[fromCompId]) {
+      iWire = deadShortSources[fromCompId];
+    } else if (fromCompId && deadShortSources[fromCompId]) {
+      iWire = deadShortSources[fromCompId];
+    } else if (toCompId && deadShortSources[toCompId]) {
+      iWire = deadShortSources[toCompId];
+    } else if (fromCompId && componentCurrents[fromCompId] !== undefined) {
+      iWire = componentCurrents[fromCompId];
+    } else if (toCompId && componentCurrents[toCompId] !== undefined) {
+      iWire = componentCurrents[toCompId];
+    }
+
+    wireCurrents[w.id] = iWire;
+    const prevW = prevWireThermalStates[w.id] || { heat: 0, stress: 0, status: 'normal' };
+
+    if (prevW.status === 'damaged') {
+      wireThermalStates[w.id] = { ...prevW };
+      continue;
+    }
+
+    const wStress = calculateWireStress(iWire, w.crossSection || 2.5);
+    let hw = prevW.heat;
+
+    if (wStress.stress > 1.0) {
+      hw += (wStress.overloadRate * effectiveDt) / wStress.tauHeatSec;
+    } else {
+      hw -= (hw * effectiveDt) / wStress.tauCoolSec;
+      if (hw < 0) hw = 0;
+    }
+
+    let wStatus: 'normal' | 'hot' | 'damaged' = 'normal';
+    if (hw > 2.0) {
+      wStatus = 'damaged';
+      statusMessages.push(`Dây dẫn ${w.id} (tiết diện ${w.crossSection} mm²) ĐÃ BỊ CHÁY HỎNG!`);
+    } else if (hw > 1.0) {
+      wStatus = 'hot';
+    }
+
+    wireThermalStates[w.id] = {
+      heat: Math.round(hw * 1000) / 1000,
+      stress: Math.round(wStress.stress * 100) / 100,
+      status: wStatus,
+      damageType: 'melt',
+    };
+  }
+
+  // 9. Open Circuit Analysis
   let openCircuit: OpenCircuitInfo | undefined;
   if (acSources.length > 0) {
     const src = acSources[0];
@@ -642,13 +1114,11 @@ export function solveCircuit(
     } else if (!srcONet) {
       openCircuit = { isOpen: true, reason: 'Mạch hở: Nguồn điện chưa nối dây ở cực Trung tính (O)', componentId: src.id, missingPinId: 'O' };
     } else {
-      // Check if any load is hanging without return to O
-      const loads = components.filter(c => ['ceiling_fan', 'lamp', 'lamp_fluorescent', 'appliance_generic'].includes(c.type));
+      const loads = components.filter(c => ['ceiling_fan', 'lamp', 'lamp_fluorescent', 'appliance_generic', 'electric_bell'].includes(c.type));
       for (const ld of loads) {
         const pinA = pinToNetId.get(`${ld.id}:A`) || pinToNetId.get(`${ld.id}:1`);
         const pinO = pinToNetId.get(`${ld.id}:O`) || pinToNetId.get(`${ld.id}:2`);
         const vPinA = pinA ? (nodeVoltages[pinA] ?? 0) : 0;
-        const vPinO = pinO ? (nodeVoltages[pinO] ?? 0) : 0;
         const isConnectedToA = pinA && vPinA > 10;
         const isConnectedToO = pinO === srcONet;
 
@@ -679,11 +1149,18 @@ export function solveCircuit(
     nodeVoltages,
     componentCurrents,
     componentVoltages,
+    componentPowers,
     operatingStates,
     caseStatuses,
     earthCurrents,
     faultCurrents,
     trippedComponents,
+    blownComponents,
+    damagedComponents,
+    thermalStates,
+    wireCurrents,
+    wireThermalStates,
+    meterMeasurements,
     statusMessages,
     openCircuit,
   };
