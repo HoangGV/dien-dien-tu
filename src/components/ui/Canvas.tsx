@@ -461,6 +461,106 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
 
   const currentPlacingDef = placingType ? getComponentDef(placingType) : null;
 
+  const renderComponentNode = (c: ComponentInstance) => {
+    const def = COMPONENT_MAP.get(c.type);
+    if (!def) return null;
+    const isSelected = selectedComponentIds.includes(c.id);
+    const showRotationHandle = isSelected && selectedComponentIds.length === 1;
+
+    return (
+      <g
+        key={c.id}
+        transform={`translate(${c.x}, ${c.y}) rotate(${c.rot}) scale(${c.flip ? -1 : 1}, ${c.flipY ? -1 : 1})`}
+        onPointerDown={(e) => handleComponentPointerDown(c.id, e)}
+        className="cursor-move"
+      >
+        {/* Yellow outline box when selected */}
+        {isSelected && (
+          <rect
+            x={-def.width / 2 - 4}
+            y={-def.height / 2 - 4}
+            width={def.width + 8}
+            height={def.height + 8}
+            fill="none"
+            stroke="#FFD84D"
+            strokeWidth={2.5}
+            strokeDasharray="4,2"
+          />
+        )}
+
+        {/* Circular Rotation Handle above selected component */}
+        {showRotationHandle && (
+          <g>
+            {/* Stem line */}
+            <line
+              x1={0}
+              y1={-def.height / 2 - 4}
+              x2={0}
+              y2={-def.height / 2 - 20}
+              stroke="#000000"
+              strokeWidth={2}
+              strokeDasharray="2,2"
+            />
+            {/* Circular handle */}
+            <circle
+              cx={0}
+              cy={-def.height / 2 - 20}
+              r={6}
+              fill="#FFD84D"
+              stroke="#000000"
+              strokeWidth={2}
+              className="cursor-grab active:cursor-grabbing hover:scale-125"
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                const worldPt = screenToWorld(e.clientX, e.clientY);
+                const pointerAngle = (Math.atan2(worldPt.y - c.y, worldPt.x - c.x) * 180) / Math.PI;
+                startRotating(c.id, pointerAngle);
+                (e.target as HTMLElement)?.setPointerCapture?.(e.pointerId);
+              }}
+            />
+
+            {/* Angle badge if currently rotating */}
+            {rotatingComponent?.compId === c.id && (
+              <g transform={`translate(0, ${-def.height / 2 - 38})`} pointerEvents="none">
+                <rect
+                  x={-22}
+                  y={-10}
+                  width={44}
+                  height={20}
+                  fill="#FFD84D"
+                  stroke="#000000"
+                  strokeWidth={2}
+                />
+                <text
+                  x={0}
+                  y={4}
+                  textAnchor="middle"
+                  fontSize={11}
+                  fontWeight={900}
+                  fill="#000000"
+                  fontFamily="system-ui"
+                >
+                  {Math.round(c.rot)}°
+                </text>
+              </g>
+            )}
+          </g>
+        )}
+
+        {/* Component Symbol */}
+        <def.symbol
+          comp={c}
+          isSelected={isSelected}
+          hoveredPinId={hoveredPin?.compId === c.id ? hoveredPin.pinId : null}
+          onPinPointerDown={(pinId, e) => handlePinPointerDown(c.id, pinId, e)}
+          onPinHover={(pinId) =>
+            setHoveredPin(pinId ? { compId: c.id, pinId } : null)
+          }
+        />
+      </g>
+    );
+  };
+
   return (
     <div
       ref={containerRef}
@@ -503,6 +603,11 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
         <g
           transform={`translate(${circuit.viewport.x}, ${circuit.viewport.y}) scale(${circuit.viewport.zoom})`}
         >
+          {/* 0. ANNOTATIONS LAYER (Khung phân vùng & Ghi chú chữ - luôn ở dưới cùng) */}
+          {circuit.components
+            .filter((c) => c.type === 'boundary' || c.type === 'textbox')
+            .map(renderComponentNode)}
+
           {/* 1. WIRES LAYER */}
           {circuit.wires.map((w) => {
             const isSelected = selectedWireIds.includes(w.id);
@@ -681,106 +786,10 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
             </g>
           )}
 
-          {/* 4. COMPONENTS LAYER */}
-          {circuit.components.map((c) => {
-            const def = COMPONENT_MAP.get(c.type);
-            if (!def) return null;
-            const isSelected = selectedComponentIds.includes(c.id);
-            const showRotationHandle = isSelected && selectedComponentIds.length === 1;
-
-            return (
-              <g
-                key={c.id}
-                transform={`translate(${c.x}, ${c.y}) rotate(${c.rot}) scale(${c.flip ? -1 : 1}, ${c.flipY ? -1 : 1})`}
-                onPointerDown={(e) => handleComponentPointerDown(c.id, e)}
-                className="cursor-move"
-              >
-                {/* Yellow outline box when selected */}
-                {isSelected && (
-                  <rect
-                    x={-def.width / 2 - 4}
-                    y={-def.height / 2 - 4}
-                    width={def.width + 8}
-                    height={def.height + 8}
-                    fill="none"
-                    stroke="#FFD84D"
-                    strokeWidth={2.5}
-                    strokeDasharray="4,2"
-                  />
-                )}
-
-                {/* Circular Rotation Handle above selected component */}
-                {showRotationHandle && (
-                  <g>
-                    {/* Stem line */}
-                    <line
-                      x1={0}
-                      y1={-def.height / 2 - 4}
-                      x2={0}
-                      y2={-def.height / 2 - 20}
-                      stroke="#000000"
-                      strokeWidth={2}
-                      strokeDasharray="2,2"
-                    />
-                    {/* Circular handle */}
-                    <circle
-                      cx={0}
-                      cy={-def.height / 2 - 20}
-                      r={6}
-                      fill="#FFD84D"
-                      stroke="#000000"
-                      strokeWidth={2}
-                      className="cursor-grab active:cursor-grabbing hover:scale-125"
-                      onPointerDown={(e) => {
-                        e.stopPropagation();
-                        const worldPt = screenToWorld(e.clientX, e.clientY);
-                        const pointerAngle = (Math.atan2(worldPt.y - c.y, worldPt.x - c.x) * 180) / Math.PI;
-                        startRotating(c.id, pointerAngle);
-                        (e.target as HTMLElement)?.setPointerCapture?.(e.pointerId);
-                      }}
-                    />
-
-                    {/* Angle badge if currently rotating */}
-                    {rotatingComponent?.compId === c.id && (
-                      <g transform={`translate(0, ${-def.height / 2 - 38})`} pointerEvents="none">
-                        <rect
-                          x={-22}
-                          y={-10}
-                          width={44}
-                          height={20}
-                          fill="#FFD84D"
-                          stroke="#000000"
-                          strokeWidth={2}
-                        />
-                        <text
-                          x={0}
-                          y={4}
-                          textAnchor="middle"
-                          fontSize={11}
-                          fontWeight={900}
-                          fill="#000000"
-                          fontFamily="system-ui"
-                        >
-                          {Math.round(c.rot)}°
-                        </text>
-                      </g>
-                    )}
-                  </g>
-                )}
-
-                {/* Component Symbol */}
-                <def.symbol
-                  comp={c}
-                  isSelected={isSelected}
-                  hoveredPinId={hoveredPin?.compId === c.id ? hoveredPin.pinId : null}
-                  onPinPointerDown={(pinId, e) => handlePinPointerDown(c.id, pinId, e)}
-                  onPinHover={(pinId) =>
-                    setHoveredPin(pinId ? { compId: c.id, pinId } : null)
-                  }
-                />
-              </g>
-            );
-          })}
+          {/* 4. ELECTRICAL COMPONENTS LAYER */}
+          {circuit.components
+            .filter((c) => c.type !== 'boundary' && c.type !== 'textbox')
+            .map(renderComponentNode)}
 
           {/* 5. PLACING GHOST PREVIEW */}
           {editorMode === 'placing' && currentPlacingDef && (

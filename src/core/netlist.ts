@@ -106,6 +106,13 @@ export function extractNetlist(
     } else if (c.type === 'ammeter' || c.type === 'voltmeter') {
       dsu.union(`${c.id}:pos`, `${c.id}:1`);
       dsu.union(`${c.id}:neg`, `${c.id}:2`);
+    } else if (c.type === 'socket') {
+      dsu.union(`${c.id}:A`, `${c.id}:in_A`);
+      dsu.union(`${c.id}:A`, `${c.id}:out_A`);
+      dsu.union(`${c.id}:O`, `${c.id}:in_O`);
+      dsu.union(`${c.id}:O`, `${c.id}:out_O`);
+      dsu.union(`${c.id}:PE`, `${c.id}:in_PE`);
+      dsu.union(`${c.id}:PE`, `${c.id}:out_PE`);
     }
   }
 

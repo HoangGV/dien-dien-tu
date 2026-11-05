@@ -447,22 +447,22 @@ export const FuseSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPi
 
   const pins: PinDef[] = [];
   if (poles === 1) {
-    pins.push({ id: 'in', label: '1', dx: -2, dy: 0 }, { id: 'out', label: '1\'', dx: 2, dy: 0 });
+    pins.push({ id: 'in', label: '', dx: -2, dy: 0 }, { id: 'out', label: '', dx: 2, dy: 0 });
   } else if (poles === 2) {
     pins.push(
-      { id: 'in1', label: '1', dx: -2, dy: -1 },
-      { id: 'out1', label: '1\'', dx: 2, dy: -1 },
-      { id: 'in2', label: '2', dx: -2, dy: 1 },
-      { id: 'out2', label: '2\'', dx: 2, dy: 1 }
+      { id: 'in1', label: '', dx: -2, dy: -1 },
+      { id: 'out1', label: '', dx: 2, dy: -1 },
+      { id: 'in2', label: '', dx: -2, dy: 1 },
+      { id: 'out2', label: '', dx: 2, dy: 1 }
     );
   } else {
     pins.push(
-      { id: 'in1', label: '1', dx: -2, dy: -2 },
-      { id: 'out1', label: '1\'', dx: 2, dy: -2 },
-      { id: 'in2', label: '2', dx: -2, dy: 0 },
-      { id: 'out2', label: '2\'', dx: 2, dy: 0 },
-      { id: 'in3', label: '3', dx: -2, dy: 2 },
-      { id: 'out3', label: '3\'', dx: 2, dy: 2 }
+      { id: 'in1', label: '', dx: -2, dy: -2 },
+      { id: 'out1', label: '', dx: 2, dy: -2 },
+      { id: 'in2', label: '', dx: -2, dy: 0 },
+      { id: 'out2', label: '', dx: 2, dy: 0 },
+      { id: 'in3', label: '', dx: -2, dy: 2 },
+      { id: 'out3', label: '', dx: 2, dy: 2 }
     );
   }
 
@@ -952,32 +952,33 @@ export const SocketSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, on
   const hasPE = Boolean(comp.props.hasPE);
   const pins: PinDef[] = hasPE
     ? [
-        { id: 'A', label: 'A', dx: -2, dy: -1 },
-        { id: 'PE', label: 'PE', dx: -2, dy: 0, polarity: 'PE' },
-        { id: 'O', label: 'O', dx: -2, dy: 1 },
+        { id: 'A', label: 'A', dx: -2, dy: 0 },
+        { id: 'O', label: 'O', dx: 2, dy: 0 },
+        { id: 'PE', label: 'PE', dx: 0, dy: 1, polarity: 'PE' },
       ]
     : [
-        { id: 'A', label: 'A', dx: -2, dy: -1 },
-        { id: 'O', label: 'O', dx: -2, dy: 1 },
+        { id: 'A', label: 'A', dx: -2, dy: 0 },
+        { id: 'O', label: 'O', dx: 2, dy: 0 },
       ];
 
   return (
     <g>
       <circle cx={0} cy={0} r={18} fill="#FFFFFF" stroke="#000000" strokeWidth={2} />
-      {/* 2 main socket holes */}
-      <circle cx={-6} cy={0} r={2.5} fill="#000" />
-      <circle cx={6} cy={0} r={2.5} fill="#000" />
+      {/* 2 main socket holes arranged horizontally, collinear with A and O pins */}
+      <circle cx={-7} cy={0} r={3} fill="#000000" />
+      <circle cx={7} cy={0} r={3} fill="#000000" />
       {/* Ground socket hole if hasPE */}
       {hasPE && (
-        <circle cx={0} cy={-8} r={2} fill="#10B981" stroke="#000" strokeWidth={1} />
+        <circle cx={0} cy={-7} r={2.5} fill="#10B981" stroke="#000000" strokeWidth={1} />
       )}
 
-      {/* Input wire stubs */}
-      <line x1={-40} y1={-20} x2={-16} y2={-8} stroke="#000" strokeWidth={2} />
-      <line x1={-40} y1={20} x2={-16} y2={8} stroke="#000" strokeWidth={2} />
+      {/* Horizontal leads from circle to pins A and O */}
+      <line x1={-40} y1={0} x2={-18} y2={0} stroke="#000000" strokeWidth={2} />
+      <line x1={18} y1={0} x2={40} y2={0} stroke="#000000" strokeWidth={2} />
 
+      {/* PE lead down to pin PE if active */}
       {hasPE && (
-        <line x1={-40} y1={0} x2={-18} y2={0} stroke="#10B981" strokeWidth={2} strokeDasharray="3 2" />
+        <line x1={0} y1={18} x2={0} y2={20} stroke="#10B981" strokeWidth={2} strokeDasharray="3 2" />
       )}
 
       {pins.map(p => (
@@ -992,7 +993,7 @@ export const SocketSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, on
           isHovered={hoveredPinId === p.id}
         />
       ))}
-      <SymbolLabels label={comp.label} valueStr={hasPE ? 'Ổ cắm 3 chấu' : 'Ổ cắm'} rot={comp.rot} flip={comp.flip} flipY={comp.flipY} yOffset={-24} />
+      <SymbolLabels label={comp.label} valueStr={hasPE ? '3 chấu' : undefined} rot={comp.rot} flip={comp.flip} flipY={comp.flipY} yOffset={-24} />
     </g>
   );
 };
@@ -1063,16 +1064,16 @@ export const InstrumentSymbol: React.FC<SymbolProps & { meterKind: 'A' | 'V' | '
       { id: 'U-', label: 'U−', dx: 0, dy: 2, polarity: '-' },
     ];
   } else if (meterKind === 'Ω') {
-    // 2 pins: 1 and 2
+    // 2 pins: 1 and 2 without pin labels
     pins = [
-      { id: '1', label: '1', dx: -2, dy: 0 },
-      { id: '2', label: '2', dx: 2, dy: 0 },
+      { id: '1', label: '', dx: -2, dy: 0 },
+      { id: '2', label: '', dx: 2, dy: 0 },
     ];
   } else {
-    // A and V: pos (+) and neg (−)
+    // A and V: pos and neg without pin labels at the terminals
     pins = [
-      { id: 'pos', label: '+', dx: -2, dy: 0, polarity: '+' },
-      { id: 'neg', label: '−', dx: 2, dy: 0, polarity: '-' },
+      { id: 'pos', label: '', dx: -2, dy: 0, polarity: '+' },
+      { id: 'neg', label: '', dx: 2, dy: 0, polarity: '-' },
     ];
   }
 
@@ -1236,7 +1237,7 @@ export const EarthGroundSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDow
           isHovered={hoveredPinId === p.id}
         />
       ))}
-      <SymbolLabels label={comp.label} valueStr={`${rDat} Ω`} rot={comp.rot} flip={comp.flip} flipY={comp.flipY} yOffset={-26} />
+      <SymbolLabels label="" valueStr={`${rDat} Ω`} rot={comp.rot} flip={comp.flip} flipY={comp.flipY} yOffset={-26} />
     </g>
   );
 };
@@ -1464,7 +1465,6 @@ export const VCCSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPin
           isHovered={hoveredPinId === p.id}
         />
       ))}
-      <SymbolLabels label={comp.label || 'VCC'} rot={comp.rot} flip={comp.flip} flipY={comp.flipY} yOffset={14} />
     </g>
   );
 };

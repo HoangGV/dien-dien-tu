@@ -186,19 +186,19 @@ export const COMPONENT_DEFINITIONS: ComponentDef[] = [
       }
       if (poles === 2) {
         return [
-          { id: 'in1', label: '1', dx: -2, dy: -1 },
-          { id: 'out1', label: '1\'', dx: 2, dy: -1 },
-          { id: 'in2', label: '2', dx: -2, dy: 1 },
-          { id: 'out2', label: '2\'', dx: 2, dy: 1 },
+          { id: 'in1', label: '', dx: -2, dy: -1 },
+          { id: 'out1', label: '', dx: 2, dy: -1 },
+          { id: 'in2', label: '', dx: -2, dy: 1 },
+          { id: 'out2', label: '', dx: 2, dy: 1 },
         ];
       }
       return [
-        { id: 'in1', label: '1', dx: -2, dy: -2 },
-        { id: 'out1', label: '1\'', dx: 2, dy: -2 },
-        { id: 'in2', label: '2', dx: -2, dy: 0 },
-        { id: 'out2', label: '2\'', dx: 2, dy: 0 },
-        { id: 'in3', label: '3', dx: -2, dy: 2 },
-        { id: 'out3', label: '3\'', dx: 2, dy: 2 },
+        { id: 'in1', label: '', dx: -2, dy: -2 },
+        { id: 'out1', label: '', dx: 2, dy: -2 },
+        { id: 'in2', label: '', dx: -2, dy: 0 },
+        { id: 'out2', label: '', dx: 2, dy: 0 },
+        { id: 'in3', label: '', dx: -2, dy: 2 },
+        { id: 'out3', label: '', dx: 2, dy: 2 },
       ];
     },
     symbol: FuseSymbol,
@@ -394,13 +394,13 @@ export const COMPONENT_DEFINITIONS: ComponentDef[] = [
       const hasPE = Boolean(props.hasPE);
       return hasPE
         ? [
-            { id: 'A', label: 'A', dx: -2, dy: -1 },
-            { id: 'PE', label: 'PE', dx: -2, dy: 0, polarity: 'PE' },
-            { id: 'O', label: 'O', dx: -2, dy: 1 },
+            { id: 'A', label: 'A', dx: -2, dy: 0 },
+            { id: 'O', label: 'O', dx: 2, dy: 0 },
+            { id: 'PE', label: 'PE', dx: 0, dy: 1, polarity: 'PE' },
           ]
         : [
-            { id: 'A', label: 'A', dx: -2, dy: -1 },
-            { id: 'O', label: 'O', dx: -2, dy: 1 },
+            { id: 'A', label: 'A', dx: -2, dy: 0 },
+            { id: 'O', label: 'O', dx: 2, dy: 0 },
           ];
     },
     symbol: SocketSymbol,
@@ -768,8 +768,8 @@ export const COMPONENT_DEFINITIONS: ComponentDef[] = [
     width: 80,
     height: 60,
     pins: [
-      { id: 'pos', label: '+', dx: -2, dy: 0, polarity: '+' },
-      { id: 'neg', label: '−', dx: 2, dy: 0, polarity: '-' },
+      { id: 'pos', label: '', dx: -2, dy: 0, polarity: '+' },
+      { id: 'neg', label: '', dx: 2, dy: 0, polarity: '-' },
     ],
     symbol: (props) => React.createElement(InstrumentSymbol, { ...props, meterKind: 'A' }),
     propsSchema: [],
@@ -783,8 +783,8 @@ export const COMPONENT_DEFINITIONS: ComponentDef[] = [
     width: 80,
     height: 60,
     pins: [
-      { id: 'pos', label: '+', dx: -2, dy: 0, polarity: '+' },
-      { id: 'neg', label: '−', dx: 2, dy: 0, polarity: '-' },
+      { id: 'pos', label: '', dx: -2, dy: 0, polarity: '+' },
+      { id: 'neg', label: '', dx: 2, dy: 0, polarity: '-' },
     ],
     symbol: (props) => React.createElement(InstrumentSymbol, { ...props, meterKind: 'V' }),
     propsSchema: [],
@@ -815,8 +815,8 @@ export const COMPONENT_DEFINITIONS: ComponentDef[] = [
     width: 80,
     height: 60,
     pins: [
-      { id: '1', label: '1', dx: -2, dy: 0 },
-      { id: '2', label: '2', dx: 2, dy: 0 },
+      { id: '1', label: '', dx: -2, dy: 0 },
+      { id: '2', label: '', dx: 2, dy: 0 },
     ],
     symbol: (props) => React.createElement(InstrumentSymbol, { ...props, meterKind: 'Ω' }),
     propsSchema: [],
