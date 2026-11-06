@@ -9,12 +9,18 @@ export const Palette: React.FC = () => {
     useWorkspaceStore();
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Filter components relevant to this workspace
+  // Filter components relevant to this workspace: ensure boundary & textbox are always at the bottom
   const workspaceDefs = COMPONENT_DEFINITIONS.filter(def =>
     config.paletteIds.includes(def.type)
   ).filter(def =>
     searchTerm ? def.nameVi.toLowerCase().includes(searchTerm.toLowerCase()) : true
-  );
+  ).sort((a, b) => {
+    const isAnnotationA = a.type === 'boundary' || a.type === 'textbox' || a.category === 'annotation';
+    const isAnnotationB = b.type === 'boundary' || b.type === 'textbox' || b.category === 'annotation';
+    if (isAnnotationA && !isAnnotationB) return 1;
+    if (!isAnnotationA && isAnnotationB) return -1;
+    return 0;
+  });
 
   if (!leftPanelOpen) {
     return (

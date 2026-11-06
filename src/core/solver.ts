@@ -235,6 +235,15 @@ export function solveOhmmeterResistance(
           addResistor(nodeMap.get(n1) ?? -1, nodeMap.get(n2) ?? -1, 0.001);
         }
       }
+    } else if (c.type === 'switch_3p') {
+      const netCom = pinToNetId.get(`${c.id}:com`) || pinToNetId.get(`${c.id}:COM`) || pinToNetId.get(`${c.id}:0`);
+      const isPosA = c.props.state === true || c.props.state === 1 || c.props.state === 'a' || c.props.state === '1';
+      const netTarget = isPosA
+        ? (pinToNetId.get(`${c.id}:a`) || pinToNetId.get(`${c.id}:1`) || pinToNetId.get(`${c.id}:A`))
+        : (pinToNetId.get(`${c.id}:b`) || pinToNetId.get(`${c.id}:2`) || pinToNetId.get(`${c.id}:B`));
+      if (netCom && netTarget) {
+        addResistor(nodeMap.get(netCom) ?? -1, nodeMap.get(netTarget) ?? -1, 0.001);
+      }
     } else if (c.type === 'wattmeter') {
       // Current coil is shorted (1 mΩ), voltage coil is open (10 MΩ)
       const ni1 = pinToNetId.get(`${c.id}:I+`);
@@ -611,22 +620,24 @@ export function solveCircuit(
         }
       } else if (c.type === 'switch_2p') {
         const isClosed = Boolean(c.props.state);
-        const net1 = pinToNetId.get(`${c.id}:1`);
-        const net2 = pinToNetId.get(`${c.id}:2`);
+        const net1 = pinToNetId.get(`${c.id}:1`) || pinToNetId.get(`${c.id}:in`) || pinToNetId.get(`${c.id}:A`);
+        const net2 = pinToNetId.get(`${c.id}:2`) || pinToNetId.get(`${c.id}:out`) || pinToNetId.get(`${c.id}:B`);
         if (net1 && net2 && isClosed) {
           addResistor(nodeMap.get(net1) ?? -1, nodeMap.get(net2) ?? -1, 0.001);
         }
       } else if (c.type === 'push_button') {
         const isClosed = Boolean(c.props.state);
-        const net1 = pinToNetId.get(`${c.id}:1`);
-        const net2 = pinToNetId.get(`${c.id}:2`);
+        const net1 = pinToNetId.get(`${c.id}:1`) || pinToNetId.get(`${c.id}:in`);
+        const net2 = pinToNetId.get(`${c.id}:2`) || pinToNetId.get(`${c.id}:out`);
         if (net1 && net2 && isClosed) {
           addResistor(nodeMap.get(net1) ?? -1, nodeMap.get(net2) ?? -1, 0.001);
         }
       } else if (c.type === 'switch_3p') {
-        const netCom = pinToNetId.get(`${c.id}:com`);
-        const targetPin = (c.props.state === true || c.props.state === 1) ? 'a' : 'b';
-        const netTarget = pinToNetId.get(`${c.id}:${targetPin}`);
+        const netCom = pinToNetId.get(`${c.id}:com`) || pinToNetId.get(`${c.id}:COM`) || pinToNetId.get(`${c.id}:0`);
+        const isPosA = c.props.state === true || c.props.state === 1 || c.props.state === 'a' || c.props.state === '1';
+        const netTarget = isPosA
+          ? (pinToNetId.get(`${c.id}:a`) || pinToNetId.get(`${c.id}:1`) || pinToNetId.get(`${c.id}:A`))
+          : (pinToNetId.get(`${c.id}:b`) || pinToNetId.get(`${c.id}:2`) || pinToNetId.get(`${c.id}:B`));
         if (netCom && netTarget) {
           addResistor(nodeMap.get(netCom) ?? -1, nodeMap.get(netTarget) ?? -1, 0.001);
         }

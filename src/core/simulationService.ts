@@ -907,6 +907,27 @@ export class SimulationService {
   }
 
   /**
+   * Updates a component property dynamically during simulation (e.g. switch toggle, slider)
+   */
+  public updateComponentProp(compId: string, key: string, value: any) {
+    if (this.currentCircuitState) {
+      const comp = this.currentCircuitState.components.find(c => c.id === compId);
+      if (comp) {
+        comp.props = { ...comp.props, [key]: value };
+      }
+    }
+    if (this.compiledCircuit) {
+      const comp = this.compiledCircuit.compMap.get(compId) || this.compiledCircuit.components.find(c => c.id === compId);
+      if (comp) {
+        comp.props = { ...comp.props, [key]: value };
+      }
+      // Re-solve immediately for instant visual response
+      const snapshot = this.step(0.001);
+      this.listeners.forEach(fn => fn(snapshot));
+    }
+  }
+
+  /**
    * Repairs a single burnt wire.
    */
   public repairWire(wireId: string) {

@@ -925,6 +925,12 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       canRedo: history.canRedo(),
     });
 
+    // Propagate live changes to simulationService
+    simulationService.updateComponentProp(compId, key, value);
+    if (removedPinIds.length > 0 && (get().isSimulating || get().simulationSnapshot !== null)) {
+      simulationService.recompile(nextState, get().config.mode);
+    }
+
     autoSaver.schedule(get().activeSlug, nextState);
     get().runLint();
   },

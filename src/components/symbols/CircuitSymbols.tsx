@@ -117,7 +117,7 @@ export const PinDot: React.FC<{
 };
 
 // Label renderer that counter-transforms so text is ALWAYS horizontal and upright
-// Displays the component reference symbol (e.g. Q1, R1, MCB, Đ1)
+// User request: "1. Xóa nhãn tên của tất cả các linh kiện" -> Do not render component reference labels
 export const SymbolLabels: React.FC<{
   label: string;
   valueStr?: string;
@@ -125,30 +125,8 @@ export const SymbolLabels: React.FC<{
   flip?: boolean;
   flipY?: boolean;
   yOffset?: number;
-}> = ({ label, rot = 0, flip = false, flipY = false, yOffset = -22 }) => {
-  if (!label) return null;
-  const flipX = flip ? -1 : 1;
-  const flipYVal = flipY ? -1 : 1;
-
-  return (
-    <g
-      transform={`translate(0, ${yOffset}) scale(${flipX}, ${flipYVal}) rotate(${-rot})`}
-      pointerEvents="none"
-      className="select-none"
-    >
-      <text
-        x={0}
-        y={0}
-        textAnchor="middle"
-        dominantBaseline="central"
-        fontSize="11"
-        fontWeight="900"
-        fill="#000000"
-      >
-        {label}
-      </text>
-    </g>
-  );
+}> = () => {
+  return null;
 };
 
 // 1. NGUỒN ĐIỆN XOAY CHIỀU (TCVN / SGK: 2 cực A - Pha, O - Trung tính, tùy chọn PE nối đất)
@@ -1397,7 +1375,6 @@ export const GroundSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, on
           isHovered={hoveredPinId === p.id}
         />
       ))}
-      <SymbolLabels label={comp.label || 'GND'} rot={comp.rot} flip={comp.flip} flipY={comp.flipY} yOffset={-26} />
     </g>
   );
 };
@@ -1442,18 +1419,6 @@ export const VCCSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPin
       <line x1={0} y1={20} x2={0} y2={-2} stroke="#000000" strokeWidth={2} />
       {/* Upward pointing triangle arrow */}
       <polygon points="0,-16 -7,-4 7,-4" fill="#E5322D" stroke="#000000" strokeWidth={1.5} />
-      <UprightText
-        x={0}
-        y={-22}
-        rot={comp.rot}
-        flip={comp.flip}
-        flipY={comp.flipY}
-        fontSize={11}
-        fontWeight={900}
-        fill="#E5322D"
-      >
-        {comp.props.voltage ? `+${comp.props.voltage}V` : '+VCC'}
-      </UprightText>
       {pins.map(p => (
         <PinDot
           key={p.id}
