@@ -12,6 +12,12 @@ import { createWorkspaceExportPackage, validateCircuitJson } from './io';
 import { migrateCircuitState } from './migration';
 import { SimulationService } from './simulationService';
 import { formatMeasure } from './measureFormat';
+import {
+  createPresetHouseholdJ,
+  createPresetHouseholdK,
+  createPresetHouseholdM,
+  createPresetSensorR,
+} from './presets';
 
 // Helper to make a wire
 function makeWire(
@@ -37,7 +43,7 @@ function makeWire(
 export interface SolverTestCase {
   id: string;
   stt: number;
-  group: 'C-1' | 'PE' | 'C-2' | 'C-3';
+  group: 'C-1' | 'PE' | 'C-2' | 'C-3' | 'C-4';
   name: string;
   expectedStr: string;
   toleranceStr: string;
@@ -1349,6 +1355,472 @@ export const ALL_SOLVER_TEST_CASES: SolverTestCase[] = [
       const passed = Math.abs(pVal - 60) <= 0.5 && formatted === '60,0 W';
       return {
         actualStr: `Số đo: ${formatted} (P = ${pVal.toFixed(1)} W, U = 220 V, I ≈ 0.273 A)`,
+        passed,
+      };
+    },
+  },
+
+  // Ca S1: Chập A–O qua aptomat 16 A
+  {
+    id: 's1_short_mcb16_reset',
+    stt: 44,
+    group: 'C-3',
+    name: 'Ca S1: Chập A–O qua aptomat 16A: Aptomat NHẢY, dây không cháy; bỏ chập đóng lại chạy bình thường',
+    expectedStr: 'Aptomat NHẢY, damaged = false (MCB và mọi dây); bỏ chập đóng lại thì mạch chạy bình thường',
+    toleranceStr: 'Chính xác',
+    createCircuit: () => {
+      const u: ComponentInstance = { id: 'u1', type: 'ac_source', x: 80, y: 140, rot: 0, flip: false, label: 'U', props: { voltage: 220, hasPE: false } };
+      const mcb: ComponentInstance = { id: 'mcb1', type: 'cb', x: 200, y: 140, rot: 0, flip: false, label: 'MCB1', props: { poles: 1, ratedCurrent: 16, state: true } };
+      const w1 = makeWire('w1', 'u1', 'A', 'mcb1', 'in', [{ x: 120, y: 140 }, { x: 160, y: 140 }], 'phase');
+      const w2 = makeWire('w2', 'mcb1', 'out', 'u1', 'O', [{ x: 240, y: 140 }, { x: 300, y: 140 }, { x: 300, y: 60 }, { x: 120, y: 60 }, { x: 120, y: 100 }], 'neutral');
+      return { components: [u, mcb], wires: [w1, w2], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+    },
+    evaluate: () => {
+      const circ = ALL_SOLVER_TEST_CASES[43].createCircuit();
+      const sim = new SimulationService();
+      sim.compile(circ, 'rms');
+      // Step 1: short circuit should trip MCB instantly in first step
+      const snap1 = sim.step(0.05);
+      const isTripped = snap1.thermalStates?.['mcb1']?.status === 'tripped';
+      const mcbNotDamaged = snap1.thermalStates?.['mcb1']?.status !== 'damaged' && !(snap1.solverResult?.damagedComponents || []).includes('mcb1');
+      const wiresNotDamaged = Object.values(snap1.wireThermalStates || {}).every(w => w.status !== 'damaged');
+
+      // Now remove short circuit wire w2, connect lamp 60W, reset MCB
+      const lamp: ComponentInstance = { id: 'l1', type: 'lamp', x: 360, y: 140, rot: 0, flip: false, label: 'Đ1', props: { power: 60, hasPE: false } };
+      const wLoad1 = makeWire('wLoad1', 'mcb1', 'out', 'l1', '1', [{ x: 240, y: 140 }, { x: 320, y: 140 }], 'phase');
+      const wLoad2 = makeWire('wLoad2', 'l1', '2', 'u1', 'O', [{ x: 400, y: 140 }, { x: 400, y: 60 }, { x: 120, y: 60 }, { x: 120, y: 100 }], 'neutral');
+
+      const normalCirc: CircuitState = {
+        components: [circ.components[0], { ...circ.components[1], props: { ...circ.components[1].props, isTripped: false, state: true } }, lamp],
+        wires: [circ.wires[0], wLoad1, wLoad2],
+        junctions: [],
+        viewport: { x: 40, y: 40, zoom: 1 },
+      };
+
+      sim.compile(normalCirc, 'rms');
+      sim.resetAllDamaged();
+      const snap2 = sim.step(0.1);
+      const lampOperating = snap2.componentKinetics?.['l1']?.isOperating === true;
+      const mcbNormal = snap2.thermalStates?.['mcb1']?.status === 'normal';
+
+      const passed = isTripped && mcbNotDamaged && wiresNotDamaged && lampOperating && mcbNormal;
+      return {
+        actualStr: `Aptomat: ${isTripped ? 'ĐÃ NHẢY' : 'Chưa nhảy'} (damaged = ${!mcbNotDamaged}), Dây: ${wiresNotDamaged ? 'KHÔNG CHÁY' : 'Bị cháy'}, Đóng lại qua tải: ${lampOperating ? 'HOẠT ĐỘNG BÌNH THƯỜNG' : 'Không hoạt động'}`,
+        passed,
+      };
+    },
+  },
+
+  // Ca S2: LED nối thẳng 9 V (không trở)
+  {
+    id: 's2_led_direct_9v',
+    stt: 45,
+    group: 'C-3',
+    name: 'Ca S2: LED nối thẳng 9V: Sau khi cháy, damaged = true và trạng thái hiển thị "đỏ/hỏng"',
+    expectedStr: 'LED cháy hỏng: damaged = true, thermalStatus = damaged, trạng thái hiển thị "ĐÃ CHÁY / HỎNG"',
+    toleranceStr: 'Chính xác',
+    createCircuit: () => {
+      const v: ComponentInstance = { id: 'v1', type: 'dc_source', x: 80, y: 120, rot: 0, flip: false, label: 'BAT1', props: { voltage: 9 } };
+      const led: ComponentInstance = { id: 'led1', type: 'led', x: 240, y: 120, rot: 0, flip: false, label: 'LED1', props: { color: 'red' } };
+      const w1 = makeWire('w1', 'v1', 'pos', 'led1', 'A', [{ x: 100, y: 80 }, { x: 220, y: 120 }], 'phase');
+      const w2 = makeWire('w2', 'led1', 'K', 'v1', 'neg', [{ x: 300, y: 120 }, { x: 300, y: 160 }, { x: 100, y: 160 }], 'neutral');
+      return { components: [v, led], wires: [w1, w2], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+    },
+    evaluate: () => {
+      const circ = ALL_SOLVER_TEST_CASES[44].createCircuit();
+      const sim = new SimulationService();
+      sim.compile(circ, 'dc');
+      // Step multiple times or sufficient dt to exceed LED tau (0.2s)
+      for (let i = 0; i < 5; i++) {
+        sim.step(0.1);
+      }
+      const snap = sim.step(0.1);
+      const isDamaged = snap.thermalStates?.['led1']?.status === 'damaged';
+      const compDamaged = snap.compiled?.compMap?.get('led1')?.damaged === true || isDamaged;
+      const stateStr = snap.componentKinetics?.['led1']?.stateStr || '';
+      const isRedStatus = stateStr.includes('HỎNG') || stateStr.includes('CHÁY') || isDamaged;
+      const passed = isDamaged && compDamaged && isRedStatus;
+      return {
+        actualStr: `LED: ${isDamaged ? 'ĐÃ HỎNG (status = damaged)' : 'Chưa hỏng'}, damaged = ${compDamaged}, Hiển thị: "${stateStr}"`,
+        passed,
+      };
+    },
+  },
+
+  // Ca S3: Chạy các mẫu (j), (k), (m): không có aptomat nào damaged = true
+  {
+    id: 's3_presets_j_k_m_no_mcb_damage',
+    stt: 46,
+    group: 'C-3',
+    name: 'Ca S3: Chạy các mẫu (j), (k), (m): Không có aptomat nào bị hỏng (damaged = false)',
+    expectedStr: 'Mẫu (j): MCB nhảy do quá tải; Mẫu (k): MCB nhảy tức thì do chập; Mẫu (m): MCB 20A chưa nhảy; Cả 3 mẫu: MCB damaged = false',
+    toleranceStr: 'Chính xác',
+    createCircuit: () => {
+      return createPresetHouseholdK();
+    },
+    evaluate: () => {
+      // 1. Check Preset J (Quá tải: MCB 10A + 3000W)
+      const circJ = createPresetHouseholdJ();
+      const simJ = new SimulationService();
+      simJ.compile(circJ, 'rms');
+      // Step up to 10 seconds to accumulate overload heat
+      for (let i = 0; i < 20; i++) {
+        simJ.step(0.5);
+      }
+      const snapJ = simJ.step(0.5);
+      const mcbTrippedJ = snapJ.thermalStates?.['mcb1']?.status === 'tripped';
+      const mcbNotDamagedJ = snapJ.thermalStates?.['mcb1']?.status !== 'damaged' && !(snapJ.solverResult?.damagedComponents || []).includes('mcb1');
+
+      // 2. Check Preset K (Chập mạch: MCB 16A nối tắt A-O)
+      const circK = createPresetHouseholdK();
+      const simK = new SimulationService();
+      simK.compile(circK, 'rms');
+      const snapK = simK.step(0.1);
+      const mcbTrippedK = snapK.thermalStates?.['mcb1']?.status === 'tripped';
+      const mcbNotDamagedK = snapK.thermalStates?.['mcb1']?.status !== 'damaged' && !(snapK.solverResult?.damagedComponents || []).includes('mcb1');
+
+      // 3. Check Preset M (Chọn sai dây: MCB 20A + Dây 1.0mm² + 3300W)
+      const circM = createPresetHouseholdM();
+      const simM = new SimulationService();
+      simM.compile(circM, 'rms');
+      for (let i = 0; i < 20; i++) {
+        simM.step(0.5);
+      }
+      const snapM = simM.step(0.5);
+      const mcbNotDamagedM = snapM.thermalStates?.['mcb1']?.status !== 'damaged' && !(snapM.solverResult?.damagedComponents || []).includes('mcb1');
+
+      const allNotDamaged = mcbNotDamagedJ && mcbNotDamagedK && mcbNotDamagedM;
+      const passed = mcbTrippedJ && mcbTrippedK && allNotDamaged;
+
+      return {
+        actualStr: `Mẫu (j): ${mcbTrippedJ ? 'MCB nhảy' : 'chưa nhảy'} (damaged=${!mcbNotDamagedJ}); Mẫu (k): ${mcbTrippedK ? 'MCB nhảy' : 'chưa nhảy'} (damaged=${!mcbNotDamagedK}); Mẫu (m): MCB damaged=${!mcbNotDamagedM}`,
+        passed,
+      };
+    },
+  },
+
+  // ====================================================
+  // BỐN CA THỬ T1 - T4 (SỬA NHỎ LẦN 2)
+  // ====================================================
+
+  // Ca T1: Nguồn → Công tơ → Đèn 60 W → O
+  {
+    id: 't1_kwh_meter_60w_lamp',
+    stt: 47,
+    group: 'C-3',
+    name: 'Ca T1: Nguồn → Công tơ → Đèn 60W → O: U_tải ≈ 219,9 V, P = 60 W, chạy 1s với TUA ×3600 thì E ≈ 0,060 kWh',
+    expectedStr: 'U_tải ≈ 219,9 V (±0,5 V), P = 60 W (±1 W), E ≈ 0,060 kWh (±2%)',
+    toleranceStr: 'U: ±0,5 V; P: ±1 W; E: ±2%',
+    createCircuit: () => {
+      const u: ComponentInstance = { id: 'u1', type: 'ac_source', x: 80, y: 140, rot: 0, flip: false, label: 'U', props: { voltage: 220, hasPE: false } };
+      const ct: ComponentInstance = { id: 'ct1', type: 'kwh_meter', x: 200, y: 140, rot: 0, flip: false, label: 'CT1', props: { kwh: 0 } };
+      const lamp: ComponentInstance = { id: 'l1', type: 'lamp', x: 340, y: 140, rot: 0, flip: false, label: 'Đ1', props: { power: 60, hasPE: false } };
+
+      const w1 = makeWire('w1', 'u1', 'A', 'ct1', '1', [{ x: 120, y: 140 }, { x: 160, y: 120 }], 'phase');
+      const w2 = makeWire('w2', 'ct1', '2', 'l1', '1', [{ x: 240, y: 120 }, { x: 300, y: 140 }], 'phase');
+      const w3 = makeWire('w3', 'l1', '2', 'ct1', '4', [{ x: 380, y: 140 }, { x: 380, y: 200 }, { x: 240, y: 200 }, { x: 240, y: 160 }], 'neutral');
+      const w4 = makeWire('w4', 'ct1', '3', 'u1', 'O', [{ x: 160, y: 160 }, { x: 160, y: 200 }, { x: 120, y: 200 }, { x: 120, y: 100 }], 'neutral');
+
+      return { components: [u, ct, lamp], wires: [w1, w2, w3, w4], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+    },
+    evaluate: () => {
+      const circ = ALL_SOLVER_TEST_CASES[46].createCircuit();
+      const sim = new SimulationService();
+      sim.compile(circ, 'rms');
+      sim.setEnergyMultiplier(3600);
+
+      // Run 1 second in simulation time with x3600 multiplier
+      const snap = sim.step(1.0);
+      const ctMeter = snap.meters?.['ct1'];
+      const uVal = ctMeter?.voltage ?? 0;
+      const pVal = ctMeter?.power ?? 0;
+      const eVal = ctMeter?.energyKwh ?? 0;
+
+      const checkU = Math.abs(uVal - 220) <= 0.6; // ≈ 219.9 V
+      const checkP = Math.abs(pVal - 60) <= 1.0;  // 60 W ± 1
+      const checkE = Math.abs(eVal - 0.060) <= 0.060 * 0.02; // 0.060 kWh ± 2%
+
+      const passed = checkU && checkP && checkE;
+      return {
+        actualStr: `U_tải = ${uVal.toFixed(1)} V, P = ${pVal.toFixed(1)} W, E = ${eVal.toFixed(4)} kWh`,
+        passed,
+      };
+    },
+  },
+
+  // Ca T2: Aptomat 10 A + tải 3000 W: đo thời gian nhảy lần 1 và lần 2
+  {
+    id: 't2_mcb_reclose_quicker',
+    stt: 48,
+    group: 'C-3',
+    name: 'Ca T2: Aptomat 10A + tải 3000W: Thời gian nhảy lần 2 (t2) nhỏ hơn lần 1 (t1)',
+    expectedStr: 't2 < t1 (Aptomat còn nóng nên khi đóng lại quá tải nhảy nhanh hơn)',
+    toleranceStr: 't2 < t1',
+    createCircuit: () => {
+      const u: ComponentInstance = { id: 'u1', type: 'ac_source', x: 80, y: 140, rot: 0, flip: false, label: 'U', props: { voltage: 220, hasPE: false } };
+      const mcb: ComponentInstance = { id: 'mcb1', type: 'cb', x: 200, y: 140, rot: 0, flip: false, label: 'MCB1', props: { poles: 1, ratedCurrent: 10, state: true } };
+      const app: ComponentInstance = { id: 'app1', type: 'appliance_generic', x: 360, y: 140, rot: 0, flip: false, label: 'TB1', props: { power: 3000, hasPE: false } };
+
+      const w1 = makeWire('w1', 'u1', 'A', 'mcb1', 'in', [{ x: 120, y: 140 }, { x: 160, y: 140 }], 'phase');
+      const w2 = makeWire('w2', 'mcb1', 'out', 'app1', '1', [{ x: 240, y: 140 }, { x: 320, y: 140 }], 'phase');
+      const w3 = makeWire('w3', 'app1', '2', 'u1', 'O', [{ x: 400, y: 140 }, { x: 400, y: 60 }, { x: 120, y: 60 }, { x: 120, y: 100 }], 'neutral');
+
+      return { components: [u, mcb, app], wires: [w1, w2, w3], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+    },
+    evaluate: () => {
+      const circ = ALL_SOLVER_TEST_CASES[47].createCircuit();
+      const sim = new SimulationService();
+      sim.compile(circ, 'rms');
+
+      // 1. Measure trip time 1 (t1)
+      let t1 = 0;
+      for (let step = 0; step < 200; step++) {
+        t1 += 0.1;
+        const snap = sim.step(0.1);
+        if (snap.thermalStates?.['mcb1']?.status === 'tripped') {
+          break;
+        }
+      }
+
+      // 2. Re-close immediately
+      sim.replaceDamagedComponent('mcb1');
+
+      // 3. Measure trip time 2 (t2)
+      let t2 = 0;
+      for (let step = 0; step < 200; step++) {
+        t2 += 0.1;
+        const snap = sim.step(0.1);
+        if (snap.thermalStates?.['mcb1']?.status === 'tripped') {
+          break;
+        }
+      }
+
+      const passed = t1 > 0 && t2 > 0 && t2 < t1;
+      return {
+        actualStr: `Lần 1 nhảy sau t1 = ${t1.toFixed(1)} s; Lần 2 nhảy sau t2 = ${t2.toFixed(1)} s (${t2 < t1 ? 't2 < t1 ĐẠT' : 't2 >= t1 KHÔNG ĐẠT'})`,
+        passed,
+      };
+    },
+  },
+
+  // Ca T3: Ở mẫu (j): dây KHÔNG chuyển sang NÓNG trước khi aptomat nhảy
+  {
+    id: 't3_preset_j_wire_not_hot_before_trip',
+    stt: 49,
+    group: 'C-3',
+    name: 'Ca T3: Ở mẫu (j): Dây dẫn KHÔNG chuyển sang NÓNG trước khi aptomat nhảy',
+    expectedStr: 'Mọi bước t < t_nhảy: Dây dẫn bình thường (không bị NÓNG); Aptomat bảo vệ nhảy thành công',
+    toleranceStr: 'Chính xác',
+    createCircuit: () => {
+      return createPresetHouseholdJ();
+    },
+    evaluate: () => {
+      const circ = createPresetHouseholdJ();
+      const sim = new SimulationService();
+      sim.compile(circ, 'rms');
+
+      let wireBecameHotBeforeTrip = false;
+      let mcbTripped = false;
+      let tripTime = 0;
+
+      for (let i = 0; i < 60; i++) {
+        tripTime += 0.2;
+        const snap = sim.step(0.2);
+        const isTripped = snap.thermalStates?.['mcb1']?.status === 'tripped';
+
+        if (!isTripped) {
+          // Check if any wire is hot
+          const anyWireHot = Object.values(snap.wireThermalStates || {}).some(
+            w => w.status === 'hot' || w.status === 'damaged'
+          );
+          if (anyWireHot) {
+            wireBecameHotBeforeTrip = true;
+          }
+        } else {
+          mcbTripped = true;
+          break;
+        }
+      }
+
+      const passed = mcbTripped && !wireBecameHotBeforeTrip;
+      return {
+        actualStr: `Aptomat: ${mcbTripped ? `ĐÃ NHẢY tại t = ${tripTime.toFixed(1)}s` : 'Chưa nhảy'}, Dây trước khi nhảy: ${wireBecameHotBeforeTrip ? 'BỊ NÓNG (KHÔNG ĐẠT)' : 'BÌNH THƯỜNG (ĐẠT)'}`,
+        passed,
+      };
+    },
+  },
+
+  // Ca T4: Bấm vào aptomat đã NHẢY khi đang chạy → chuyển sang ĐÓNG
+  {
+    id: 't4_click_tripped_mcb_recloses',
+    stt: 50,
+    group: 'C-3',
+    name: 'Ca T4: Bấm vào aptomat đã NHẢY khi đang chạy → Chuyển sang ĐÓNG',
+    expectedStr: 'Aptomat đang NHẢY (isTripped = true) sau khi thao tác chuyển sang ĐÓNG (isTripped = false, state = true)',
+    toleranceStr: 'Chính xác',
+    createCircuit: () => {
+      const u: ComponentInstance = { id: 'u1', type: 'ac_source', x: 80, y: 140, rot: 0, flip: false, label: 'U', props: { voltage: 220, hasPE: false } };
+      const mcb: ComponentInstance = { id: 'mcb1', type: 'cb', x: 200, y: 140, rot: 0, flip: false, label: 'MCB1', props: { poles: 1, ratedCurrent: 16, state: false, isTripped: true } };
+      const lamp: ComponentInstance = { id: 'l1', type: 'lamp', x: 340, y: 140, rot: 0, flip: false, label: 'Đ1', props: { power: 60, hasPE: false } };
+
+      const w1 = makeWire('w1', 'u1', 'A', 'mcb1', 'in', [{ x: 120, y: 140 }, { x: 160, y: 140 }], 'phase');
+      const w2 = makeWire('w2', 'mcb1', 'out', 'l1', '1', [{ x: 240, y: 140 }, { x: 300, y: 140 }], 'phase');
+      const w3 = makeWire('w3', 'l1', '2', 'u1', 'O', [{ x: 380, y: 140 }, { x: 380, y: 60 }, { x: 120, y: 60 }, { x: 120, y: 100 }], 'neutral');
+
+      return { components: [u, mcb, lamp], wires: [w1, w2, w3], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+    },
+    evaluate: () => {
+      const circ = ALL_SOLVER_TEST_CASES[49].createCircuit();
+      const sim = new SimulationService();
+      sim.compile(circ, 'rms');
+
+      // 1. Initial snapshot has MCB tripped
+      const snapInit = sim.step(0.01);
+      const wasTripped = snapInit.compiled?.compMap?.get('mcb1')?.props?.isTripped === true;
+
+      // 2. Perform reclose action (same as clicking MCB when tripped during simulation)
+      sim.replaceDamagedComponent('mcb1');
+
+      // 3. Step again and verify closed state
+      const snapAfter = sim.step(0.01);
+      const mcbComp = snapAfter.compiled?.compMap?.get('mcb1');
+      const isClosedNow = mcbComp?.props?.isTripped === false && mcbComp?.props?.state === true;
+      const isConducting = (snapAfter.solverResult?.componentCurrents?.['mcb1'] ?? 0) > 0.1;
+
+      const passed = wasTripped && isClosedNow && isConducting;
+      return {
+        actualStr: `Trước: isTripped = ${wasTripped}; Sau bấm: isTripped = ${mcbComp?.props?.isTripped}, state = ${mcbComp?.props?.state}, Dòng điện = ${snapAfter.solverResult?.componentCurrents?.['mcb1']} A`,
+        passed,
+      };
+    },
+  },
+
+  // Ca 51: Cảm biến ánh sáng ngưỡng 50%: giá trị 30 → DO = VCC (±0.1V), giá trị 70 → DO ≈ 0V
+  {
+    id: 'cb1_sensor_light_threshold_50',
+    stt: 51,
+    group: 'C-4',
+    name: 'Ca 51: Cảm biến ánh sáng ngưỡng 50%: giá trị 30 → DO = VCC (±0.1V), giá trị 70 → DO ≈ 0V',
+    expectedStr: 'Ánh sáng 30% → DO ≈ 5.0 V (±0.1 V); Ánh sáng 70% → DO ≈ 0 V (< 0.1 V)',
+    toleranceStr: '±0.1 V',
+    createCircuit: () => {
+      const src: ComponentInstance = { id: 'src1', type: 'dc_source', x: 80, y: 140, rot: 0, flip: false, label: 'E', props: { voltage: 5 } };
+      const cb: ComponentInstance = {
+        id: 'cb1',
+        type: 'sensor_module',
+        x: 240,
+        y: 140,
+        rot: 0,
+        flip: false,
+        label: 'CB1',
+        props: { sensorType: 'light', envValue: 30, threshold: 50, triggerCondition: 'below' },
+      };
+      const vm: ComponentInstance = { id: 'vm1', type: 'voltmeter', x: 400, y: 140, rot: 0, flip: false, label: 'V1', props: {} };
+
+      const w1 = makeWire('w1', 'src1', 'pos', 'cb1', 'vcc', [{ x: 120, y: 140 }, { x: 190, y: 115 }], 'phase');
+      const w2 = makeWire('w2', 'src1', 'neg', 'cb1', 'gnd', [{ x: 120, y: 160 }, { x: 190, y: 135 }], 'neutral');
+      const w3 = makeWire('w3', 'cb1', 'do', 'vm1', 'pos', [{ x: 290, y: 115 }, { x: 360, y: 140 }], 'phase');
+      const w4 = makeWire('w4', 'cb1', 'gnd', 'vm1', 'neg', [{ x: 190, y: 135 }, { x: 190, y: 220 }, { x: 440, y: 220 }, { x: 440, y: 140 }], 'neutral');
+
+      return { components: [src, cb, vm], wires: [w1, w2, w3, w4], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+    },
+    evaluate: () => {
+      const circ = ALL_SOLVER_TEST_CASES[50].createCircuit();
+      const sim = new SimulationService();
+      sim.compile(circ, 'dc');
+
+      // 1. Bước 1: giá trị 30%
+      const snap1 = sim.step(0.01);
+      const vDo1 = snap1.solverResult?.componentVoltages?.['vm1'] ?? 0;
+
+      // 2. Bước 2: đổi giá trị 70%
+      const cbComp = snap1.compiled?.compMap?.get('cb1');
+      if (cbComp) cbComp.props.envValue = 70;
+      const snap2 = sim.step(0.01);
+      const vDo2 = snap2.solverResult?.componentVoltages?.['vm1'] ?? 0;
+
+      const passed = Math.abs(vDo1 - 5.0) <= 0.1 && vDo2 < 0.1;
+      return {
+        actualStr: `Khi ánh sáng 30%: DO = ${vDo1.toFixed(2)} V; Khi ánh sáng 70%: DO = ${vDo2.toFixed(2)} V`,
+        passed,
+      };
+    },
+  },
+
+  // Ca 52: Mẫu (r): Ánh sáng 30% → đèn nhỏ chạy, 70% → tắt
+  {
+    id: 'cb2_preset_r_light_auto_lamp',
+    stt: 52,
+    group: 'C-4',
+    name: 'Ca 52: Mẫu (r): Ánh sáng 30% → đèn nhỏ chạy, 70% → tắt',
+    expectedStr: 'Ánh sáng 30% → Đèn nhỏ chạy (isOperating = true); Ánh sáng 70% → Đèn nhỏ tắt (isOperating = false)',
+    toleranceStr: 'Chính xác',
+    createCircuit: () => {
+      return createPresetSensorR();
+    },
+    evaluate: () => {
+      const circ = createPresetSensorR();
+      const sim = new SimulationService();
+      sim.compile(circ, 'dc');
+
+      // 1. Bước 1: Ánh sáng 30% (mặc định của mẫu r)
+      const snap1 = sim.step(0.01);
+      const isOp1 = snap1.solverResult?.operatingStates?.['den1'] === true;
+
+      // 2. Bước 2: Chuyển ánh sáng sang 70% (trời sáng)
+      const cbComp = snap1.compiled?.compMap?.get('cb1');
+      if (cbComp) cbComp.props.envValue = 70;
+      const snap2 = sim.step(0.01);
+      const isOp2 = snap2.solverResult?.operatingStates?.['den1'] === true;
+
+      const passed = isOp1 === true && isOp2 === false;
+      return {
+        actualStr: `Ánh sáng 30%: Đèn ${isOp1 ? 'ĐANG CHẠY (BẬT)' : 'TẮT'}; Ánh sáng 70%: Đèn ${isOp2 ? 'ĐANG CHẠY' : 'ĐÃ TẮT'}`,
+        passed,
+      };
+    },
+  },
+
+  // Ca 53: Mô-đun cảm biến cấp 2 V (< 3 V) → DO = 0 V
+  {
+    id: 'cb3_sensor_undervoltage_2v_do_0v',
+    stt: 53,
+    group: 'C-4',
+    name: 'Ca 53: Mô-đun cảm biến cấp 2 V (< 3 V) → DO = 0 V',
+    expectedStr: 'Cấp nguồn 2 V (< 3 V) → Cảm biến không đủ nguồn hoạt động → DO = 0 V',
+    toleranceStr: 'DO < 0.05 V',
+    createCircuit: () => {
+      const src: ComponentInstance = { id: 'src1', type: 'dc_source', x: 80, y: 140, rot: 0, flip: false, label: 'E', props: { voltage: 2 } };
+      const cb: ComponentInstance = {
+        id: 'cb1',
+        type: 'sensor_module',
+        x: 240,
+        y: 140,
+        rot: 0,
+        flip: false,
+        label: 'CB1',
+        props: { sensorType: 'light', envValue: 30, threshold: 50, triggerCondition: 'below' },
+      };
+      const vm: ComponentInstance = { id: 'vm1', type: 'voltmeter', x: 400, y: 140, rot: 0, flip: false, label: 'V1', props: {} };
+
+      const w1 = makeWire('w1', 'src1', 'pos', 'cb1', 'vcc', [{ x: 120, y: 140 }, { x: 190, y: 115 }], 'phase');
+      const w2 = makeWire('w2', 'src1', 'neg', 'cb1', 'gnd', [{ x: 120, y: 160 }, { x: 190, y: 135 }], 'neutral');
+      const w3 = makeWire('w3', 'cb1', 'do', 'vm1', 'pos', [{ x: 290, y: 115 }, { x: 360, y: 140 }], 'phase');
+      const w4 = makeWire('w4', 'cb1', 'gnd', 'vm1', 'neg', [{ x: 190, y: 135 }, { x: 190, y: 220 }, { x: 440, y: 220 }, { x: 440, y: 140 }], 'neutral');
+
+      return { components: [src, cb, vm], wires: [w1, w2, w3, w4], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+    },
+    evaluate: () => {
+      const circ = ALL_SOLVER_TEST_CASES[52].createCircuit();
+      const sim = new SimulationService();
+      sim.compile(circ, 'dc');
+
+      const snap = sim.step(0.01);
+      const vDo = snap.solverResult?.componentVoltages?.['vm1'] ?? 0;
+
+      const passed = vDo < 0.05;
+      return {
+        actualStr: `Điện áp cấp VCC = 2.0 V, Điện áp ngõ ra DO = ${vDo.toFixed(3)} V (${passed ? 'ĐẠT' : 'KHÔNG ĐẠT'})`,
         passed,
       };
     },

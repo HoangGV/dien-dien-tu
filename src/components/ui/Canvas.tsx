@@ -56,6 +56,7 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
     finishRotating,
     setHoveredPin,
     setHoveredWire,
+    replaceDamagedComponent,
   } = useWorkspaceStore();
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -413,30 +414,56 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
     selectWire(wireId, e.shiftKey);
   };
 
+  // Track last click time for double-click detection outside simulation
+  const lastCompClickTimeRef = useRef<Record<string, number>>({});
+
   // Click on a Component
   const handleComponentPointerDown = (compId: string, e: React.PointerEvent) => {
     e.stopPropagation();
 
-    // In simulation mode: interactive switches, CB, push-buttons
-    if (isSimulating) {
-      const comp = circuit.components.find((c) => c.id === compId);
-      if (comp) {
-        if (
-          comp.type === 'switch_2p' ||
-          comp.type === 'cb' ||
-          comp.type === 'knife_switch'
-        ) {
+    const isSimActive = isSimulating || simulationSnapshot !== null;
+    const comp = circuit.components.find((c) => c.id === compId);
+
+    // 1. Khi mô phỏng đang chạy (hoặc tạm dừng sau khi đã chạy): bấm vào kí hiệu aptomat bật/tắt trong MỌI trạng thái (kể cả sau khi NHẢY: bấm = ĐÓNG LẠI). Công tắc cũng vậy.
+    if (isSimActive && comp) {
+      if (comp.type === 'cb' || comp.type === 'knife_switch') {
+        const kinetics = simulationSnapshot?.componentKinetics?.[compId];
+        const isTripped = Boolean(comp.props.isTripped || kinetics?.thermalStatus === 'tripped');
+        if (isTripped) {
+          replaceDamagedComponent(compId);
+        } else {
           updateComponentProp(compId, 'state', !comp.props.state);
+        }
+        return;
+      }
+      if (comp.type === 'switch_2p' || comp.type === 'switch_3p') {
+        updateComponentProp(compId, 'state', !comp.props.state);
+        return;
+      }
+      if (comp.type === 'push_button') {
+        updateComponentProp(compId, 'state', true);
+        activeButtonRef.current = compId;
+        (e.target as HTMLElement)?.setPointerCapture?.(e.pointerId);
+        return;
+      }
+    }
+
+    // 2. Ngoài lúc chạy: nháy đúp vào kí hiệu để đóng/ngắt
+    if (!isSimActive && comp) {
+      const now = Date.now();
+      const lastClick = lastCompClickTimeRef.current[compId] || 0;
+      lastCompClickTimeRef.current[compId] = now;
+      if (now - lastClick < 350) {
+        if (comp.type === 'cb' || comp.type === 'knife_switch') {
+          if (comp.props.isTripped) {
+            replaceDamagedComponent(compId);
+          } else {
+            updateComponentProp(compId, 'state', !comp.props.state);
+          }
           return;
         }
-        if (comp.type === 'switch_3p') {
+        if (comp.type === 'switch_2p' || comp.type === 'switch_3p') {
           updateComponentProp(compId, 'state', !comp.props.state);
-          return;
-        }
-        if (comp.type === 'push_button') {
-          updateComponentProp(compId, 'state', true);
-          activeButtonRef.current = compId;
-          (e.target as HTMLElement)?.setPointerCapture?.(e.pointerId);
           return;
         }
       }
@@ -466,14 +493,48 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
     if (!def) return null;
     const isSelected = selectedComponentIds.includes(c.id);
     const showRotationHandle = isSelected && selectedComponentIds.length === 1;
+    const kinetics = simulationSnapshot?.componentKinetics?.[c.id];
+    const isDamaged = Boolean(
+      (c.damaged || kinetics?.thermalStatus === 'damaged' || kinetics?.thermalStatus === 'blown' || c.props.isBlown) &&
+      (c.type !== 'cb' && c.type !== 'knife_switch')
+    );
 
     return (
       <g
         key={c.id}
         transform={`translate(${c.x}, ${c.y}) rotate(${c.rot}) scale(${c.flip ? -1 : 1}, ${c.flipY ? -1 : 1})`}
         onPointerDown={(e) => handleComponentPointerDown(c.id, e)}
+        onDoubleClick={(e) => {
+          e.stopPropagation();
+          const targetComp = circuit.components.find((comp) => comp.id === c.id);
+          if (!targetComp) return;
+          if (targetComp.type === 'cb' || targetComp.type === 'knife_switch') {
+            if (targetComp.props.isTripped) {
+              replaceDamagedComponent(targetComp.id);
+            } else {
+              updateComponentProp(targetComp.id, 'state', !targetComp.props.state);
+            }
+          } else if (targetComp.type === 'switch_2p' || targetComp.type === 'switch_3p') {
+            updateComponentProp(targetComp.id, 'state', !targetComp.props.state);
+          }
+        }}
         className="cursor-move"
       >
+        {/* Damaged red highlight box for damaged components */}
+        {isDamaged && (
+          <rect
+            x={-def.width / 2 - 2}
+            y={-def.height / 2 - 2}
+            width={def.width + 4}
+            height={def.height + 4}
+            fill="rgba(220, 38, 38, 0.3)"
+            stroke="#B71C1C"
+            strokeWidth={2}
+            rx={2}
+            pointerEvents="none"
+          />
+        )}
+
         {/* Yellow outline box when selected */}
         {isSelected && (
           <rect
@@ -665,7 +726,7 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
                 <polyline
                   points={pointsStr}
                   fill="none"
-                  stroke={isMelted ? '#374151' : '#000000'}
+                  stroke={isMelted ? 'rgba(183, 28, 28, 0.25)' : '#000000'}
                   strokeWidth={Math.max(3, w.crossSection + 2)}
                   strokeLinecap="square"
                   strokeLinejoin="miter"
@@ -675,7 +736,7 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
                 <polyline
                   points={pointsStr}
                   fill="none"
-                  stroke={isMelted ? '#1F2937' : isOverheated ? '#EA580C' : w.color}
+                  stroke={isMelted ? '#B71C1C' : isOverheated ? '#EA580C' : w.color}
                   strokeWidth={Math.max(2, w.crossSection)}
                   strokeDasharray={isMelted ? '6 4' : undefined}
                   strokeLinecap="square"

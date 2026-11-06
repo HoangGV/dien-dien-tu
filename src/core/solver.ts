@@ -37,13 +37,14 @@ export interface OpenCircuitInfo {
 }
 
 export interface MeterMeasurement {
-  kind: 'A' | 'V' | 'W' | 'Ω';
+  kind: 'A' | 'V' | 'W' | 'Ω' | 'kWh';
   value: number;
   formatted: string;
   voltage?: number;
   current?: number;
   power?: number;
   resistance?: number;
+  energyKwh?: number;
   isReversePolarity?: boolean;
   isVoltageCoilConnected?: boolean;
   hasLiveVoltageWarning?: boolean;
@@ -246,8 +247,33 @@ export function solveOhmmeterResistance(
       if (nu1 && nu2) {
         addResistor(nodeMap.get(nu1) ?? -1, nodeMap.get(nu2) ?? -1, 1e7);
       }
+    } else if (c.type === 'kwh_meter') {
+      const netPIn = pinToNetId.get(`${c.id}:1`) || pinToNetId.get(`${c.id}:in_p`);
+      const netPOut = pinToNetId.get(`${c.id}:2`) || pinToNetId.get(`${c.id}:out_p`);
+      if (netPIn && netPOut) addResistor(nodeMap.get(netPIn) ?? -1, nodeMap.get(netPOut) ?? -1, 0.001);
+      const netNIn = pinToNetId.get(`${c.id}:3`) || pinToNetId.get(`${c.id}:in_n`);
+      const netNOut = pinToNetId.get(`${c.id}:4`) || pinToNetId.get(`${c.id}:out_n`);
+      if (netNIn && netNOut) addResistor(nodeMap.get(netNIn) ?? -1, nodeMap.get(netNOut) ?? -1, 0.001);
     } else if (c.type === 'socket') {
       // Socket pins A and O are wired natively
+    } else if (c.type === 'lamp_dc') {
+      const vNom = Number(c.props.voltage) || 5;
+      const pNom = Number(c.props.power) || 1;
+      const rLamp = Math.max((vNom * vNom) / pNom, 0.1);
+      const n1 = pinToNetId.get(`${c.id}:1`);
+      const n2 = pinToNetId.get(`${c.id}:2`);
+      if (n1 && n2) addResistor(nodeMap.get(n1) ?? -1, nodeMap.get(n2) ?? -1, rLamp);
+    } else if (c.type === 'sensor_module') {
+      const nVcc = pinToNetId.get(`${c.id}:vcc`);
+      const nGnd = pinToNetId.get(`${c.id}:gnd`);
+      if (nVcc && nGnd) addResistor(nodeMap.get(nVcc) ?? -1, nodeMap.get(nGnd) ?? -1, 1000);
+    } else if (c.type === 'relay_module_1ch') {
+      const nVcc = pinToNetId.get(`${c.id}:vcc`);
+      const nGnd = pinToNetId.get(`${c.id}:gnd`);
+      if (nVcc && nGnd) addResistor(nodeMap.get(nVcc) ?? -1, nodeMap.get(nGnd) ?? -1, 1000);
+      const nCom = pinToNetId.get(`${c.id}:com`);
+      const nNc = pinToNetId.get(`${c.id}:nc`);
+      if (nCom && nNc) addResistor(nodeMap.get(nCom) ?? -1, nodeMap.get(nNc) ?? -1, 0.001);
     }
   }
 
@@ -417,8 +443,67 @@ export function solveCircuit(
     });
   }
 
+  // Dynamic protective devices states for re-solve loop
+  const dynamicallyTripped = new Set<string>();
+  const dynamicallyBlown = new Set<string>();
+
+  const computeSensorDoHigh = (c: ComponentInstance, isPowered: boolean, prevDoHigh?: boolean): boolean => {
+    if (!isPowered) return false;
+    const sensorType = c.props.sensorType || 'light';
+    let minVal = 0, maxVal = 100;
+    if (sensorType === 'temp') {
+      minVal = -10;
+      maxVal = 80;
+    }
+    const curVal = Number(c.props.envValue ?? (sensorType === 'temp' ? 25 : sensorType === 'humidity' ? 60 : 50));
+    const defaultThresh = sensorType === 'light' ? 50 : sensorType === 'temp' ? 35 : 70;
+    const threshold = Number(c.props.threshold ?? defaultThresh);
+    const defaultCond = sensorType === 'light' ? 'below' : 'above';
+    const triggerCond = c.props.triggerCondition || defaultCond;
+
+    const span = maxVal - minVal;
+    const hyst = 0.02 * span; // ±2% hysteresis
+
+    if (triggerCond === 'below') {
+      if (prevDoHigh === true) {
+        return curVal <= threshold + hyst;
+      } else if (prevDoHigh === false) {
+        return curVal < threshold - hyst;
+      } else {
+        return curVal < threshold;
+      }
+    } else {
+      if (prevDoHigh === true) {
+        return curVal >= threshold - hyst;
+      } else if (prevDoHigh === false) {
+        return curVal > threshold + hyst;
+      } else {
+        return curVal > threshold;
+      }
+    }
+  };
+
+  const computeRelayEnergized = (vSup: number, vInRel: number, prevEnergized?: boolean): boolean => {
+    if (vSup < 3.5) return false;
+    const highThreshold = 0.6 * vSup;
+    const lowThreshold = 0.3 * vSup;
+
+    if (prevEnergized === true) {
+      return vInRel > lowThreshold;
+    } else {
+      return vInRel >= highThreshold;
+    }
+  };
+
   // Linear System Builder
-  const buildAndSolve = (ledConduction: Record<string, boolean>) => {
+  const buildAndSolve = (
+    ledConduction: Record<string, boolean>,
+    controlStates?: {
+      sensorPowered?: Record<string, boolean>;
+      sensorDoHigh?: Record<string, boolean>;
+      relayEnergized?: Record<string, boolean>;
+    }
+  ) => {
     const totalMatrixSize = numNodes + vSources.length;
     const G: number[][] = Array.from({ length: totalMatrixSize }, () =>
       new Array(totalMatrixSize).fill(0)
@@ -545,8 +630,20 @@ export function solveCircuit(
         if (netCom && netTarget) {
           addResistor(nodeMap.get(netCom) ?? -1, nodeMap.get(netTarget) ?? -1, 0.001);
         }
+      } else if (c.type === 'kwh_meter') {
+        // Công tơ điện: mỗi cực nối thông 1 mΩ (pha vào↔pha ra: 1↔2; trung tính vào↔trung tính ra: 3↔4)
+        const netPIn = pinToNetId.get(`${c.id}:1`) || pinToNetId.get(`${c.id}:in_p`) || pinToNetId.get(`${c.id}:in`);
+        const netPOut = pinToNetId.get(`${c.id}:2`) || pinToNetId.get(`${c.id}:out_p`) || pinToNetId.get(`${c.id}:out`);
+        if (netPIn && netPOut) {
+          addResistor(nodeMap.get(netPIn) ?? -1, nodeMap.get(netPOut) ?? -1, 0.001);
+        }
+        const netNIn = pinToNetId.get(`${c.id}:3`) || pinToNetId.get(`${c.id}:in_n`);
+        const netNOut = pinToNetId.get(`${c.id}:4`) || pinToNetId.get(`${c.id}:out_n`);
+        if (netNIn && netNOut) {
+          addResistor(nodeMap.get(netNIn) ?? -1, nodeMap.get(netNOut) ?? -1, 0.001);
+        }
       } else if (c.type === 'cb' || c.type === 'knife_switch') {
-        const isTripped = Boolean(c.props.isTripped) || prevThermalStates[c.id]?.status === 'tripped';
+        const isTripped = Boolean(c.props.isTripped) || dynamicallyTripped.has(c.id);
         const isClosed = Boolean(c.props.state) && !isTripped;
         const poles = c.props.poles || (c.type === 'knife_switch' ? 2 : 1);
         if (isClosed) {
@@ -567,7 +664,7 @@ export function solveCircuit(
           }
         }
       } else if (c.type === 'fuse') {
-        const isBlown = Boolean(c.props.isBlown) || prevThermalStates[c.id]?.status === 'blown';
+        const isBlown = Boolean(c.props.isBlown) || prevThermalStates[c.id]?.status === 'blown' || dynamicallyBlown.has(c.id);
         if (!isBlown) {
           const poles = c.props.poles || 1;
           if (poles === 1) {
@@ -626,6 +723,88 @@ export function solveCircuit(
             addResistor(nodeMap.get(netA) ?? -1, nodeMap.get(netK) ?? -1, 1e7);
           }
         }
+      } else if (c.type === 'lamp_dc') {
+        const vNom = Number(c.props.voltage) || 5;
+        const pNom = Number(c.props.power) || 1;
+        const rLamp = Math.max((vNom * vNom) / pNom, 0.1);
+        const net1 = pinToNetId.get(`${c.id}:1`) || pinToNetId.get(`${c.id}:pos`);
+        const net2 = pinToNetId.get(`${c.id}:2`) || pinToNetId.get(`${c.id}:neg`);
+        if (net1 && net2) {
+          addResistor(nodeMap.get(net1) ?? -1, nodeMap.get(net2) ?? -1, rLamp);
+        }
+      } else if (c.type === 'sensor_module') {
+        const netVcc = pinToNetId.get(`${c.id}:vcc`) || pinToNetId.get(`${c.id}:VCC`);
+        const netGnd = pinToNetId.get(`${c.id}:gnd`) || pinToNetId.get(`${c.id}:GND`);
+        const netDo = pinToNetId.get(`${c.id}:do`) || pinToNetId.get(`${c.id}:DO`);
+        const netAo = pinToNetId.get(`${c.id}:ao`) || pinToNetId.get(`${c.id}:AO`);
+
+        const uVcc = netVcc ? (nodeMap.get(netVcc) ?? -1) : -1;
+        const uGnd = netGnd ? (nodeMap.get(netGnd) ?? -1) : -1;
+        const uDo = netDo ? (nodeMap.get(netDo) ?? -1) : -1;
+        const uAo = netAo ? (nodeMap.get(netAo) ?? -1) : -1;
+
+        if (uVcc >= 0 && uGnd >= 0) {
+          addResistor(uVcc, uGnd, 1000);
+        }
+
+        const isDoHigh = controlStates?.sensorDoHigh?.[c.id] ?? false;
+        if (uDo >= 0) {
+          if (isDoHigh && uVcc >= 0) {
+            addResistor(uDo, uVcc, 100);
+          } else if (uGnd >= 0) {
+            addResistor(uDo, uGnd, 100);
+          }
+        }
+
+        const sensorType = c.props.sensorType || 'light';
+        let minVal = 0, maxVal = 100;
+        if (sensorType === 'temp') {
+          minVal = -10;
+          maxVal = 80;
+        }
+        const curVal = Number(c.props.envValue ?? (sensorType === 'temp' ? 25 : sensorType === 'humidity' ? 60 : 50));
+        const k = Math.max(0.0001, Math.min(0.9999, (curVal - minVal) / (maxVal - minVal)));
+
+        if (uAo >= 0) {
+          const isPowered = controlStates?.sensorPowered?.[c.id] ?? true;
+          if (isPowered && uVcc >= 0 && uGnd >= 0) {
+            addResistor(uAo, uVcc, 100 / k);
+            addResistor(uAo, uGnd, 100 / (1 - k));
+          } else if (uGnd >= 0) {
+            addResistor(uAo, uGnd, 100);
+          }
+        }
+      } else if (c.type === 'relay_module_1ch') {
+        const netVcc = pinToNetId.get(`${c.id}:vcc`) || pinToNetId.get(`${c.id}:VCC`);
+        const netGnd = pinToNetId.get(`${c.id}:gnd`) || pinToNetId.get(`${c.id}:GND`);
+        const netIn = pinToNetId.get(`${c.id}:in`) || pinToNetId.get(`${c.id}:IN`);
+        const netCom = pinToNetId.get(`${c.id}:com`) || pinToNetId.get(`${c.id}:COM`);
+        const netNo = pinToNetId.get(`${c.id}:no`) || pinToNetId.get(`${c.id}:NO`);
+        const netNc = pinToNetId.get(`${c.id}:nc`) || pinToNetId.get(`${c.id}:NC`);
+
+        const uVcc = netVcc ? (nodeMap.get(netVcc) ?? -1) : -1;
+        const uGnd = netGnd ? (nodeMap.get(netGnd) ?? -1) : -1;
+        const uIn = netIn ? (nodeMap.get(netIn) ?? -1) : -1;
+        const uCom = netCom ? (nodeMap.get(netCom) ?? -1) : -1;
+        const uNo = netNo ? (nodeMap.get(netNo) ?? -1) : -1;
+        const uNc = netNc ? (nodeMap.get(netNc) ?? -1) : -1;
+
+        if (uIn >= 0 && uGnd >= 0) {
+          addResistor(uIn, uGnd, 10000);
+        }
+
+        const isEnergized = controlStates?.relayEnergized?.[c.id] ?? false;
+
+        if (uVcc >= 0 && uGnd >= 0) {
+          addResistor(uVcc, uGnd, isEnergized ? 70 : 1000);
+        }
+
+        if (uCom >= 0 && uNo >= 0) {
+          addResistor(uCom, uNo, isEnergized ? 0.001 : 1e7);
+        }
+        if (uCom >= 0 && uNc >= 0) {
+          addResistor(uCom, uNc, isEnergized ? 1e7 : 0.001);
+        }
       }
     }
 
@@ -668,7 +847,24 @@ export function solveCircuit(
   for (const c of components) {
     if (c.type === 'led' || c.type === 'diode') initialConduction[c.id] = true;
   }
-  let solveOutput = buildAndSolve(initialConduction);
+
+  const initialControlStates = {
+    sensorPowered: {} as Record<string, boolean>,
+    sensorDoHigh: {} as Record<string, boolean>,
+    relayEnergized: {} as Record<string, boolean>,
+  };
+
+  for (const c of components) {
+    if (c.type === 'sensor_module') {
+      const assumedPowered = vSources.length > 0;
+      initialControlStates.sensorPowered[c.id] = assumedPowered;
+      initialControlStates.sensorDoHigh[c.id] = computeSensorDoHigh(c, assumedPowered, c.props._doHigh);
+    } else if (c.type === 'relay_module_1ch') {
+      initialControlStates.relayEnergized[c.id] = Boolean(c.props._isEnergized);
+    }
+  }
+
+  let solveOutput = buildAndSolve(initialConduction, initialControlStates);
   let nodeVoltages = solveOutput.nodeVoltages;
   let sourceCurrents = solveOutput.sourceCurrents;
 
@@ -687,8 +883,52 @@ export function solveCircuit(
       }
     }
   }
+
+  const refinedControlStates = {
+    sensorPowered: { ...initialControlStates.sensorPowered },
+    sensorDoHigh: { ...initialControlStates.sensorDoHigh },
+    relayEnergized: { ...initialControlStates.relayEnergized },
+  };
+
+  for (const c of components) {
+    if (c.type === 'sensor_module') {
+      const netVcc = pinToNetId.get(`${c.id}:vcc`) || pinToNetId.get(`${c.id}:VCC`);
+      const netGnd = pinToNetId.get(`${c.id}:gnd`) || pinToNetId.get(`${c.id}:GND`);
+      const vVcc = netVcc ? (nodeVoltages[netVcc] ?? 0) : 0;
+      const vGnd = netGnd ? (nodeVoltages[netGnd] ?? 0) : 0;
+      const vSup = vVcc - vGnd;
+      const isPowered = vSup >= 3.0;
+      const doHigh = computeSensorDoHigh(c, isPowered, c.props._doHigh);
+
+      if (refinedControlStates.sensorPowered[c.id] !== isPowered || refinedControlStates.sensorDoHigh[c.id] !== doHigh) {
+        refinedControlStates.sensorPowered[c.id] = isPowered;
+        refinedControlStates.sensorDoHigh[c.id] = doHigh;
+        needsResolve = true;
+      }
+    }
+  }
+
+  for (const c of components) {
+    if (c.type === 'relay_module_1ch') {
+      const netVcc = pinToNetId.get(`${c.id}:vcc`) || pinToNetId.get(`${c.id}:VCC`);
+      const netGnd = pinToNetId.get(`${c.id}:gnd`) || pinToNetId.get(`${c.id}:GND`);
+      const netIn = pinToNetId.get(`${c.id}:in`) || pinToNetId.get(`${c.id}:IN`);
+      const vVcc = netVcc ? (nodeVoltages[netVcc] ?? 0) : 0;
+      const vGnd = netGnd ? (nodeVoltages[netGnd] ?? 0) : 0;
+      const vIn = netIn ? (nodeVoltages[netIn] ?? 0) : 0;
+      const vSup = vVcc - vGnd;
+      const vInRel = vIn - vGnd;
+      const isEnergized = computeRelayEnergized(vSup, vInRel, c.props._isEnergized);
+
+      if (refinedControlStates.relayEnergized[c.id] !== isEnergized) {
+        refinedControlStates.relayEnergized[c.id] = isEnergized;
+        needsResolve = true;
+      }
+    }
+  }
+
   if (needsResolve) {
-    solveOutput = buildAndSolve(refinedConduction);
+    solveOutput = buildAndSolve(refinedConduction, refinedControlStates);
     nodeVoltages = solveOutput.nodeVoltages;
     sourceCurrents = solveOutput.sourceCurrents;
   }
@@ -698,26 +938,6 @@ export function solveCircuit(
   const componentCurrents: Record<string, number> = {};
   const componentPowers: Record<string, number> = {};
   const signedCapVoltages: Record<string, number> = {};
-
-  // Populate source currents
-  for (const src of acSources) {
-    const iSrc = deadShortSources[src.id] ?? (sourceCurrents[src.id] ?? 0);
-    componentCurrents[src.id] = Math.round(iSrc * 100) / 100;
-    componentVoltages[src.id] = Number(src.props.voltage) || 220;
-    componentPowers[src.id] = Math.round(componentVoltages[src.id] * iSrc * 100) / 100;
-  }
-  for (const src of dcSources) {
-    const iSrc = deadShortSources[src.id] ?? (sourceCurrents[src.id] ?? 0);
-    componentCurrents[src.id] = Math.round(iSrc * 100) / 100;
-    componentVoltages[src.id] = Number(src.props.voltage) || 9;
-    componentPowers[src.id] = Math.round(componentVoltages[src.id] * iSrc * 100) / 100;
-  }
-  for (const src of vccSources) {
-    const iSrc = sourceCurrents[src.id] ?? 0;
-    componentCurrents[src.id] = Math.round(iSrc * 100) / 100;
-    componentVoltages[src.id] = Number(src.props.voltage) || 5;
-    componentPowers[src.id] = Math.round(componentVoltages[src.id] * iSrc * 100) / 100;
-  }
   const operatingStates: Record<string, boolean> = {};
   const caseStatuses: Record<string, CaseStatus> = {};
   const earthCurrents: Record<string, number> = {};
@@ -731,188 +951,302 @@ export function solveCircuit(
   const meterMeasurements: Record<string, MeterMeasurement> = {};
   const statusMessages: string[] = [];
 
-  // Calculate per-component V, I, and operating state
-  for (const c of components) {
-    if (['ceiling_fan', 'lamp', 'lamp_fluorescent', 'appliance_generic', 'electric_bell'].includes(c.type)) {
-      const netA = pinToNetId.get(`${c.id}:A`) || pinToNetId.get(`${c.id}:1`);
-      const netO = pinToNetId.get(`${c.id}:O`) || pinToNetId.get(`${c.id}:2`);
-      const vA = netA ? (nodeVoltages[netA] ?? 0) : 0;
-      const vO = netO ? (nodeVoltages[netO] ?? 0) : 0;
-      const vDrop = Math.abs(vA - vO);
-      const power = Number(c.props.power) || (c.type === 'ceiling_fan' ? 60 : c.type === 'lamp_fluorescent' ? 36 : c.type === 'electric_bell' ? 25 : 60);
-      const rLoad = Math.max((220 * 220) / power, 10);
-      const iLoad = vDrop / rLoad;
-      const pReal = vDrop * iLoad;
-
-      componentVoltages[c.id] = Math.round(vDrop * 100) / 100;
-      componentCurrents[c.id] = Math.round(iLoad * 1000) / 1000;
-      componentPowers[c.id] = Math.round(pReal * 100) / 100;
-      operatingStates[c.id] = pReal >= 0.05 * power; // operates if power >= 5% rated
-    } else if (c.type === 'resistor') {
-      const net1 = pinToNetId.get(`${c.id}:1`);
-      const net2 = pinToNetId.get(`${c.id}:2`);
-      const v1 = net1 ? (nodeVoltages[net1] ?? 0) : 0;
-      const v2 = net2 ? (nodeVoltages[net2] ?? 0) : 0;
-      const vDrop = Math.abs(v1 - v2);
-      const r = Number(c.props.resistance ?? 1000) || 1000;
-      const iRes = vDrop / r;
-
-      componentVoltages[c.id] = Math.round(vDrop * 100) / 100;
-      componentCurrents[c.id] = Math.round(iRes * 10000) / 10000;
-      componentPowers[c.id] = Math.round((vDrop * iRes) * 1000) / 1000;
-    } else if (c.type === 'ammeter') {
-      const net1 = pinToNetId.get(`${c.id}:pos`) || pinToNetId.get(`${c.id}:1`);
-      const net2 = pinToNetId.get(`${c.id}:neg`) || pinToNetId.get(`${c.id}:2`);
-      const v1 = net1 ? (nodeVoltages[net1] ?? 0) : 0;
-      const v2 = net2 ? (nodeVoltages[net2] ?? 0) : 0;
-      const iAmp = (v1 - v2) / 0.001;
-      const absIAmp = Math.abs(iAmp);
-
-      componentCurrents[c.id] = Math.round(absIAmp * 1000) / 1000;
-      componentVoltages[c.id] = Math.round(Math.abs(v1 - v2) * 1000) / 1000;
-      meterMeasurements[c.id] = {
-        kind: 'A',
-        value: absIAmp,
-        current: absIAmp,
-        formatted: formatMeasure(absIAmp, 'current'),
-        isReversePolarity: iAmp < 0,
-      };
-    } else if (c.type === 'voltmeter') {
-      const net1 = pinToNetId.get(`${c.id}:pos`) || pinToNetId.get(`${c.id}:1`);
-      const net2 = pinToNetId.get(`${c.id}:neg`) || pinToNetId.get(`${c.id}:2`);
-      const v1 = net1 ? (nodeVoltages[net1] ?? 0) : 0;
-      const v2 = net2 ? (nodeVoltages[net2] ?? 0) : 0;
-      const vMeter = v1 - v2;
-      const absVMeter = Math.abs(vMeter);
-
-      componentVoltages[c.id] = Math.round(absVMeter * 100) / 100;
-      componentCurrents[c.id] = 0;
-      meterMeasurements[c.id] = {
-        kind: 'V',
-        value: absVMeter,
-        voltage: absVMeter,
-        formatted: formatMeasure(absVMeter, 'voltage'),
-        isReversePolarity: vMeter < 0,
-      };
-    } else if (c.type === 'wattmeter') {
-      const nI1 = pinToNetId.get(`${c.id}:I+`);
-      const nI2 = pinToNetId.get(`${c.id}:I-`);
-      const nU1 = pinToNetId.get(`${c.id}:U+`);
-      const nU2 = pinToNetId.get(`${c.id}:U-`);
-
-      const vI1 = nI1 ? (nodeVoltages[nI1] ?? 0) : 0;
-      const vI2 = nI2 ? (nodeVoltages[nI2] ?? 0) : 0;
-      const vU1 = nU1 ? (nodeVoltages[nU1] ?? 0) : 0;
-      const vU2 = nU2 ? (nodeVoltages[nU2] ?? 0) : 0;
-
-      const iVal = (vI1 - vI2) / 0.001;
-      const uVal = vU1 - vU2;
-      const isVoltageCoilConnected = Boolean(nU1 && nU2);
-      const pReal = isVoltageCoilConnected ? uVal * iVal : 0;
-
-      componentVoltages[c.id] = Math.round(Math.abs(uVal) * 100) / 100;
-      componentCurrents[c.id] = Math.round(Math.abs(iVal) * 1000) / 1000;
-      componentPowers[c.id] = Math.round(pReal * 100) / 100;
-
-      meterMeasurements[c.id] = {
-        kind: 'W',
-        value: Math.abs(pReal),
-        power: Math.abs(pReal),
-        voltage: Math.abs(uVal),
-        current: Math.abs(iVal),
-        formatted: formatMeasure(Math.abs(pReal), 'power'),
-        isReversePolarity: pReal < 0,
-        isVoltageCoilConnected,
-      };
-    } else if (c.type === 'ohmmeter') {
-      const resResult = solveOhmmeterResistance(components, wires, junctions, c.id, defMap);
-      const rVal = resResult.resistance;
-      componentVoltages[c.id] = 0;
-      componentCurrents[c.id] = 0;
-
-      meterMeasurements[c.id] = {
-        kind: 'Ω',
-        value: rVal,
-        resistance: rVal,
-        formatted: formatMeasure(rVal, 'resistance'),
-        hasLiveVoltageWarning: resResult.hasLiveVoltageWarning,
-      };
-    } else if (c.type === 'led' || c.type === 'diode') {
-      const netA = pinToNetId.get(`${c.id}:A`) || pinToNetId.get(`${c.id}:1`) || pinToNetId.get(`${c.id}:pos`);
-      const netK = pinToNetId.get(`${c.id}:K`) || pinToNetId.get(`${c.id}:2`) || pinToNetId.get(`${c.id}:neg`);
-      const vA = netA ? (nodeVoltages[netA] ?? 0) : 0;
-      const vK = netK ? (nodeVoltages[netK] ?? 0) : 0;
-      const vAK = vA - vK;
-      const isConducting = refinedConduction[c.id] ?? false;
-      const vf = c.type === 'diode' ? 0.7 : (c.props.color === 'blue' || c.props.color === 'white' ? 3.0 : 2.0);
-      const rEq = (vf / 0.0146) + 10;
-      const iLed = isConducting ? Math.max(0, vAK / rEq) : 0;
-
-      componentVoltages[c.id] = Math.round(Math.max(0, vAK) * 100) / 100;
-      componentCurrents[c.id] = Math.round(iLed * 10000) / 10000;
-      componentPowers[c.id] = Math.round((vAK * iLed) * 1000) / 1000;
-      operatingStates[c.id] = isConducting && iLed > 0.001;
-    } else if (c.type === 'capacitor_ceramic' || c.type === 'capacitor_electrolytic') {
-      const net1 = pinToNetId.get(`${c.id}:1`) || pinToNetId.get(`${c.id}:pos`);
-      const net2 = pinToNetId.get(`${c.id}:2`) || pinToNetId.get(`${c.id}:neg`);
-      const v1 = net1 ? (nodeVoltages[net1] ?? 0) : 0;
-      const v2 = net2 ? (nodeVoltages[net2] ?? 0) : 0;
-      const vCap = v1 - v2;
-      signedCapVoltages[c.id] = vCap;
-      componentVoltages[c.id] = Math.round(Math.abs(vCap) * 100) / 100;
-      componentCurrents[c.id] = 0; // DC steady state
-
-      if (c.type === 'capacitor_electrolytic' && vCap < -0.5) {
-        statusMessages.push(`CẢNH BÁO: Tụ hóa ${c.label} bị đấu ngược cực! (+ nối âm, − nối dương).`);
-      }
+  const updateCalculations = () => {
+    // Populate source currents
+    for (const src of acSources) {
+      const iSrc = deadShortSources[src.id] ?? (sourceCurrents[src.id] ?? 0);
+      componentCurrents[src.id] = Math.round(iSrc * 100) / 100;
+      componentVoltages[src.id] = Number(src.props.voltage) || 220;
+      componentPowers[src.id] = Math.round(componentVoltages[src.id] * iSrc * 100) / 100;
     }
-  }
-
-  // Check Chassis Devices
-  for (const c of chassisComps) {
-    const vCase = nodeVoltages[`case:${c.id}`] ?? 0;
-    const humanTouch = Boolean(c.props.humanTouch);
-    const humanCurrent = humanTouch ? (vCase / 1000) * 1000 : 0; // in mA
-
-    let dangerLevel: 'none' | 'mild' | 'warning' | 'danger' = 'none';
-    let dangerMessage = '';
-
-    if (humanTouch) {
-      if (humanCurrent < 10) {
-        dangerLevel = 'mild';
-        dangerMessage = 'Tê / giật nhẹ (minh họa)';
-      } else if (humanCurrent <= 30) {
-        dangerLevel = 'warning';
-        dangerMessage = 'Co giật cơ (minh họa)';
-      } else {
-        dangerLevel = 'danger';
-        dangerMessage = 'Nguy hiểm đến tính mạng! (minh họa)';
-      }
+    for (const src of dcSources) {
+      const iSrc = deadShortSources[src.id] ?? (sourceCurrents[src.id] ?? 0);
+      componentCurrents[src.id] = Math.round(iSrc * 100) / 100;
+      componentVoltages[src.id] = Number(src.props.voltage) || 9;
+      componentPowers[src.id] = Math.round(componentVoltages[src.id] * iSrc * 100) / 100;
+    }
+    for (const src of vccSources) {
+      const iSrc = sourceCurrents[src.id] ?? 0;
+      componentCurrents[src.id] = Math.round(iSrc * 100) / 100;
+      componentVoltages[src.id] = Number(src.props.voltage) || 5;
+      componentPowers[src.id] = Math.round(componentVoltages[src.id] * iSrc * 100) / 100;
     }
 
-    caseStatuses[c.id] = {
-      caseVoltage: Math.round(vCase * 100) / 100,
-      humanCurrent: Math.round(humanCurrent * 100) / 100,
-      dangerLevel,
-      dangerMessage,
-    };
-  }
+    // Calculate per-component V, I, and operating state
+    for (const c of components) {
+      if (['ceiling_fan', 'lamp', 'lamp_fluorescent', 'appliance_generic', 'electric_bell'].includes(c.type)) {
+        const netA = pinToNetId.get(`${c.id}:A`) || pinToNetId.get(`${c.id}:1`);
+        const netO = pinToNetId.get(`${c.id}:O`) || pinToNetId.get(`${c.id}:2`);
+        const vA = netA ? (nodeVoltages[netA] ?? 0) : 0;
+        const vO = netO ? (nodeVoltages[netO] ?? 0) : 0;
+        const vDrop = Math.abs(vA - vO);
+        const power = Number(c.props.power) || (c.type === 'ceiling_fan' ? 60 : c.type === 'lamp_fluorescent' ? 36 : c.type === 'electric_bell' ? 25 : 60);
+        const rLoad = Math.max((220 * 220) / power, 10);
+        const iLoad = vDrop / rLoad;
+        const pReal = vDrop * iLoad;
 
-  // Check Earth Ground currents
-  const earthGrounds = components.filter(c => c.type === 'earth_ground');
-  for (const eg of earthGrounds) {
-    const peNet = pinToNetId.get(`${eg.id}:pe`) || pinToNetId.get(`${eg.id}:PE`);
-    const vPe = peNet ? (nodeVoltages[peNet] ?? 0) : 0;
-    const rDat = Number(eg.props.resistance ?? 4) || 4;
-    const iEarth = vPe / rDat;
-    earthCurrents[eg.id] = Math.round(iEarth * 1000) / 1000;
-  }
+        componentVoltages[c.id] = Math.round(vDrop * 100) / 100;
+        componentCurrents[c.id] = Math.round(iLoad * 1000) / 1000;
+        componentPowers[c.id] = Math.round(pReal * 100) / 100;
+        operatingStates[c.id] = pReal >= 0.05 * power; // operates if power >= 5% rated
+      } else if (c.type === 'resistor') {
+        const net1 = pinToNetId.get(`${c.id}:1`);
+        const net2 = pinToNetId.get(`${c.id}:2`);
+        const v1 = net1 ? (nodeVoltages[net1] ?? 0) : 0;
+        const v2 = net2 ? (nodeVoltages[net2] ?? 0) : 0;
+        const vDrop = Math.abs(v1 - v2);
+        const r = Number(c.props.resistance ?? 1000) || 1000;
+        const iRes = vDrop / r;
 
-  // Check Breakers and Fuses
+        componentVoltages[c.id] = Math.round(vDrop * 100) / 100;
+        componentCurrents[c.id] = Math.round(iRes * 10000) / 10000;
+        componentPowers[c.id] = Math.round((vDrop * iRes) * 1000) / 1000;
+      } else if (c.type === 'ammeter') {
+        const net1 = pinToNetId.get(`${c.id}:pos`) || pinToNetId.get(`${c.id}:1`);
+        const net2 = pinToNetId.get(`${c.id}:neg`) || pinToNetId.get(`${c.id}:2`);
+        const v1 = net1 ? (nodeVoltages[net1] ?? 0) : 0;
+        const v2 = net2 ? (nodeVoltages[net2] ?? 0) : 0;
+        const iAmp = (v1 - v2) / 0.001;
+        const absIAmp = Math.abs(iAmp);
+
+        componentCurrents[c.id] = Math.round(absIAmp * 1000) / 1000;
+        componentVoltages[c.id] = Math.round(Math.abs(v1 - v2) * 1000) / 1000;
+        meterMeasurements[c.id] = {
+          kind: 'A',
+          value: absIAmp,
+          current: absIAmp,
+          formatted: formatMeasure(absIAmp, 'current'),
+          isReversePolarity: iAmp < 0,
+        };
+      } else if (c.type === 'voltmeter') {
+        const net1 = pinToNetId.get(`${c.id}:pos`) || pinToNetId.get(`${c.id}:1`);
+        const net2 = pinToNetId.get(`${c.id}:neg`) || pinToNetId.get(`${c.id}:2`);
+        const v1 = net1 ? (nodeVoltages[net1] ?? 0) : 0;
+        const v2 = net2 ? (nodeVoltages[net2] ?? 0) : 0;
+        const vMeter = v1 - v2;
+        const absVMeter = Math.abs(vMeter);
+
+        componentVoltages[c.id] = Math.round(absVMeter * 100) / 100;
+        componentCurrents[c.id] = 0;
+        meterMeasurements[c.id] = {
+          kind: 'V',
+          value: absVMeter,
+          voltage: absVMeter,
+          formatted: formatMeasure(absVMeter, 'voltage'),
+          isReversePolarity: vMeter < 0,
+        };
+      } else if (c.type === 'wattmeter') {
+        const nI1 = pinToNetId.get(`${c.id}:I+`);
+        const nI2 = pinToNetId.get(`${c.id}:I-`);
+        const nU1 = pinToNetId.get(`${c.id}:U+`);
+        const nU2 = pinToNetId.get(`${c.id}:U-`);
+
+        const vI1 = nI1 ? (nodeVoltages[nI1] ?? 0) : 0;
+        const vI2 = nI2 ? (nodeVoltages[nI2] ?? 0) : 0;
+        const vU1 = nU1 ? (nodeVoltages[nU1] ?? 0) : 0;
+        const vU2 = nU2 ? (nodeVoltages[nU2] ?? 0) : 0;
+
+        const iVal = (vI1 - vI2) / 0.001;
+        const uVal = vU1 - vU2;
+        const isVoltageCoilConnected = Boolean(nU1 && nU2);
+        const pReal = isVoltageCoilConnected ? uVal * iVal : 0;
+
+        componentVoltages[c.id] = Math.round(Math.abs(uVal) * 100) / 100;
+        componentCurrents[c.id] = Math.round(Math.abs(iVal) * 1000) / 1000;
+        componentPowers[c.id] = Math.round(pReal * 100) / 100;
+
+        meterMeasurements[c.id] = {
+          kind: 'W',
+          value: Math.abs(pReal),
+          power: Math.abs(pReal),
+          voltage: Math.abs(uVal),
+          current: Math.abs(iVal),
+          formatted: formatMeasure(Math.abs(pReal), 'power'),
+          isReversePolarity: pReal < 0,
+          isVoltageCoilConnected,
+        };
+      } else if (c.type === 'ohmmeter') {
+        const resResult = solveOhmmeterResistance(components, wires, junctions, c.id, defMap);
+        const rVal = resResult.resistance;
+        componentVoltages[c.id] = 0;
+        componentCurrents[c.id] = 0;
+
+        meterMeasurements[c.id] = {
+          kind: 'Ω',
+          value: rVal,
+          resistance: rVal,
+          formatted: formatMeasure(rVal, 'resistance'),
+          hasLiveVoltageWarning: resResult.hasLiveVoltageWarning,
+        };
+      } else if (c.type === 'kwh_meter') {
+        const netPIn = pinToNetId.get(`${c.id}:1`) || pinToNetId.get(`${c.id}:in_p`) || pinToNetId.get(`${c.id}:in`);
+        const netPOut = pinToNetId.get(`${c.id}:2`) || pinToNetId.get(`${c.id}:out_p`) || pinToNetId.get(`${c.id}:out`);
+        const netNIn = pinToNetId.get(`${c.id}:3`) || pinToNetId.get(`${c.id}:in_n`);
+        const netNOut = pinToNetId.get(`${c.id}:4`) || pinToNetId.get(`${c.id}:out_n`);
+
+        const vPIn = netPIn ? (nodeVoltages[netPIn] ?? 0) : 0;
+        const vPOut = netPOut ? (nodeVoltages[netPOut] ?? 0) : 0;
+        const vNOut = netNOut ? (nodeVoltages[netNOut] ?? 0) : 0;
+
+        // U_tải: điện áp giữa hai chân ra tải (2 và 4)
+        const uLoad = Math.abs(vPOut - vNOut);
+        // I: dòng điện qua cực pha (1 -> 2)
+        const iPhase = Math.abs(vPIn - vPOut) / 0.001;
+        // P = U_tải * I
+        const pVal = uLoad * iPhase;
+
+        componentVoltages[c.id] = Math.round(uLoad * 100) / 100;
+        componentCurrents[c.id] = Math.round(iPhase * 1000) / 1000;
+        componentPowers[c.id] = Math.round(pVal * 100) / 100;
+
+        const kwh = Number(c.props.kwh ?? 0);
+        meterMeasurements[c.id] = {
+          kind: 'kWh',
+          value: kwh,
+          power: Math.round(pVal * 100) / 100,
+          voltage: Math.round(uLoad * 100) / 100,
+          current: Math.round(iPhase * 1000) / 1000,
+          energyKwh: kwh,
+          formatted: `${kwh.toFixed(3).replace('.', ',')} kWh`,
+        };
+      } else if (c.type === 'led' || c.type === 'diode') {
+        const netA = pinToNetId.get(`${c.id}:A`) || pinToNetId.get(`${c.id}:1`) || pinToNetId.get(`${c.id}:pos`);
+        const netK = pinToNetId.get(`${c.id}:K`) || pinToNetId.get(`${c.id}:2`) || pinToNetId.get(`${c.id}:neg`);
+        const vA = netA ? (nodeVoltages[netA] ?? 0) : 0;
+        const vK = netK ? (nodeVoltages[netK] ?? 0) : 0;
+        const vAK = vA - vK;
+        const isConducting = refinedConduction[c.id] ?? false;
+        const vf = c.type === 'diode' ? 0.7 : (c.props.color === 'blue' || c.props.color === 'white' ? 3.0 : 2.0);
+        const rEq = (vf / 0.0146) + 10;
+        const iLed = isConducting ? Math.max(0, vAK / rEq) : 0;
+
+        componentVoltages[c.id] = Math.round(Math.max(0, vAK) * 100) / 100;
+        componentCurrents[c.id] = Math.round(iLed * 10000) / 10000;
+        componentPowers[c.id] = Math.round((vAK * iLed) * 1000) / 1000;
+        operatingStates[c.id] = isConducting && iLed > 0.001;
+      } else if (c.type === 'capacitor_ceramic' || c.type === 'capacitor_electrolytic') {
+        const net1 = pinToNetId.get(`${c.id}:1`) || pinToNetId.get(`${c.id}:pos`);
+        const net2 = pinToNetId.get(`${c.id}:2`) || pinToNetId.get(`${c.id}:neg`);
+        const v1 = net1 ? (nodeVoltages[net1] ?? 0) : 0;
+        const v2 = net2 ? (nodeVoltages[net2] ?? 0) : 0;
+        const vCap = v1 - v2;
+        signedCapVoltages[c.id] = vCap;
+        componentVoltages[c.id] = Math.round(Math.abs(vCap) * 100) / 100;
+        componentCurrents[c.id] = 0; // DC steady state
+
+        if (c.type === 'capacitor_electrolytic' && vCap < -0.5) {
+          statusMessages.push(`CẢNH BÁO: Tụ hóa ${c.label} bị đấu ngược cực! (+ nối âm, − nối dương).`);
+        }
+      } else if (c.type === 'lamp_dc') {
+        const net1 = pinToNetId.get(`${c.id}:1`) || pinToNetId.get(`${c.id}:pos`);
+        const net2 = pinToNetId.get(`${c.id}:2`) || pinToNetId.get(`${c.id}:neg`);
+        const v1 = net1 ? (nodeVoltages[net1] ?? 0) : 0;
+        const v2 = net2 ? (nodeVoltages[net2] ?? 0) : 0;
+        const vDrop = Math.abs(v1 - v2);
+        const vNom = Number(c.props.voltage) || 5;
+        const pNom = Number(c.props.power) || 1;
+        const rLamp = Math.max((vNom * vNom) / pNom, 0.1);
+        const iLamp = vDrop / rLamp;
+        const pReal = vDrop * iLamp;
+
+        componentVoltages[c.id] = Math.round(vDrop * 100) / 100;
+        componentCurrents[c.id] = Math.round(iLamp * 1000) / 1000;
+        componentPowers[c.id] = Math.round(pReal * 100) / 100;
+        operatingStates[c.id] = pReal >= 0.05 * pNom;
+      } else if (c.type === 'sensor_module') {
+        const netVcc = pinToNetId.get(`${c.id}:vcc`) || pinToNetId.get(`${c.id}:VCC`);
+        const netGnd = pinToNetId.get(`${c.id}:gnd`) || pinToNetId.get(`${c.id}:GND`);
+        const netDo = pinToNetId.get(`${c.id}:do`) || pinToNetId.get(`${c.id}:DO`);
+        const netAo = pinToNetId.get(`${c.id}:ao`) || pinToNetId.get(`${c.id}:AO`);
+
+        const vVcc = netVcc ? (nodeVoltages[netVcc] ?? 0) : 0;
+        const vGnd = netGnd ? (nodeVoltages[netGnd] ?? 0) : 0;
+        const vDo = netDo ? (nodeVoltages[netDo] ?? 0) : 0;
+        const vAo = netAo ? (nodeVoltages[netAo] ?? 0) : 0;
+        const vSup = Math.max(0, vVcc - vGnd);
+
+        const isDoHigh = Boolean(refinedControlStates.sensorDoHigh[c.id]);
+        const isPowered = Boolean(refinedControlStates.sensorPowered[c.id]);
+        const aoVolts = Math.round(Math.abs(vAo - vGnd) * 100) / 100;
+        c.props._doHigh = isDoHigh;
+        c.props._isPowered = isPowered;
+        c.props._aoVoltage = aoVolts;
+
+        componentVoltages[c.id] = Math.round(vSup * 100) / 100;
+        componentCurrents[c.id] = isPowered ? Math.round((vSup / 1000) * 1000) / 1000 : 0;
+        componentPowers[c.id] = Math.round(componentVoltages[c.id] * componentCurrents[c.id] * 100) / 100;
+        operatingStates[c.id] = isDoHigh;
+      } else if (c.type === 'relay_module_1ch') {
+        const netVcc = pinToNetId.get(`${c.id}:vcc`) || pinToNetId.get(`${c.id}:VCC`);
+        const netGnd = pinToNetId.get(`${c.id}:gnd`) || pinToNetId.get(`${c.id}:GND`);
+        const vVcc = netVcc ? (nodeVoltages[netVcc] ?? 0) : 0;
+        const vGnd = netGnd ? (nodeVoltages[netGnd] ?? 0) : 0;
+        const vSup = Math.max(0, vVcc - vGnd);
+        const isEnergized = Boolean(refinedControlStates.relayEnergized[c.id]);
+        c.props._isEnergized = isEnergized;
+
+        componentVoltages[c.id] = Math.round(vSup * 100) / 100;
+        const iCoil = isEnergized ? vSup / 70 : vSup / 1000;
+        componentCurrents[c.id] = Math.round(iCoil * 1000) / 1000;
+        componentPowers[c.id] = Math.round(vSup * iCoil * 100) / 100;
+        operatingStates[c.id] = isEnergized;
+      }
+    }
+
+    // Check Chassis Devices
+    for (const c of chassisComps) {
+      const vCase = nodeVoltages[`case:${c.id}`] ?? 0;
+      const humanTouch = Boolean(c.props.humanTouch);
+      const humanCurrent = humanTouch ? (vCase / 1000) * 1000 : 0; // in mA
+
+      let dangerLevel: 'none' | 'mild' | 'warning' | 'danger' = 'none';
+      let dangerMessage = '';
+
+      if (humanTouch) {
+        if (humanCurrent < 10) {
+          dangerLevel = 'mild';
+          dangerMessage = 'Tê / giật nhẹ (minh họa)';
+        } else if (humanCurrent <= 30) {
+          dangerLevel = 'warning';
+          dangerMessage = 'Co giật cơ (minh họa)';
+        } else {
+          dangerLevel = 'danger';
+          dangerMessage = 'Nguy hiểm đến tính mạng! (minh họa)';
+        }
+      }
+
+      caseStatuses[c.id] = {
+        caseVoltage: Math.round(vCase * 100) / 100,
+        humanCurrent: Math.round(humanCurrent * 100) / 100,
+        dangerLevel,
+        dangerMessage,
+      };
+    }
+
+    // Check Earth Ground currents
+    const earthGrounds = components.filter(c => c.type === 'earth_ground');
+    for (const eg of earthGrounds) {
+      const peNet = pinToNetId.get(`${eg.id}:pe`) || pinToNetId.get(`${eg.id}:PE`);
+      const vPe = peNet ? (nodeVoltages[peNet] ?? 0) : 0;
+      const rDat = Number(eg.props.resistance ?? 4) || 4;
+      const iEarth = vPe / rDat;
+      earthCurrents[eg.id] = Math.round(iEarth * 1000) / 1000;
+    }
+  };
+
+  // Step 1: Initial solve post-processing
+  updateCalculations();
+
+  const effectiveDt = (timeSec > 0 && Object.keys(prevThermalStates).length === 0) ? timeSec : dtSeconds;
+
+  // Step 2: Check protection devices (Breakers, ELCBs, Fuses)
+  const newlyTripped: { id: string; reason: string }[] = [];
+  const newlyBlown: { id: string; reason: string }[] = [];
+
   const breakers = components.filter(c => c.type === 'cb' || c.type === 'knife_switch');
   for (const brk of breakers) {
-    if (brk.props.isTripped || prevThermalStates[brk.id]?.status === 'tripped') {
-      trippedComponents.push(brk.id);
+    if (brk.props.isTripped || dynamicallyTripped.has(brk.id)) {
+      if (!trippedComponents.includes(brk.id)) trippedComponents.push(brk.id);
       continue;
     }
 
@@ -936,21 +1270,38 @@ export function solveCircuit(
     componentCurrents[brk.id] = Math.round(iMax * 100) / 100;
     componentVoltages[brk.id] = Math.round(Math.abs(vIn1 - vOut1) * 1000) / 1000;
 
+    const inVal = Number(brk.props.ratedCurrent) || 16;
+    const s = iMax / inVal;
+
     // Check ELCB Residual Current: |I_phase - I_neutral| > 30 mA
     const isELCB = Boolean(brk.props.isELCB || brk.props.hasELCB || (poles === 2 && brk.props.ratedCurrent === undefined && brk.type === 'knife_switch'));
     const iResidual = Math.abs(iPole1 - iPole2);
 
+    let tripReason: string | null = null;
     if ((isELCB || brk.props.isELCB) && iResidual > 0.030) {
-      trippedComponents.push(brk.id);
-      statusMessages.push(`ELCB NHẢY do dòng rò: ${(iResidual * 1000).toFixed(1)} mA > 30 mA.`);
+      tripReason = `ELCB NHẢY do dòng rò: ${(iResidual * 1000).toFixed(1)} mA > 30 mA.`;
+    } else if (s >= 5.0) {
+      tripReason = `Aptomat ${brk.label} NHẢY do ngắn mạch (dòng > 5·In).`;
+    } else {
+      const prevH = prevThermalStates[brk.id]?.heat || 0;
+      let newH = prevH;
+      if (s > 1.0) {
+        newH += ((s * s - 1) * effectiveDt) / 8.0;
+        if (newH >= 1.0) {
+          tripReason = `Aptomat ${brk.label} NHẢY do quá tải nhiệt.`;
+        }
+      }
+    }
+
+    if (tripReason) {
+      newlyTripped.push({ id: brk.id, reason: tripReason });
     }
   }
 
-  // Calculate Fuses
   const fuses = components.filter(c => c.type === 'fuse');
   for (const f of fuses) {
-    if (f.props.isBlown || prevThermalStates[f.id]?.status === 'blown') {
-      blownComponents.push(f.id);
+    if (f.props.isBlown || prevThermalStates[f.id]?.status === 'blown' || dynamicallyBlown.has(f.id)) {
+      if (!blownComponents.includes(f.id)) blownComponents.push(f.id);
       continue;
     }
     const inNet = pinToNetId.get(`${f.id}:1`) || pinToNetId.get(`${f.id}:in`);
@@ -960,147 +1311,229 @@ export function solveCircuit(
     const iFuse = Math.abs(vIn - vOut) / 0.001;
     componentCurrents[f.id] = Math.round(iFuse * 100) / 100;
     componentVoltages[f.id] = Math.round(Math.abs(vIn - vOut) * 1000) / 1000;
+
+    const inVal = Number(f.props.ratedCurrent) || 10;
+    const s = iFuse / inVal;
+
+    let blowReason: string | null = null;
+    if (s >= 5.0) {
+      blowReason = `Cầu chì ${f.label} ĐỨT do ngắn mạch (dòng > 5·In).`;
+    } else {
+      const prevH = prevThermalStates[f.id]?.heat || 0;
+      let newH = prevH;
+      if (s > 1.0) {
+        newH += ((s * s - 1) * effectiveDt) / 2.0;
+        if (newH >= 1.0) {
+          blowReason = `Cầu chì ${f.label} ĐỨT do quá tải nhiệt.`;
+        }
+      }
+    }
+
+    if (blowReason) {
+      newlyBlown.push({ id: f.id, reason: blowReason });
+    }
   }
 
-  // 7. Thermal accumulation & damage updates (dt step)
-  const effectiveDt = (timeSec > 0 && Object.keys(prevThermalStates).length === 0) ? timeSec : dtSeconds;
+  const protectionDeviceTriggered = newlyTripped.length > 0 || newlyBlown.length > 0;
 
-  for (const c of components) {
-    const spec = COMPONENT_THERMAL_SPECS[c.type];
-    const prev = prevThermalStates[c.id] || { heat: 0, stress: 0, status: 'normal' };
-
-    if (prev.status === 'damaged' || prev.status === 'tripped' || prev.status === 'blown') {
-      thermalStates[c.id] = { ...prev };
-      if (prev.status === 'tripped') trippedComponents.push(c.id);
-      if (prev.status === 'blown') blownComponents.push(c.id);
-      if (prev.status === 'damaged') damagedComponents.push(c.id);
-      continue;
+  if (protectionDeviceTriggered) {
+    // Step 3: Thiết bị bảo vệ vừa nhảy/đứt: Giải lại mạch & BỎ QUA tích lũy nhiệt bước này
+    for (const t of newlyTripped) {
+      dynamicallyTripped.add(t.id);
+      if (!trippedComponents.includes(t.id)) trippedComponents.push(t.id);
+      const prevH = prevThermalStates[t.id]?.heat || 1.0;
+      thermalStates[t.id] = { heat: Math.max(1.0, prevH), stress: 0, status: 'tripped', damageType: 'trip' };
+      statusMessages.push(t.reason);
+    }
+    for (const b of newlyBlown) {
+      dynamicallyBlown.add(b.id);
+      if (!blownComponents.includes(b.id)) blownComponents.push(b.id);
+      thermalStates[b.id] = { heat: 2.5, stress: 0, status: 'blown', damageType: 'blow' };
+      statusMessages.push(b.reason);
     }
 
-    if (trippedComponents.includes(c.id)) {
-      thermalStates[c.id] = { heat: 2.5, stress: 1.0, status: 'tripped', damageType: 'trip' };
-      continue;
+    // Giải lại mạch với tiếp điểm thiết bị bảo vệ mở
+    solveOutput = buildAndSolve(refinedConduction, refinedControlStates);
+    nodeVoltages = solveOutput.nodeVoltages;
+    sourceCurrents = solveOutput.sourceCurrents;
+    updateCalculations();
+
+    // BỎ QUA việc tích lũy nhiệt cho bước này cho toàn bộ linh kiện và dây còn lại
+    for (const c of components) {
+      if (dynamicallyTripped.has(c.id) || dynamicallyBlown.has(c.id)) continue;
+      const prev = prevThermalStates[c.id];
+      if (prev) {
+        thermalStates[c.id] = { ...prev };
+        if (prev.status === 'damaged') damagedComponents.push(c.id);
+        if (prev.status === 'tripped') trippedComponents.push(c.id);
+        if (prev.status === 'blown') blownComponents.push(c.id);
+      } else {
+        thermalStates[c.id] = { heat: 0, stress: 0, status: 'normal' };
+      }
     }
 
-    if (!spec) {
-      thermalStates[c.id] = { heat: 0, stress: 0, status: 'normal' };
-      continue;
+    for (const w of wires) {
+      const prevW = prevWireThermalStates[w.id];
+      wireThermalStates[w.id] = prevW ? { ...prevW } : { heat: 0, stress: 0, status: 'normal', damageType: 'melt' };
+      wireCurrents[w.id] = 0;
+    }
+  } else {
+    // Step 4: Không có thiết bị bảo vệ vừa nhảy -> Cập nhật nhiệt và hỏng hóc bình thường
+    for (const c of components) {
+      const spec = COMPONENT_THERMAL_SPECS[c.type];
+      const prev = prevThermalStates[c.id] || { heat: 0, stress: 0, status: 'normal' };
+
+      if (prev.status === 'damaged' || prev.status === 'blown') {
+        thermalStates[c.id] = { ...prev };
+        if (prev.status === 'blown') blownComponents.push(c.id);
+        if (prev.status === 'damaged') damagedComponents.push(c.id);
+        continue;
+      }
+
+      // Aptomat đang ở trạng thái hở mạch (đã nhảy hoặc công tắc tắt): giảm nhiệt theo tauCool (4s)
+      if (c.type === 'cb' || c.type === 'knife_switch') {
+        const isTripped = Boolean(c.props.isTripped) || dynamicallyTripped.has(c.id);
+        const isOpen = isTripped || !c.props.state;
+        if (isOpen) {
+          let h = prev.heat;
+          h -= (h * effectiveDt) / 4.0;
+          if (h < 0) h = 0;
+          const status = isTripped ? 'tripped' : (h > 1.0 ? 'hot' : 'normal');
+          if (isTripped && !trippedComponents.includes(c.id)) trippedComponents.push(c.id);
+          thermalStates[c.id] = {
+            heat: Math.round(h * 1000) / 1000,
+            stress: 0,
+            status,
+            damageType: 'trip',
+          };
+          continue;
+        }
+      }
+
+      if (!spec) {
+        thermalStates[c.id] = { heat: 0, stress: 0, status: 'normal' };
+        continue;
+      }
+
+      const cur = componentCurrents[c.id] || 0;
+      const volt = componentVoltages[c.id] || 0;
+      const pwr = componentPowers[c.id] || 0;
+
+      const stressInfo = spec.calculateStress({
+        voltage: volt,
+        current: cur,
+        power: pwr,
+        ratedVoltage: Number(c.props.voltage || c.props.ratedVoltage),
+        ratedCurrent: Number(c.props.ratedCurrent),
+        ratedPower: Number(c.props.power || c.props.ratedPower),
+        isReversePolarity: c.type === 'capacitor_electrolytic' && ((signedCapVoltages[c.id] !== undefined ? signedCapVoltages[c.id] : volt) < -0.5),
+      });
+
+      let h = prev.heat;
+      if (stressInfo.instantExplode || (stressInfo.instantTrip && stressInfo.damageType === 'explode')) {
+        h = 2.5; // Instant explosion
+      } else if (stressInfo.instantTrip && stressInfo.damageType === 'trip') {
+        // Aptomat never damaged, trips keeping current heat
+        if (!trippedComponents.includes(c.id)) trippedComponents.push(c.id);
+        thermalStates[c.id] = { heat: Math.max(1.0, h), stress: stressInfo.stress, status: 'tripped', damageType: 'trip' };
+        statusMessages.push(`Aptomat ${c.label} NHẢY do ngắn mạch (dòng > 5·In).`);
+        continue;
+      } else if (stressInfo.instantTrip && stressInfo.damageType === 'blow') {
+        // Instant fuse blow
+        blownComponents.push(c.id);
+        thermalStates[c.id] = { heat: 2.5, stress: stressInfo.stress, status: 'blown', damageType: 'blow' };
+        statusMessages.push(`Cầu chì ${c.label} ĐỨT do ngắn mạch (dòng > 5·In).`);
+        continue;
+      } else if (stressInfo.stress > 1.0) {
+        h += (stressInfo.overloadRate * effectiveDt) / spec.tauHeatSec;
+      } else {
+        h -= (h * effectiveDt) / (spec.tauCoolSec || DEFAULT_TAU_COOL);
+        if (h < 0) h = 0;
+      }
+
+      let status: 'normal' | 'hot' | 'damaged' | 'tripped' | 'blown' = 'normal';
+      if (stressInfo.damageType === 'trip' && h >= 1.0) {
+        status = 'tripped';
+        // Giữ nguyên h >= 1.0, không đặt h = 0 khi nhảy
+        if (!trippedComponents.includes(c.id)) trippedComponents.push(c.id);
+        statusMessages.push(`Aptomat ${c.label} NHẢY do quá tải nhiệt.`);
+      } else if (stressInfo.damageType === 'blow' && h >= 1.0) {
+        status = 'blown';
+        blownComponents.push(c.id);
+        statusMessages.push(`Cầu chì ${c.label} ĐỨT do quá tải nhiệt.`);
+      } else if (h > 2.0) {
+        if (c.type !== 'cb' && c.type !== 'knife_switch') {
+          status = 'damaged';
+          damagedComponents.push(c.id);
+          statusMessages.push(`Linh kiện ${c.label} (${c.type}) ĐÃ BỊ HỎNG / CHÁY do quá tải.`);
+        } else {
+          status = 'tripped';
+          if (!trippedComponents.includes(c.id)) trippedComponents.push(c.id);
+        }
+      } else if (h > 1.0) {
+        status = 'hot';
+      }
+
+      thermalStates[c.id] = {
+        heat: Math.round(h * 1000) / 1000,
+        stress: Math.round(stressInfo.stress * 100) / 100,
+        status,
+        damageType: stressInfo.damageType,
+      };
     }
 
-    const cur = componentCurrents[c.id] || 0;
-    const volt = componentVoltages[c.id] || 0;
-    const pwr = componentPowers[c.id] || 0;
+    // Wire current & thermal accumulation
+    for (const w of wires) {
+      const fromCompId = w.from.compId;
+      const toCompId = w.to.compId;
+      let iWire = 0;
 
-    const stressInfo = spec.calculateStress({
-      voltage: volt,
-      current: cur,
-      power: pwr,
-      ratedVoltage: Number(c.props.voltage || c.props.ratedVoltage),
-      ratedCurrent: Number(c.props.ratedCurrent),
-      ratedPower: Number(c.props.power || c.props.ratedPower),
-      isReversePolarity: c.type === 'capacitor_electrolytic' && ((signedCapVoltages[c.id] !== undefined ? signedCapVoltages[c.id] : volt) < -0.5),
-    });
+      // Approximate wire current from connected components
+      if (fromCompId && toCompId && fromCompId === toCompId && deadShortSources[fromCompId]) {
+        iWire = deadShortSources[fromCompId];
+      } else if (fromCompId && deadShortSources[fromCompId]) {
+        iWire = deadShortSources[fromCompId];
+      } else if (toCompId && deadShortSources[toCompId]) {
+        iWire = deadShortSources[toCompId];
+      } else if (fromCompId && componentCurrents[fromCompId] !== undefined) {
+        iWire = componentCurrents[fromCompId];
+      } else if (toCompId && componentCurrents[toCompId] !== undefined) {
+        iWire = componentCurrents[toCompId];
+      }
 
-    let h = prev.heat;
-    if (stressInfo.instantExplode || (stressInfo.instantTrip && stressInfo.damageType === 'explode')) {
-      h = 2.5; // Instant explosion
-    } else if (stressInfo.instantTrip && stressInfo.damageType === 'trip') {
-      // Instant breaker magnetic trip
-      trippedComponents.push(c.id);
-      thermalStates[c.id] = { heat: 2.5, stress: stressInfo.stress, status: 'tripped', damageType: 'trip' };
-      statusMessages.push(`Aptomat ${c.label} NHẢY do ngắn mạch (dòng > 5·In).`);
-      continue;
-    } else if (stressInfo.instantTrip && stressInfo.damageType === 'blow') {
-      // Instant fuse blow
-      blownComponents.push(c.id);
-      thermalStates[c.id] = { heat: 2.5, stress: stressInfo.stress, status: 'blown', damageType: 'blow' };
-      statusMessages.push(`Cầu chì ${c.label} ĐỨT do ngắn mạch (dòng > 5·In).`);
-      continue;
-    } else if (stressInfo.stress > 1.0) {
-      // Heating up: dh = overloadRate * dt / tauHeat
-      h += (stressInfo.overloadRate * effectiveDt) / spec.tauHeatSec;
-    } else {
-      // Cooling down: dh = -h * dt / tauCool
-      h -= (h * effectiveDt) / (spec.tauCoolSec || DEFAULT_TAU_COOL);
-      if (h < 0) h = 0;
+      wireCurrents[w.id] = iWire;
+      const prevW = prevWireThermalStates[w.id] || { heat: 0, stress: 0, status: 'normal' };
+
+      if (prevW.status === 'damaged') {
+        wireThermalStates[w.id] = { ...prevW };
+        continue;
+      }
+
+      const wStress = calculateWireStress(iWire, w.crossSection || 2.5);
+      let hw = prevW.heat;
+
+      if (wStress.stress > 1.0) {
+        hw += (wStress.overloadRate * effectiveDt) / wStress.tauHeatSec;
+      } else {
+        hw -= (hw * effectiveDt) / wStress.tauCoolSec;
+        if (hw < 0) hw = 0;
+      }
+
+      let wStatus: 'normal' | 'hot' | 'damaged' = 'normal';
+      if (hw > 2.0) {
+        wStatus = 'damaged';
+        statusMessages.push(`Dây dẫn ${w.id} (tiết diện ${w.crossSection} mm²) ĐÃ BỊ CHÁY HỎNG!`);
+      } else if (hw > 1.0) {
+        wStatus = 'hot';
+      }
+
+      wireThermalStates[w.id] = {
+        heat: Math.round(hw * 1000) / 1000,
+        stress: Math.round(wStress.stress * 100) / 100,
+        status: wStatus,
+        damageType: 'melt',
+      };
     }
-
-    let status: 'normal' | 'hot' | 'damaged' | 'tripped' | 'blown' = 'normal';
-    if (stressInfo.damageType === 'trip' && h >= 1.0) {
-      status = 'tripped';
-      trippedComponents.push(c.id);
-      statusMessages.push(`Aptomat ${c.label} NHẢY do quá tải nhiệt.`);
-    } else if (stressInfo.damageType === 'blow' && h >= 1.0) {
-      status = 'blown';
-      blownComponents.push(c.id);
-      statusMessages.push(`Cầu chì ${c.label} ĐỨT do quá tải nhiệt.`);
-    } else if (h > 2.0) {
-      status = 'damaged';
-      damagedComponents.push(c.id);
-      statusMessages.push(`Linh kiện ${c.label} (${c.type}) ĐÃ BỊ HỎNG / CHÁY do quá tải.`);
-    } else if (h > 1.0) {
-      status = 'hot';
-    }
-
-    thermalStates[c.id] = {
-      heat: Math.round(h * 1000) / 1000,
-      stress: Math.round(stressInfo.stress * 100) / 100,
-      status,
-      damageType: stressInfo.damageType,
-    };
-  }
-
-  // 8. Wire current & thermal accumulation
-  for (const w of wires) {
-    const fromCompId = w.from.compId;
-    const toCompId = w.to.compId;
-    let iWire = 0;
-
-    // Approximate wire current from connected components
-    if (fromCompId && toCompId && fromCompId === toCompId && deadShortSources[fromCompId]) {
-      iWire = deadShortSources[fromCompId];
-    } else if (fromCompId && deadShortSources[fromCompId]) {
-      iWire = deadShortSources[fromCompId];
-    } else if (toCompId && deadShortSources[toCompId]) {
-      iWire = deadShortSources[toCompId];
-    } else if (fromCompId && componentCurrents[fromCompId] !== undefined) {
-      iWire = componentCurrents[fromCompId];
-    } else if (toCompId && componentCurrents[toCompId] !== undefined) {
-      iWire = componentCurrents[toCompId];
-    }
-
-    wireCurrents[w.id] = iWire;
-    const prevW = prevWireThermalStates[w.id] || { heat: 0, stress: 0, status: 'normal' };
-
-    if (prevW.status === 'damaged') {
-      wireThermalStates[w.id] = { ...prevW };
-      continue;
-    }
-
-    const wStress = calculateWireStress(iWire, w.crossSection || 2.5);
-    let hw = prevW.heat;
-
-    if (wStress.stress > 1.0) {
-      hw += (wStress.overloadRate * effectiveDt) / wStress.tauHeatSec;
-    } else {
-      hw -= (hw * effectiveDt) / wStress.tauCoolSec;
-      if (hw < 0) hw = 0;
-    }
-
-    let wStatus: 'normal' | 'hot' | 'damaged' = 'normal';
-    if (hw > 2.0) {
-      wStatus = 'damaged';
-      statusMessages.push(`Dây dẫn ${w.id} (tiết diện ${w.crossSection} mm²) ĐÃ BỊ CHÁY HỎNG!`);
-    } else if (hw > 1.0) {
-      wStatus = 'hot';
-    }
-
-    wireThermalStates[w.id] = {
-      heat: Math.round(hw * 1000) / 1000,
-      stress: Math.round(wStress.stress * 100) / 100,
-      status: wStatus,
-      damageType: 'melt',
-    };
   }
 
   // 9. Open Circuit Analysis

@@ -151,6 +151,7 @@ interface WorkspaceStore {
   duplicateSelected: () => void;
   restoreAllDamaged: () => void;
   replaceDamagedComponent: (id: string) => void;
+  repairWire: (wireId: string) => void;
 
   // Rotation Handle
   startRotating: (compId: string, pointerAngle: number) => void;
@@ -172,6 +173,7 @@ interface WorkspaceStore {
   rerouteWireAuto: (wireId: string) => void;
   updateWireProps: (wireId: string, color: string, crossSection: number) => void;
   setWireType: (wireId: string, wireType: WireType) => void;
+  resetKwh: (compId: string) => void;
 
   // Netlist & Linter
   setHoveredPin: (pin: { compId: string; pinId: string } | null) => void;
@@ -395,7 +397,14 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 
   resetSimulation: () => {
     simulationService.reset();
-    set({ isSimulating: false, simTime: 0, statusMessage: null });
+    const { circuit } = get();
+    const nextComponents = circuit.components.map(c => {
+      if (c.type === 'kwh_meter') {
+        return { ...c, props: { ...c.props, kwh: 0 } };
+      }
+      return c;
+    });
+    set({ circuit: { ...circuit, components: nextComponents }, isSimulating: false, simTime: 0, statusMessage: null });
   },
 
   toggleShowMeterOverlay: () => {
@@ -1199,6 +1208,48 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 
     autoSaver.schedule(get().activeSlug, nextState);
     get().runLint();
+  },
+
+  repairWire: (wireId: string) => {
+    const { circuit } = get();
+    history.push(circuit);
+    const nextWires = circuit.wires.map(w => {
+      if (w.id === wireId) {
+        return { ...w, isBurnt: false };
+      }
+      return w;
+    });
+    const nextState = { ...circuit, wires: nextWires };
+    simulationService.repairWire(wireId);
+    set({
+      circuit: nextState,
+      canUndo: history.canUndo(),
+      canRedo: history.canRedo(),
+      statusMessage: `Đã nối lại dây dẫn ${wireId}.`,
+    });
+
+    autoSaver.schedule(get().activeSlug, nextState);
+    get().runLint();
+  },
+
+  resetKwh: (compId: string) => {
+    const { circuit } = get();
+    history.push(circuit);
+    const nextComponents = circuit.components.map(c => {
+      if (c.id === compId) {
+        return { ...c, props: { ...c.props, kwh: 0 } };
+      }
+      return c;
+    });
+    const nextState = { ...circuit, components: nextComponents };
+    simulationService.resetKwh(compId);
+    set({
+      circuit: nextState,
+      canUndo: history.canUndo(),
+      canRedo: history.canRedo(),
+      statusMessage: `Đã đặt lại số đo công tơ điện ${compId}.`,
+    });
+    autoSaver.schedule(get().activeSlug, nextState);
   },
 
   // ---------------- WIRING OPERATIONS ----------------

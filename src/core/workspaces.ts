@@ -3,7 +3,7 @@
  */
 
 import { WorkspaceConfig } from './model';
-import { HOUSEHOLD_PRESETS, ELECTRONICS_PRESETS } from './presets';
+import { HOUSEHOLD_PRESETS, ELECTRONICS_PRESETS, SENSOR_PRESETS } from './presets';
 
 export const WORKSPACE_HOUSEHOLD: WorkspaceConfig = {
   slug: 'mang-dien-trong-nha',
@@ -125,9 +125,47 @@ export const WORKSPACE_TEST: WorkspaceConfig = {
   },
 };
 
+export const WORKSPACE_SENSOR_CONTROL: WorkspaceConfig = {
+  slug: 'mach-dieu-khien-cam-bien',
+  title: 'Mạch điều khiển cảm biến',
+  grades: 'Lớp 8, 9, 10',
+  description: 'Mô phỏng mạch điều khiển tự động sử dụng mô-đun cảm biến (ánh sáng, nhiệt độ, độ ẩm) và mô-đun rơ le đóng ngắt tải điện một chiều (DC 5 V).',
+  mode: 'dc',
+  paletteIds: [
+    'dc_source',
+    'gnd',
+    'switch_2p',
+    'push_button',
+    'resistor',
+    'led',
+    'lamp_dc',
+    'electric_bell',
+    'ammeter',
+    'voltmeter',
+    'ohmmeter',
+    'sensor_module',
+    'relay_module_1ch',
+    'boundary',
+    'textbox',
+  ],
+  presets: SENSOR_PRESETS,
+  helpText: `HƯỚNG DẪN MẠCH ĐIỀU KHIỂN CẢM BIẾN (LỚP 8, 9, 10):
+• Mô-đun cảm biến: Cấp nguồn VCC (3–5 V) và GND.
+  - Chân DO (Digital Output): Mức logic CAO (xấp xỉ VCC qua trở 100 Ω) hoặc THẤP (xấp xỉ 0 V).
+  - Chân AO (Analog Output): Điện áp tỉ lệ tuyến tính theo giá trị môi trường.
+  - Ngưỡng tác động và chế độ (khi < ngưỡng hoặc > ngưỡng) chỉnh linh hoạt trong panel Thuộc tính.
+• Mô-đun rơ le 1 kênh: Kích mức cao.
+  - Hút khi VCC ≥ 3.5 V và chân IN ≥ 0.6·VCC; Nhả khi IN ≤ 0.3·VCC.
+  - Tiếp điểm cách ly: COM nối NO khi hút, nối NC khi nhả.`,
+  defaultSpecs: {
+    voltage: 5,
+  },
+};
+
 export const WORKSPACE_REGISTRY: WorkspaceConfig[] = [
   WORKSPACE_HOUSEHOLD,
   WORKSPACE_ELECTRONICS,
+  WORKSPACE_SENSOR_CONTROL,
   WORKSPACE_TEST,
 ];
 
@@ -139,3 +177,4 @@ export function getWorkspaceBySlug(slug: string): WorkspaceConfig | undefined {
   if (slug === '_thu') return WORKSPACE_TEST;
   return WORKSPACE_REGISTRY.find(w => w.slug === slug);
 }
+

@@ -44,10 +44,12 @@ export const PropsPanel: React.FC<PropsPanelProps> = ({ isBottomSheet = false })
     duplicateSelected,
     restoreAllDamaged,
     replaceDamagedComponent,
+    repairWire,
     updateWireProps,
     setWireType,
     rerouteWireAuto,
     setPEForSelected,
+    resetKwh,
   } = useWorkspaceStore();
 
   const selectedComp =
@@ -170,9 +172,9 @@ export const PropsPanel: React.FC<PropsPanelProps> = ({ isBottomSheet = false })
                 />
               </div>
 
-              {selectedComp.damaged && (
-                <div className="p-1 bg-[#E5322D] text-white border border-black text-[10px] font-black text-center">
-                  Linh kiện đang bị chập / hỏng!
+              {(selectedComp.damaged || kinetics?.thermalStatus === 'damaged' || kinetics?.thermalStatus === 'blown' || selectedComp.props.isBlown) && (
+                <div className="p-1.5 bg-[#DC2626] text-white border-2 border-black text-[11px] font-black text-center tracking-wide uppercase shadow-[2px_2px_0_#000]">
+                  LINH KIỆN ĐÃ HỎNG
                 </div>
               )}
             </div>
@@ -245,25 +247,68 @@ export const PropsPanel: React.FC<PropsPanelProps> = ({ isBottomSheet = false })
                         </select>
                       )}
 
-                      {schema.kind === 'number' && (
-                        <div className="flex items-center gap-1">
-                          <input
-                            type="number"
-                            min={schema.min}
-                            max={schema.max}
-                            step={schema.step || 1}
-                            value={currentVal}
-                            onChange={(e) =>
-                              updateComponentProp(
-                                selectedComp.id,
-                                schema.key,
-                                parseFloat(e.target.value) || schema.default
-                              )
-                            }
-                            className="w-full h-[24px] px-1 border border-black text-[11px] font-black bg-white"
-                          />
-                        </div>
-                      )}
+                      {schema.kind === 'number' && (() => {
+                        let minVal = schema.min;
+                        let maxVal = schema.max;
+                        let unit = schema.unit;
+                        if (selectedComp.type === 'sensor_module') {
+                          const sType = selectedComp.props.sensorType || 'light';
+                          if (sType === 'temp' || sType === 'temperature') {
+                            minVal = -10;
+                            maxVal = 80;
+                            unit = '°C';
+                          } else if (sType === 'humidity') {
+                            minVal = 0;
+                            maxVal = 100;
+                            unit = '%RH';
+                          } else {
+                            minVal = 0;
+                            maxVal = 100;
+                            unit = '%';
+                          }
+                        }
+                        const isSlider = selectedComp.type === 'sensor_module' && (schema.key === 'envValue' || schema.key === 'threshold');
+
+                        return (
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1.5">
+                              {isSlider && (
+                                <input
+                                  type="range"
+                                  min={minVal}
+                                  max={maxVal}
+                                  step={schema.step || 1}
+                                  value={currentVal}
+                                  onChange={(e) =>
+                                    updateComponentProp(
+                                      selectedComp.id,
+                                      schema.key,
+                                      parseFloat(e.target.value) || schema.default
+                                    )
+                                  }
+                                  className="flex-1 h-3 accent-[#4169E1] cursor-pointer"
+                                />
+                              )}
+                              <input
+                                type="number"
+                                min={minVal}
+                                max={maxVal}
+                                step={schema.step || 1}
+                                value={currentVal}
+                                onChange={(e) =>
+                                  updateComponentProp(
+                                    selectedComp.id,
+                                    schema.key,
+                                    parseFloat(e.target.value) || schema.default
+                                  )
+                                }
+                                className={`${isSlider ? 'w-16' : 'w-full'} h-[24px] px-1 border border-black text-[11px] font-black bg-white text-right`}
+                              />
+                              {unit && <span className="text-[10px] font-bold text-gray-500">{unit}</span>}
+                            </div>
+                          </div>
+                        );
+                      })()}
 
                       {schema.kind === 'text' && (
                         <input
@@ -319,9 +364,61 @@ export const PropsPanel: React.FC<PropsPanelProps> = ({ isBottomSheet = false })
                 )}
               </div>
 
-              {/* 1. ĐO ĐẠC DỤNG CỤ ĐO (AMPE KẾ, VÔN KẾ, OÁT KẾ, ÔM KẾ) */}
-              {['ammeter', 'voltmeter', 'wattmeter', 'ohmmeter'].includes(selectedComp.type) ? (
+              {/* 1. ĐO ĐẠC DỤNG CỤ ĐO (AMPE KẾ, VÔN KẾ, OÁT KẾ, ÔM KẾ, CÔNG TƠ ĐIỆN) */}
+              {['ammeter', 'voltmeter', 'wattmeter', 'ohmmeter', 'kwh_meter'].includes(selectedComp.type) ? (
                 <div className="space-y-2">
+                  {/* CÔNG TƠ ĐIỆN: Đo điện năng tiêu thụ E (kWh) */}
+                  {selectedComp.type === 'kwh_meter' && (() => {
+                    const meterData = simulationSnapshot?.meters?.[selectedComp.id];
+                    const kwhVal = Number(selectedComp.props.kwh ?? 0);
+                    const pVal = meterData?.power ?? kinetics?.power ?? 0;
+                    const uVal = meterData?.voltage ?? kinetics?.voltage ?? 0;
+                    const iVal = meterData?.current ?? kinetics?.current ?? 0;
+
+                    return (
+                      <div className="space-y-1.5">
+                        <div className="bg-white border-2 border-black p-2 text-center rounded">
+                          <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                            Điện năng tích lũy (E)
+                          </div>
+                          <div className="text-[20px] font-mono font-black text-[#4169E1] leading-tight my-0.5">
+                            Điện năng: {kwhVal.toFixed(3).replace('.', ',')} kWh
+                          </div>
+                          {!isSimulating && (
+                            <p className="text-[9px] text-gray-500 italic mt-0.5">Bấm CHẠY để công tơ tích lũy điện năng</p>
+                          )}
+                        </div>
+
+                        <div className="space-y-1 text-[10px] font-mono bg-white p-1.5 border border-black/10 rounded">
+                          <div className="flex justify-between">
+                            <span className="text-gray-600 font-sans">Công suất tức thời:</span>
+                            <span className="font-bold">{pVal >= 1000 ? `${(pVal / 1000).toFixed(2).replace('.', ',')} kW` : `${pVal.toFixed(1).replace('.', ',')} W`}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600 font-sans">Điện áp tải:</span>
+                            <span className="font-bold">{uVal.toFixed(1).replace('.', ',')} V</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600 font-sans">Dòng điện cực pha:</span>
+                            <span className="font-bold">{iVal >= 1 ? `${iVal.toFixed(2).replace('.', ',')} A` : `${(iVal * 1000).toFixed(1).replace('.', ',')} mA`}</span>
+                          </div>
+                        </div>
+
+                        {/* Nút đặt lại số đo */}
+                        <button
+                          onClick={() => resetKwh(selectedComp.id)}
+                          className="w-full h-7 bg-white hover:bg-gray-100 text-black border border-black font-extrabold text-[10px] uppercase shadow-[1px_1px_0_#000] cursor-pointer mt-1"
+                        >
+                          ĐẶT LẠI SỐ ĐO
+                        </button>
+
+                        <div className="p-1 bg-[#EEF2FF] border border-[#C7D2FE] text-[#3730A3] text-[9px] rounded italic">
+                          ℹ️ Chân 1 (Pha vào), Chân 2 (Pha ra tải), Chân 3 (Trung tính vào), Chân 4 (Trung tính ra tải).
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   {/* ÔM KẾ: Tự động đo kể cả khi chưa bấm CHẠY */}
                   {selectedComp.type === 'ohmmeter' && (() => {
                     const ohmRes = solveOhmmeterResistance(circuit.components, circuit.wires, circuit.junctions, selectedComp.id);
@@ -488,7 +585,7 @@ export const PropsPanel: React.FC<PropsPanelProps> = ({ isBottomSheet = false })
                           <span className="text-gray-600 font-sans text-[10px]">Trạng thái:</span>
                           <span className={`font-black text-[10px] ${
                             kinetics?.thermalStatus === 'damaged' ? 'text-[#DC2626]' :
-                            kinetics?.thermalStatus === 'tripped' ? 'text-[#DC2626]' :
+                            kinetics?.thermalStatus === 'tripped' ? 'text-[#D97706]' :
                             kinetics?.thermalStatus === 'blown' ? 'text-[#DC2626]' :
                             kinetics?.thermalStatus === 'hot' ? 'text-[#EA580C]' :
                             kinetics?.isOperating ? 'text-[#059669]' : 'text-gray-500'
@@ -501,6 +598,42 @@ export const PropsPanel: React.FC<PropsPanelProps> = ({ isBottomSheet = false })
                           </span>
                         </div>
                       </div>
+
+                      {/* Cảm biến & Rơ le: Trạng thái DO, AO, HÚT/NHẢ */}
+                      {selectedComp.type === 'sensor_module' && (
+                        <div className="pt-1 border-t border-black/10 space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-gray-600 font-sans text-[10px]">Trạng thái DO:</span>
+                            <span className={`px-1.5 py-0.5 text-[10px] font-black border border-black ${
+                              selectedComp.props._doHigh
+                                ? 'bg-[#DC2626] text-white'
+                                : 'bg-gray-200 text-gray-700'
+                            }`}>
+                              {selectedComp.props._doHigh ? 'CAO (HIGH ~5V)' : 'THẤP (LOW ~0V)'}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-gray-600 font-sans text-[10px]">Điện áp AO:</span>
+                            <span className="font-bold text-black font-mono">
+                              {selectedComp.props._aoVoltage != null ? `${selectedComp.props._aoVoltage.toFixed(2).replace('.', ',')} V` : '—'}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                      {selectedComp.type === 'relay_module_1ch' && (
+                        <div className="pt-1 border-t border-black/10 space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-gray-600 font-sans text-[10px]">Trạng thái Rơ le:</span>
+                            <span className={`px-1.5 py-0.5 text-[10px] font-black border border-black ${
+                              selectedComp.props._isEnergized
+                                ? 'bg-[#2DB84D] text-white'
+                                : 'bg-gray-200 text-gray-700'
+                            }`}>
+                              {selectedComp.props._isEnergized ? 'HÚT (ĐÓNG COM–NO)' : 'NHẢ (ĐÓNG COM–NC)'}
+                            </span>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div className="py-2 text-center space-y-1">
@@ -513,19 +646,24 @@ export const PropsPanel: React.FC<PropsPanelProps> = ({ isBottomSheet = false })
                   {(kinetics?.thermalStatus === 'tripped' || selectedComp.props.isTripped) && (
                     <button
                       onClick={() => replaceDamagedComponent(selectedComp.id)}
-                      className="w-full h-7 bg-[#2DB84D] text-white border-2 border-black font-black text-[10px] uppercase shadow-[2px_2px_0_#000] cursor-pointer hover:bg-[#25A244]"
+                      className="w-full h-8 bg-[#FFD84D] text-black border-2 border-black font-black text-[11px] uppercase shadow-[2px_2px_0_#000] cursor-pointer hover:bg-[#FACC15]"
                     >
                       ĐÓNG LẠI APTOMAT
                     </button>
                   )}
 
                   {(kinetics?.thermalStatus === 'damaged' || kinetics?.thermalStatus === 'blown' || selectedComp.damaged || selectedComp.props.isBlown) && (
-                    <button
-                      onClick={() => replaceDamagedComponent(selectedComp.id)}
-                      className="w-full h-7 bg-[#E5322D] text-white border-2 border-black font-black text-[10px] uppercase shadow-[2px_2px_0_#000] cursor-pointer hover:bg-[#C8231E]"
-                    >
-                      THAY LINH KIỆN MỚI
-                    </button>
+                    <div className="space-y-1.5 pt-1">
+                      <div className="p-1.5 bg-[#DC2626] text-white border-2 border-black text-[11px] font-black text-center tracking-wide uppercase shadow-[2px_2px_0_#000]">
+                        LINH KIỆN ĐÃ HỎNG
+                      </div>
+                      <button
+                        onClick={() => replaceDamagedComponent(selectedComp.id)}
+                        className="w-full h-8 bg-[#DC2626] text-white border-2 border-black font-black text-[11px] uppercase shadow-[2px_2px_0_#000] cursor-pointer hover:bg-[#B91C1C] transition-colors"
+                      >
+                        THAY LINH KIỆN MỚI
+                      </button>
+                    </div>
                   )}
                 </div>
               )}
@@ -728,6 +866,23 @@ export const PropsPanel: React.FC<PropsPanelProps> = ({ isBottomSheet = false })
 
             {/* Wire Actions */}
             <div className="space-y-1.5">
+              {(selectedWire.isBurnt || simulationSnapshot?.wireFlows?.[selectedWire.id]?.isMelted) && (
+                <div className="p-2 bg-[#FEE2E2] border-2 border-[#B71C1C] space-y-1.5">
+                  <div className="p-1 bg-[#DC2626] text-white border border-black text-[10px] font-black text-center uppercase tracking-wide">
+                    DÂY DẪN ĐÃ BỊ CHÁY HỎNG
+                  </div>
+                  <NeoButton
+                    variant="primary"
+                    onClick={() => repairWire(selectedWire.id)}
+                    icon={<Sparkles size={12} strokeWidth={3} />}
+                    className="w-full !h-[28px] !text-[11px] !bg-[#2DB84D] !text-white !border-black"
+                    title="Nối lại đoạn dây đã cháy"
+                  >
+                    NỐI LẠI DÂY
+                  </NeoButton>
+                </div>
+              )}
+
               <NeoButton
                 variant="secondary"
                 onClick={() => rerouteWireAuto(selectedWire.id)}

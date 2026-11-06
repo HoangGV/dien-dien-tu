@@ -327,3 +327,112 @@ export const ELECTRONICS_PRESETS: Preset[] = [
   },
 ];
 
+// ----------------------------------------------------
+// Mạch điều khiển cảm biến (Sensor presets)
+// ----------------------------------------------------
+
+export function createPresetSensorR(): CircuitState {
+  const src: ComponentInstance = { id: 'src1', type: 'dc_source', x: 80, y: 160, rot: 0, flip: false, label: 'E', props: { voltage: 5 } };
+  const sensor: ComponentInstance = {
+    id: 'cb1',
+    type: 'sensor_module',
+    x: 260,
+    y: 120,
+    rot: 0,
+    flip: false,
+    label: 'CB_AS',
+    props: { sensorType: 'light', envValue: 30, threshold: 50, triggerCondition: 'below' },
+  };
+  const relay: ComponentInstance = {
+    id: 'rl1',
+    type: 'relay_module_1ch',
+    x: 440,
+    y: 160,
+    rot: 0,
+    flip: false,
+    label: 'RL1',
+    props: { ratedCurrent: 10 },
+  };
+  const lamp: ComponentInstance = {
+    id: 'den1',
+    type: 'lamp_dc',
+    x: 620,
+    y: 160,
+    rot: 0,
+    flip: false,
+    label: 'Đ1',
+    props: { voltage: 5, power: 1 },
+  };
+
+  const w1 = makePresetWire('w1', 'src1', 'pos', 'cb1', 'vcc', [{ x: 120, y: 160 }, { x: 160, y: 160 }, { x: 160, y: 95 }, { x: 210, y: 95 }], 'phase');
+  const w2 = makePresetWire('w2', 'src1', 'pos', 'rl1', 'vcc', [{ x: 160, y: 160 }, { x: 160, y: 40 }, { x: 390, y: 40 }, { x: 390, y: 110 }], 'phase');
+  const w3 = makePresetWire('w3', 'src1', 'pos', 'rl1', 'com', [{ x: 160, y: 160 }, { x: 160, y: 260 }, { x: 490, y: 260 }, { x: 490, y: 210 }], 'phase');
+  const w4 = makePresetWire('w4', 'src1', 'neg', 'cb1', 'gnd', [{ x: 120, y: 180 }, { x: 180, y: 180 }, { x: 180, y: 115 }, { x: 210, y: 115 }], 'neutral');
+  const w5 = makePresetWire('w5', 'src1', 'neg', 'rl1', 'gnd', [{ x: 180, y: 180 }, { x: 180, y: 280 }, { x: 390, y: 280 }, { x: 390, y: 160 }], 'neutral');
+  const w6 = makePresetWire('w6', 'cb1', 'do', 'rl1', 'in', [{ x: 310, y: 95 }, { x: 350, y: 95 }, { x: 350, y: 210 }, { x: 390, y: 210 }], 'phase');
+  const w7 = makePresetWire('w7', 'rl1', 'no', 'den1', '1', [{ x: 490, y: 110 }, { x: 550, y: 110 }, { x: 550, y: 160 }, { x: 580, y: 160 }], 'phase');
+  const w8 = makePresetWire('w8', 'den1', '2', 'src1', 'neg', [{ x: 660, y: 160 }, { x: 680, y: 160 }, { x: 680, y: 300 }, { x: 120, y: 300 }, { x: 120, y: 180 }], 'neutral');
+
+  return { components: [src, sensor, relay, lamp], wires: [w1, w2, w3, w4, w5, w6, w7, w8], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+}
+
+export function createPresetSensorS(): CircuitState {
+  const src: ComponentInstance = { id: 'src1', type: 'dc_source', x: 80, y: 160, rot: 0, flip: false, label: 'E', props: { voltage: 5 } };
+  const sensor: ComponentInstance = {
+    id: 'cb1',
+    type: 'sensor_module',
+    x: 260,
+    y: 120,
+    rot: 0,
+    flip: false,
+    label: 'CB_ND',
+    props: { sensorType: 'temp', envValue: 40, threshold: 35, triggerCondition: 'above' },
+  };
+  const relay: ComponentInstance = {
+    id: 'rl1',
+    type: 'relay_module_1ch',
+    x: 440,
+    y: 160,
+    rot: 0,
+    flip: false,
+    label: 'RL1',
+    props: { ratedCurrent: 10 },
+  };
+  const load: ComponentInstance = {
+    id: 'tai1',
+    type: 'lamp_dc',
+    x: 620,
+    y: 160,
+    rot: 0,
+    flip: false,
+    label: 'Đ1',
+    props: { voltage: 5, power: 1 },
+  };
+
+  const w1 = makePresetWire('w1', 'src1', 'pos', 'cb1', 'vcc', [{ x: 120, y: 160 }, { x: 160, y: 160 }, { x: 160, y: 95 }, { x: 210, y: 95 }], 'phase');
+  const w2 = makePresetWire('w2', 'src1', 'pos', 'rl1', 'vcc', [{ x: 160, y: 160 }, { x: 160, y: 40 }, { x: 390, y: 40 }, { x: 390, y: 110 }], 'phase');
+  const w3 = makePresetWire('w3', 'src1', 'pos', 'rl1', 'com', [{ x: 160, y: 160 }, { x: 160, y: 260 }, { x: 490, y: 260 }, { x: 490, y: 210 }], 'phase');
+  const w4 = makePresetWire('w4', 'src1', 'neg', 'cb1', 'gnd', [{ x: 120, y: 180 }, { x: 180, y: 180 }, { x: 180, y: 115 }, { x: 210, y: 115 }], 'neutral');
+  const w5 = makePresetWire('w5', 'src1', 'neg', 'rl1', 'gnd', [{ x: 180, y: 180 }, { x: 180, y: 280 }, { x: 390, y: 280 }, { x: 390, y: 160 }], 'neutral');
+  const w6 = makePresetWire('w6', 'cb1', 'do', 'rl1', 'in', [{ x: 310, y: 95 }, { x: 350, y: 95 }, { x: 350, y: 210 }, { x: 390, y: 210 }], 'phase');
+  const w7 = makePresetWire('w7', 'rl1', 'no', 'tai1', '1', [{ x: 490, y: 110 }, { x: 550, y: 110 }, { x: 550, y: 160 }, { x: 580, y: 160 }], 'phase');
+  const w8 = makePresetWire('w8', 'tai1', '2', 'src1', 'neg', [{ x: 660, y: 160 }, { x: 680, y: 160 }, { x: 680, y: 300 }, { x: 120, y: 300 }, { x: 120, y: 180 }], 'neutral');
+
+  return { components: [src, sensor, relay, load], wires: [w1, w2, w3, w4, w5, w6, w7, w8], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+}
+
+export const SENSOR_PRESETS: Preset[] = [
+  {
+    id: 'sn_r',
+    title: 'r) Đèn tự bật khi trời tối (Cảm biến ánh sáng + Rơ le + Đèn nhỏ 5 V)',
+    description: 'Trời tối (ánh sáng < ngưỡng 50%): ngõ ra DO lên mức cao (5 V), kích rơ le hút đóng tiếp điểm COM–NO cấp điện cho đèn nhỏ 5 V sáng.',
+    state: createPresetSensorR(),
+  },
+  {
+    id: 'sn_s',
+    title: 's) Bật tải khi nóng (Cảm biến nhiệt độ + Rơ le + Tải)',
+    description: 'Nhiệt độ môi trường vượt ngưỡng 35 °C: ngõ ra DO lên mức cao, kích rơ le đóng mạch cấp nguồn cho tải hoạt động.',
+    state: createPresetSensorS(),
+  },
+];
+

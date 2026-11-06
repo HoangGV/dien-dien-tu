@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle, Info, FlaskConical } from 'lucide-react';
 import { useWorkspaceStore } from '../store/workspaceStore';
+import { simulationService } from '../core/simulationService';
 import { TopBar } from '../components/layout/TopBar';
 import { Palette } from '../components/ui/Palette';
 import { PropsPanel } from '../components/ui/PropsPanel';
@@ -46,6 +47,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ slug }) => {
 
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [lintModalOpen, setLintModalOpen] = useState(false);
+  const [energyMult, setEnergyMult] = useState(simulationService.getEnergyMultiplier() || 1);
 
   // Viewport width measurement for 3 layout tiers
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
@@ -265,25 +267,52 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ slug }) => {
             </div>
           )}
 
-          {/* Speed Buttons [x0.1] [x1] [x10] */}
+          {/* Speed Buttons [x0.1] [x1] [x10] & Tua nhanh kWh [x1] [x60] [x600] [x3600] */}
           {isSimulating && (
-            <div className="flex items-center border border-black bg-white overflow-hidden text-[9px] font-black">
-              {[0.1, 1.0, 10.0].map((spd) => {
-                const label = spd === 0.1 ? '×0,1' : spd === 1.0 ? '×1' : '×10';
-                const isActive = Math.abs(timeSpeed - spd) < 0.01;
-                return (
-                  <button
-                    key={spd}
-                    onClick={() => setTimeSpeed(spd)}
-                    className={`px-1.5 py-0.5 border-r last:border-r-0 border-black transition-colors ${
-                      isActive ? 'bg-[#FFD84D] text-black font-extrabold' : 'bg-white hover:bg-gray-100 text-gray-700'
-                    }`}
-                    title={`Tốc độ mô phỏng ${label}`}
-                  >
-                    {label}
-                  </button>
-                );
-              })}
+            <div className="flex items-center gap-1.5">
+              <div className="flex items-center border border-black bg-white overflow-hidden text-[9px] font-black">
+                {[0.1, 1.0, 10.0].map((spd) => {
+                  const label = spd === 0.1 ? '×0,1' : spd === 1.0 ? '×1' : '×10';
+                  const isActive = Math.abs(timeSpeed - spd) < 0.01;
+                  return (
+                    <button
+                      key={spd}
+                      onClick={() => setTimeSpeed(spd)}
+                      className={`px-1.5 py-0.5 border-r last:border-r-0 border-black transition-colors ${
+                        isActive ? 'bg-[#FFD84D] text-black font-extrabold' : 'bg-white hover:bg-gray-100 text-gray-700'
+                      }`}
+                      title={`Tốc độ mô phỏng ${label}`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="flex items-center border border-black bg-white overflow-hidden text-[9px] font-black">
+                <span className="px-1 py-0.5 bg-[#EEF2FF] border-r border-black text-gray-600 font-bold">
+                  TUA:
+                </span>
+                {[1, 60, 600, 3600].map((spd) => {
+                  const label = `×${spd}`;
+                  const isActive = energyMult === spd;
+                  return (
+                    <button
+                      key={spd}
+                      onClick={() => {
+                        setEnergyMult(spd);
+                        simulationService.setEnergyMultiplier(spd);
+                      }}
+                      className={`px-1.5 py-0.5 border-r last:border-r-0 border-black transition-colors ${
+                        isActive ? 'bg-[#FFD84D] text-black font-extrabold' : 'bg-white hover:bg-gray-100 text-gray-700'
+                      }`}
+                      title={`Tua nhanh điện năng công tơ ${label}`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
 

@@ -239,9 +239,54 @@ export const COMPONENT_THERMAL_SPECS: Record<string, ComponentThermalSpec> = {
       };
     },
   },
+  lamp_dc: {
+    tauHeatSec: 0.5,
+    tauCoolSec: DEFAULT_TAU_COOL,
+    calculateStress: ({ voltage, ratedVoltage = 5 }) => {
+      const s = Math.abs(voltage) / (1.25 * (ratedVoltage || 5));
+      const overloadRate = s > 1 ? s * s - 1 : 0;
+      return {
+        stress: s,
+        damageType: 'burn',
+        overloadRate,
+      };
+    },
+  },
+  relay_module_1ch: {
+    tauHeatSec: 5.0,
+    tauCoolSec: DEFAULT_TAU_COOL,
+    calculateStress: ({ current, ratedCurrent = 10 }) => {
+      const s = Math.abs(current) / (ratedCurrent || 10);
+      const overloadRate = s > 1 ? s * s - 1 : 0;
+      return {
+        stress: s,
+        damageType: 'burn',
+        overloadRate,
+      };
+    },
+  },
 
   // Circuit Breaker (MCB / CB): s = I / In, overload = s² - 1, tau = 8s; I > 5*In -> instant trip (<= 20ms)
   cb: {
+    tauHeatSec: 8.0,
+    tauCoolSec: DEFAULT_TAU_COOL,
+    calculateStress: ({ current, ratedCurrent = 16 }) => {
+      const iAbs = Math.abs(current);
+      const inVal = ratedCurrent || 16;
+      const s = iAbs / inVal;
+      const instantTrip = s >= 5.0; // Magnetic trip curve
+      const overloadRate = s > 1 ? s * s - 1 : 0;
+      return {
+        stress: s,
+        instantTrip,
+        damageType: 'trip',
+        overloadRate,
+      };
+    },
+  },
+
+  // Knife Switch / Cầu dao: behaves identically to MCB in terms of protection tripping
+  knife_switch: {
     tauHeatSec: 8.0,
     tauCoolSec: DEFAULT_TAU_COOL,
     calculateStress: ({ current, ratedCurrent = 16 }) => {
@@ -291,7 +336,7 @@ export function calculateWireStress(current: number, crossSection: number = 2.5)
     stress: s,
     iMax,
     overloadRate,
-    tauHeatSec: 6.0,
+    tauHeatSec: crossSection <= 1.0 ? 5.0 : 12.0,
     tauCoolSec: DEFAULT_TAU_COOL,
   };
 }

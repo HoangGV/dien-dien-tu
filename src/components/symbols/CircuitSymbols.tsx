@@ -472,7 +472,7 @@ export const FuseSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPi
     <g>
       {poleYOffsets.map((py, i) => (
         <g key={i} transform={`translate(0, ${py})`}>
-          <rect x={-20} y={-7} width={40} height={14} fill="#FFFFFF" stroke="#000000" strokeWidth={2} />
+          <rect x={-20} y={-7} width={40} height={14} fill={isBlown || comp.damaged ? 'rgba(220, 38, 38, 0.3)' : '#FFFFFF'} stroke={isBlown || comp.damaged ? '#B71C1C' : '#000000'} strokeWidth={2} />
           {isBlown ? (
             <path d="M -40 0 L -8 0 M 8 0 L 40 0" stroke="#000" strokeWidth={2} />
           ) : (
@@ -773,9 +773,9 @@ export const CeilingFanSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown
   let bladeStroke = '#000000';
   let bladeOpacity = 1.0;
 
-  if (thermalStatus === 'damaged') {
-    bladeFill = '#18181B';
-    bladeStroke = '#DC2626';
+  if (thermalStatus === 'damaged' || comp.damaged) {
+    bladeFill = 'rgba(220, 38, 38, 0.3)';
+    bladeStroke = '#B71C1C';
   } else if (thermalStatus === 'hot') {
     bladeFill = '#FED7AA';
     bladeStroke = '#EA580C';
@@ -1264,7 +1264,8 @@ export const LEDSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPin
   const baseColor = colorHexMap[comp.props.color || 'red'] || '#E5322D';
   const brightness = isSimulating && kinetics ? (kinetics.brightness ?? 0) : (comp.props.isOn ? 1.0 : 0);
   const isLit = brightness > 0;
-  const fillColor = comp.damaged ? '#333333' : isLit ? baseColor : '#F3F4F6';
+  const fillColor = comp.damaged ? 'rgba(220, 38, 38, 0.3)' : isLit ? baseColor : '#F3F4F6';
+  const strokeColor = comp.damaged ? '#B71C1C' : '#000000';
   const glowBlur = Math.round(brightness * 12);
 
   return (
@@ -1272,7 +1273,7 @@ export const LEDSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPin
       <polygon
         points="-8,-12 -8,12 8,0"
         fill={fillColor}
-        stroke="#000000"
+        stroke={strokeColor}
         strokeWidth={2}
         style={isLit && !comp.damaged ? { filter: `drop-shadow(0 0 ${glowBlur}px ${baseColor})` } : undefined}
       />
@@ -1319,7 +1320,7 @@ export const ResistorSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, 
 
   return (
     <g>
-      <rect x={-20} y={-8} width={40} height={16} fill={comp.damaged ? '#333333' : '#FFFFFF'} stroke="#000000" strokeWidth={2} />
+      <rect x={-20} y={-8} width={40} height={16} fill={comp.damaged ? 'rgba(220, 38, 38, 0.3)' : '#FFFFFF'} stroke={comp.damaged ? '#B71C1C' : '#000000'} strokeWidth={2} />
       <line x1={-40} y1={0} x2={-20} y2={0} stroke="#000" strokeWidth={2} />
       <line x1={20} y1={0} x2={40} y2={0} stroke="#000" strokeWidth={2} />
 
@@ -1560,6 +1561,314 @@ export const TextBoxSymbol: React.FC<SymbolProps> = ({ comp, isSelected }) => {
           </tspan>
         ))}
       </text>
+    </g>
+  );
+};
+
+// ----------------------------------------------------
+// MÔ-ĐUN CẢM BIẾN (sensor_module)
+// Chân: VCC, GND (trái), DO, AO (phải)
+// ----------------------------------------------------
+export const SensorModuleSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPinHover, hoveredPinId }) => {
+  const { simulationSnapshot } = useWorkspaceStore();
+  const kinetics = simulationSnapshot?.componentKinetics?.[comp.id];
+  const isDoHigh = Boolean(kinetics?.isOperating ?? comp.props._doHigh);
+
+  const sensorType = comp.props.sensorType || 'light';
+  const labelText =
+    sensorType === 'temperature' ? 'NHIỆT ĐỘ' : sensorType === 'humidity' ? 'ĐỘ ẨM' : 'ÁNH SÁNG';
+
+  const pins: PinDef[] = [
+    { id: 'vcc', label: 'VCC', dx: -2, dy: -1, polarity: '+' },
+    { id: 'gnd', label: 'GND', dx: -2, dy: 1, polarity: '-' },
+    { id: 'do', label: 'DO', dx: 2, dy: -1 },
+    { id: 'ao', label: 'AO', dx: 2, dy: 1 },
+  ];
+
+  return (
+    <g>
+      {/* Thân mô-đun chữ nhật */}
+      <rect
+        x={-28}
+        y={-24}
+        width={56}
+        height={48}
+        fill="#FFFFFF"
+        stroke="#000000"
+        strokeWidth={2}
+        rx={2}
+      />
+
+      {/* Header bar */}
+      <rect
+        x={-28}
+        y={-24}
+        width={56}
+        height={11}
+        fill="#EEF2FF"
+        stroke="#000000"
+        strokeWidth={1}
+      />
+      <UprightText
+        x={0}
+        y={-18.5}
+        rot={comp.rot}
+        flip={comp.flip}
+        flipY={comp.flipY}
+        fontSize={7.5}
+        fontWeight={900}
+        fill="#4F46E5"
+      >
+        MÔ-ĐUN CẢM BIẾN
+      </UprightText>
+
+      {/* Tên loại cảm biến ở giữa */}
+      <UprightText
+        x={0}
+        y={-2}
+        rot={comp.rot}
+        flip={comp.flip}
+        flipY={comp.flipY}
+        fontSize={10}
+        fontWeight={900}
+        fill="#000000"
+      >
+        {labelText}
+      </UprightText>
+
+      {/* Đèn LED chỉ báo mức logic DO */}
+      <circle
+        cx={18}
+        cy={-14}
+        r={3}
+        fill={isDoHigh ? '#EF4444' : '#D1D5DB'}
+        stroke="#000000"
+        strokeWidth={1}
+      />
+      {isDoHigh && (
+        <circle cx={18} cy={-14} r={5} fill="none" stroke="#EF4444" strokeWidth={1} opacity={0.6} />
+      )}
+
+      {/* Lines nối chân ra mép */}
+      <line x1={-40} y1={-20} x2={-28} y2={-20} stroke="#000000" strokeWidth={2} />
+      <line x1={-40} y1={20} x2={-28} y2={20} stroke="#000000" strokeWidth={2} />
+      <line x1={28} y1={-20} x2={40} y2={-20} stroke="#000000" strokeWidth={2} />
+      <line x1={28} y1={20} x2={40} y2={20} stroke="#000000" strokeWidth={2} />
+
+      {pins.map((p) => (
+        <PinDot
+          key={p.id}
+          pin={p}
+          rot={comp.rot}
+          flip={comp.flip}
+          flipY={comp.flipY}
+          onPointerDown={onPinPointerDown}
+          onHover={onPinHover}
+          isHovered={hoveredPinId === p.id}
+        />
+      ))}
+    </g>
+  );
+};
+
+// ----------------------------------------------------
+// MÔ-ĐUN RƠ LE 1 KÊNH (relay_module_1ch)
+// Chân: VCC, GND, IN (trái), NO, COM, NC (phải)
+// ----------------------------------------------------
+export const RelayModuleSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPinHover, hoveredPinId }) => {
+  const { simulationSnapshot } = useWorkspaceStore();
+  const kinetics = simulationSnapshot?.componentKinetics?.[comp.id];
+  const isEnergized = Boolean(kinetics?.isOperating ?? comp.props._isEnergized);
+
+  const pins: PinDef[] = [
+    { id: 'vcc', label: 'VCC', dx: -2.5, dy: -1.2, polarity: '+' },
+    { id: 'gnd', label: 'GND', dx: -2.5, dy: 0, polarity: '-' },
+    { id: 'in', label: 'IN', dx: -2.5, dy: 1.2 },
+    { id: 'no', label: 'NO', dx: 2.5, dy: -1.2 },
+    { id: 'com', label: 'COM', dx: 2.5, dy: 0 },
+    { id: 'nc', label: 'NC', dx: 2.5, dy: 1.2 },
+  ];
+
+  return (
+    <g>
+      {/* Khung rơ le chữ nhật */}
+      <rect
+        x={-34}
+        y={-28}
+        width={68}
+        height={56}
+        fill="#FFFFFF"
+        stroke="#000000"
+        strokeWidth={2}
+        rx={3}
+      />
+
+      {/* Header bar */}
+      <rect
+        x={-34}
+        y={-28}
+        width={68}
+        height={11}
+        fill="#FEF3C7"
+        stroke="#000000"
+        strokeWidth={1}
+      />
+      <UprightText
+        x={0}
+        y={-22.5}
+        rot={comp.rot}
+        flip={comp.flip}
+        flipY={comp.flipY}
+        fontSize={7.5}
+        fontWeight={900}
+        fill="#B45309"
+      >
+        MÔ-ĐUN RƠ LE 1 KÊNH
+      </UprightText>
+
+      {/* Đèn LED trạng thái hút (Xanh khi hút, xám khi nhả) */}
+      <circle
+        cx={-18}
+        cy={-14}
+        r={3}
+        fill={isEnergized ? '#10B981' : '#D1D5DB'}
+        stroke="#000000"
+        strokeWidth={1}
+      />
+      {isEnergized && (
+        <circle cx={-18} cy={-14} r={5} fill="none" stroke="#10B981" strokeWidth={1} opacity={0.6} />
+      )}
+      <UprightText
+        x={-8}
+        y={-14}
+        rot={comp.rot}
+        flip={comp.flip}
+        flipY={comp.flipY}
+        fontSize={7}
+        fontWeight={800}
+        fill={isEnergized ? '#059669' : '#6B7280'}
+      >
+        {isEnergized ? 'HÚT' : 'NHẢ'}
+      </UprightText>
+
+      {/* Sơ đồ tiếp điểm giữa COM, NO, NC */}
+      {/* Điểm COM */}
+      <circle cx={14} cy={0} r={2} fill="#000" />
+      {/* Điểm NO */}
+      <circle cx={22} cy={-16} r={2} fill="#000" />
+      {/* Điểm NC */}
+      <circle cx={22} cy={16} r={2} fill="#000" />
+      {/* Lưỡi dao tiếp điểm: từ COM (14, 0) sang NO (22, -14) nếu hút, sang NC (22, 14) nếu nhả */}
+      <line
+        x1={14}
+        y1={0}
+        x2={isEnergized ? 21 : 21}
+        y2={isEnergized ? -14 : 14}
+        stroke={isEnergized ? '#059669' : '#000000'}
+        strokeWidth={2}
+      />
+
+      {/* Cuộn dây rơ le kí hiệu hộp nhỏ bên trái */}
+      <rect x={-18} y={-4} width={12} height={16} fill="#F3F4F6" stroke="#000" strokeWidth={1} />
+      <line x1={-18} y1={-4} x2={-6} y2={12} stroke="#000" strokeWidth={1} />
+
+      {/* Dây nối chân ra mép */}
+      {/* Trái: VCC (-50, -24), GND (-50, 0), IN (-50, 24) */}
+      <line x1={-50} y1={-24} x2={-34} y2={-24} stroke="#000000" strokeWidth={2} />
+      <line x1={-50} y1={0} x2={-34} y2={0} stroke="#000000" strokeWidth={2} />
+      <line x1={-50} y1={24} x2={-34} y2={24} stroke="#000000" strokeWidth={2} />
+      {/* Phải: NO (50, -24), COM (50, 0), NC (50, 24) */}
+      <line x1={34} y1={-24} x2={50} y2={-24} stroke="#000000" strokeWidth={2} />
+      <line x1={34} y1={0} x2={50} y2={0} stroke="#000000" strokeWidth={2} />
+      <line x1={34} y1={24} x2={50} y2={24} stroke="#000000" strokeWidth={2} />
+
+      {pins.map((p) => (
+        <PinDot
+          key={p.id}
+          pin={p}
+          rot={comp.rot}
+          flip={comp.flip}
+          flipY={comp.flipY}
+          onPointerDown={onPinPointerDown}
+          onHover={onPinHover}
+          isHovered={hoveredPinId === p.id}
+        />
+      ))}
+    </g>
+  );
+};
+
+// ----------------------------------------------------
+// ĐÈN NHỎ DC (lamp_dc)
+// 2 chân: 1 và 2 (dx: -1.5, dy: 0; dx: 1.5, dy: 0)
+// ----------------------------------------------------
+export const LampDCSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPinHover, hoveredPinId }) => {
+  const { simulationSnapshot } = useWorkspaceStore();
+  const kinetics = simulationSnapshot?.componentKinetics?.[comp.id];
+  const isOperating = kinetics?.isOperating ?? false;
+  const brightness = kinetics?.brightness ?? (isOperating ? 1 : 0);
+
+  const pins: PinDef[] = [
+    { id: '1', label: '', dx: -1.5, dy: 0 },
+    { id: '2', label: '', dx: 1.5, dy: 0 },
+  ];
+
+  const bulbFill = isOperating
+    ? `rgba(251, 191, 36, ${0.4 + 0.6 * brightness})`
+    : '#FFFFFF';
+  const glowRadius = isOperating ? 18 + brightness * 6 : 0;
+
+  return (
+    <g>
+      {/* Glow effect when lit */}
+      {isOperating && (
+        <circle cx={0} cy={0} r={glowRadius} fill="rgba(253, 224, 71, 0.35)" pointerEvents="none" />
+      )}
+
+      {/* Bóng đèn tròn */}
+      <circle
+        cx={0}
+        cy={0}
+        r={14}
+        fill={bulbFill}
+        stroke="#000000"
+        strokeWidth={2}
+      />
+
+      {/* Dây tóc chữ X */}
+      <line x1={-9} y1={-9} x2={9} y2={9} stroke="#000000" strokeWidth={2} />
+      <line x1={-9} y1={9} x2={9} y2={-9} stroke="#000000" strokeWidth={2} />
+
+      {/* Text 5V */}
+      <UprightText
+        x={0}
+        y={-19}
+        rot={comp.rot}
+        flip={comp.flip}
+        flipY={comp.flipY}
+        fontSize={8}
+        fontWeight={800}
+        fill="#4B5563"
+      >
+        5V
+      </UprightText>
+
+      {/* Dây ra 2 chân */}
+      <line x1={-30} y1={0} x2={-14} y2={0} stroke="#000000" strokeWidth={2} />
+      <line x1={14} y1={0} x2={30} y2={0} stroke="#000000" strokeWidth={2} />
+
+      {pins.map((p) => (
+        <PinDot
+          key={p.id}
+          pin={p}
+          rot={comp.rot}
+          flip={comp.flip}
+          flipY={comp.flipY}
+          onPointerDown={onPinPointerDown}
+          onHover={onPinHover}
+          isHovered={hoveredPinId === p.id}
+        />
+      ))}
     </g>
   );
 };

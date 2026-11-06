@@ -159,6 +159,9 @@ export class SimulationService {
   private thermalStates: Record<string, ThermalState> = {};
   private wireThermalStates: Record<string, ThermalState> = {};
 
+  // Energy Meter speed multiplier (1, 60, 600, 3600)
+  private energyMultiplier: number = 1;
+
   // Visual particles
   private particles: VisualParticle[] = [];
   private particleIdCounter: number = 0;
@@ -202,6 +205,15 @@ export class SimulationService {
   public toggleAudio(): boolean {
     this.setAudioEnabled(!this.audioEnabled);
     return this.audioEnabled;
+  }
+
+  public setEnergyMultiplier(mult: number) {
+    this.energyMultiplier = Math.max(1, mult);
+    this.addLog(`Hệ số tua nhanh điện năng công tơ: ×${this.energyMultiplier}`);
+  }
+
+  public getEnergyMultiplier(): number {
+    return this.energyMultiplier;
   }
 
   private initAudio() {
@@ -517,6 +529,37 @@ export class SimulationService {
     this.thermalStates = solverRes.thermalStates;
     this.wireThermalStates = solverRes.wireThermalStates;
 
+    // Persist damaged flag on components
+    for (const [id, t] of Object.entries(this.thermalStates)) {
+      const comp = compiled.compMap.get(id);
+      if (comp) {
+        if (t.status === 'damaged' && comp.type !== 'cb' && comp.type !== 'knife_switch') {
+          comp.damaged = true;
+        } else if (t.status === 'tripped') {
+          comp.props.isTripped = true;
+          comp.damaged = false;
+        } else if (t.status === 'blown') {
+          comp.props.isBlown = true;
+          comp.damaged = true;
+        }
+      }
+    }
+
+    // Accumulate kWh for energy meters
+    for (const c of compiled.components) {
+      if (c.type === 'kwh_meter') {
+        const pwr = solverRes.componentPowers?.[c.id] ?? 0;
+        if (pwr > 0) {
+          const deltaKwh = (pwr * dtSim * this.energyMultiplier) / (3600 * 1000);
+          c.props.kwh = (c.props.kwh || 0) + deltaKwh;
+          if (solverRes.meterMeasurements?.[c.id]) {
+            solverRes.meterMeasurements[c.id].energyKwh = c.props.kwh;
+            solverRes.meterMeasurements[c.id].formatted = `${c.props.kwh.toFixed(3).replace('.', ',')} kWh`;
+          }
+        }
+      }
+    }
+
     // 1. Calculate Wire Flows & Overheating
     const wireFlows: Record<string, WireFlow> = {};
     for (const w of wires) {
@@ -555,8 +598,11 @@ export class SimulationService {
       }
 
       const wTherm = this.wireThermalStates[w.id];
-      const isMelted = wTherm?.status === 'damaged';
+      const isMelted = Boolean(wTherm?.status === 'damaged' || w.isBurnt);
       const isOverheated = wTherm?.status === 'hot';
+      if (isMelted) {
+        w.isBurnt = true;
+      }
 
       wireFlows[w.id] = {
         wireId: w.id,
@@ -780,6 +826,11 @@ export class SimulationService {
     this.wireThermalStates = {};
     this.addLog('Đặt lại mô phỏng về trạng thái ban đầu.');
     if (this.currentCircuitState) {
+      for (const c of this.currentCircuitState.components) {
+        if (c.type === 'kwh_meter') {
+          c.props.kwh = 0;
+        }
+      }
       const snap = this.step(0);
       this.listeners.forEach(fn => fn(snap));
     }
@@ -812,14 +863,24 @@ export class SimulationService {
   }
 
   /**
-   * Replaces a single damaged or blown component.
+   * Replaces a single damaged or blown component or re-closes tripped breaker.
    */
   public replaceDamagedComponent(compId: string) {
-    delete this.thermalStates[compId];
+    const prev = this.thermalStates[compId];
+    if (prev && prev.damageType === 'trip') {
+      // Breaker re-closed: keep current accumulated heat so it trips faster if still overloaded!
+      this.thermalStates[compId] = {
+        ...prev,
+        status: prev.heat > 1.0 ? 'hot' : 'normal',
+      };
+    } else {
+      delete this.thermalStates[compId];
+    }
+
     if (this.currentCircuitState) {
       const nextComps = this.currentCircuitState.components.map(c => {
         if (c.id === compId) {
-          return { ...c, props: { ...c.props, isTripped: false, isBlown: false, state: true } };
+          return { ...c, damaged: false, props: { ...c.props, isTripped: false, isBlown: false, state: true } };
         }
         return c;
       });
@@ -827,6 +888,40 @@ export class SimulationService {
       this.recompile(this.currentCircuitState, this.currentMode);
     }
     this.addLog(`Đã thay mới / đóng lại linh kiện ${compId}.`);
+  }
+
+  /**
+   * Resets accumulated energy (kWh) of an energy meter.
+   */
+  public resetKwh(compId: string) {
+    if (this.currentCircuitState) {
+      const comp = this.currentCircuitState.components.find(c => c.id === compId);
+      if (comp) comp.props.kwh = 0;
+    }
+    const compiled = this.compiledCircuit;
+    if (compiled) {
+      const comp = compiled.compMap.get(compId);
+      if (comp) comp.props.kwh = 0;
+    }
+    this.addLog(`Đã đặt lại số đo công tơ điện ${compId}.`);
+  }
+
+  /**
+   * Repairs a single burnt wire.
+   */
+  public repairWire(wireId: string) {
+    delete this.wireThermalStates[wireId];
+    if (this.currentCircuitState) {
+      const nextWires = this.currentCircuitState.wires.map(w => {
+        if (w.id === wireId) {
+          return { ...w, isBurnt: false };
+        }
+        return w;
+      });
+      this.currentCircuitState = { ...this.currentCircuitState, wires: nextWires };
+      this.recompile(this.currentCircuitState, this.currentMode);
+    }
+    this.addLog(`Đã nối lại dây dẫn ${wireId}.`);
   }
 
   public recompile(state: CircuitState, mode: 'rms' | 'dc' = 'rms') {
