@@ -52,6 +52,12 @@ export const COMPONENT_DEFINITIONS: ComponentDef[] = [
     width: 80,
     height: 80,
     pins: (props) => {
+      if (props.peakVoltage !== undefined) {
+        return [
+          { id: 'pos', label: '+', dx: 0, dy: -2, polarity: '+' },
+          { id: 'neg', label: '−', dx: 0, dy: 2, polarity: '-' },
+        ];
+      }
       const hasPE = Boolean(props.hasPE);
       return hasPE
         ? [
@@ -66,8 +72,11 @@ export const COMPONENT_DEFINITIONS: ComponentDef[] = [
     },
     symbol: ACSourceSymbol,
     propsSchema: [
+      { key: 'peakVoltage', label: 'Biên độ đỉnh', kind: 'number', min: 0.1, max: 100, step: 0.5, unit: 'V', default: 5 },
+      { key: 'frequency', label: 'Tần số', kind: 'number', min: 0.1, max: 10000, step: 1, unit: 'Hz', default: 50 },
+      { key: 'dcOffset', label: 'Độ lệch DC', kind: 'number', min: -50, max: 50, step: 0.5, unit: 'V', default: 0 },
+      { key: 'phase', label: 'Pha', kind: 'number', min: -180, max: 180, step: 15, unit: '°', default: 0 },
       { key: 'voltage', label: 'Điện áp hiệu dụng', kind: 'number', min: 110, max: 250, step: 5, unit: 'V', default: 220 },
-      { key: 'frequency', label: 'Tần số', kind: 'number', min: 50, max: 60, step: 10, unit: 'Hz', default: 50 },
       { key: 'hasPE', label: 'Hiện chân nối đất (PE)', kind: 'bool', default: false },
     ],
     defaultProps: { voltage: 220, frequency: 50, hasPE: false },

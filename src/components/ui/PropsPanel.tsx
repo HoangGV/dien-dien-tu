@@ -222,6 +222,11 @@ export const PropsPanel: React.FC<PropsPanelProps> = ({ isBottomSheet = false })
                   if (selectedComp.type === 'led' && schema.key === 'color') return null;
                   if (selectedComp.type === 'sensor_module' && selectedComp.props.sensorType === 'pir' && (schema.key === 'envValue' || schema.key === 'threshold' || schema.key === 'triggerCondition')) return null;
                   if (selectedComp.type === 'sensor_module' && selectedComp.props.sensorType !== 'pir' && schema.key === 'motionDetected') return null;
+                  if (selectedComp.type === 'ac_source') {
+                    const isSignal = selectedComp.props.peakVoltage !== undefined;
+                    if (isSignal && (schema.key === 'voltage' || schema.key === 'hasPE')) return null;
+                    if (!isSignal && (schema.key === 'peakVoltage' || schema.key === 'dcOffset' || schema.key === 'phase')) return null;
+                  }
                   const currentVal = selectedComp.props[schema.key] ?? schema.default;
 
                   return (
@@ -362,6 +367,15 @@ export const PropsPanel: React.FC<PropsPanelProps> = ({ isBottomSheet = false })
                     </div>
                   );
                 })}
+
+              {selectedComp.type === 'ac_source' && selectedComp.props.peakVoltage !== undefined && (
+                <div className="p-1.5 bg-[#EEF2FF] border border-[#C7D2FE] text-[#1E1B4B] text-[10px] font-mono rounded">
+                  <span className="font-bold">Điện áp hiệu dụng = </span>
+                  <span className="font-black text-[#4169E1]">
+                    {(Number(selectedComp.props.peakVoltage || 5) / Math.SQRT2).toFixed(2).replace('.', ',')} V
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* NHÓM 3: ĐO ĐẠC & TRẠNG THÁI HOẠT ĐỘNG */}

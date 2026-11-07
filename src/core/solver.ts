@@ -333,7 +333,7 @@ export function solveCircuit(
   const acSources = components.filter(c => c.type === 'ac_source');
   if (acSources.length > 0) {
     const src = acSources[0];
-    refNetId = pinToNetId.get(`${src.id}:O`) || null;
+    refNetId = pinToNetId.get(`${src.id}:neg`) || pinToNetId.get(`${src.id}:O`) || null;
   }
   if (!refNetId) {
     const dcSources = components.filter(c => c.type === 'dc_source');
@@ -389,6 +389,7 @@ export function solveCircuit(
     posNode: number;
     negNode: number;
     voltage: number;
+    rInternal?: number;
   }
   const vSources: VSourceBranch[] = [];
 
@@ -398,11 +399,23 @@ export function solveCircuit(
     // Check if source is burned/damaged
     const isDamaged = prevThermalStates[src.id]?.status === 'damaged';
     if (!isDamaged) {
-      const vPosNet = pinToNetId.get(`${src.id}:A`);
-      const vNegNet = pinToNetId.get(`${src.id}:O`);
+      const vPosNet = pinToNetId.get(`${src.id}:pos`) || pinToNetId.get(`${src.id}:A`);
+      const vNegNet = pinToNetId.get(`${src.id}:neg`) || pinToNetId.get(`${src.id}:O`);
+      const isSignalAc = src.props.peakVoltage !== undefined;
+      let vVal = 220;
+      if (isSignalAc) {
+        const vPeak = Number(src.props.peakVoltage ?? 5);
+        const freq = Number(src.props.frequency ?? 50);
+        const dcOffset = Number(src.props.dcOffset ?? 0);
+        const phaseDeg = Number(src.props.phase ?? 0);
+        const phaseRad = (phaseDeg * Math.PI) / 180;
+        vVal = dcOffset + vPeak * Math.sin(2 * Math.PI * freq * simTime + phaseRad);
+      } else {
+        vVal = Number(src.props.voltage) || 220;
+      }
+
       if (vPosNet && vNegNet && vPosNet === vNegNet) {
         // Direct dead short across source terminals!
-        const vVal = Number(src.props.voltage) || 220;
         deadShortSources[src.id] = vVal / 0.05;
       } else {
         const posIdx = vPosNet ? (nodeMap.get(vPosNet) ?? -1) : -1;
@@ -411,7 +424,8 @@ export function solveCircuit(
           id: src.id,
           posNode: posIdx,
           negNode: negIdx,
-          voltage: Number(src.props.voltage) || 220,
+          voltage: vVal,
+          rInternal: isSignalAc ? 0.05 : 0.001,
         });
       }
     }
@@ -830,13 +844,31 @@ export function solveCircuit(
         if (c.props.humanTouch) {
           addResistor(caseIdx, -1, 1000);
         }
-      } else if (c.type === 'led' || c.type === 'diode') {
+      } else if (c.type === 'diode') {
+        const netA = pinToNetId.get(`${c.id}:A`) || pinToNetId.get(`${c.id}:1`) || pinToNetId.get(`${c.id}:pos`);
+        const netK = pinToNetId.get(`${c.id}:K`) || pinToNetId.get(`${c.id}:2`) || pinToNetId.get(`${c.id}:neg`);
+        if (netA && netK) {
+          const isConducting = ledConduction[c.id] ?? true;
+          const uA = nodeMap.get(netA) ?? -1;
+          const uK = nodeMap.get(netK) ?? -1;
+          if (isConducting) {
+            const rd = 5.0; // Dynamic resistance 5 Ω
+            const vf = 0.7; // Silicon barrier 0.7 V
+            addResistor(uA, uK, rd);
+            const ieq = vf / rd;
+            if (uA >= 0) I[uA] -= ieq;
+            if (uK >= 0) I[uK] += ieq;
+          } else {
+            addResistor(uA, uK, 1e7);
+          }
+        }
+      } else if (c.type === 'led') {
         const netA = pinToNetId.get(`${c.id}:A`) || pinToNetId.get(`${c.id}:1`) || pinToNetId.get(`${c.id}:pos`);
         const netK = pinToNetId.get(`${c.id}:K`) || pinToNetId.get(`${c.id}:2`) || pinToNetId.get(`${c.id}:neg`);
         if (netA && netK) {
           const isConducting = ledConduction[c.id] ?? true;
           if (isConducting) {
-            const vf = c.type === 'diode' ? 0.7 : (c.props.color === 'blue' || c.props.color === 'white' ? 3.0 : 2.0);
+            const vf = c.props.color === 'blue' || c.props.color === 'white' ? 3.0 : 2.0;
             const rEq = (vf / 0.0146) + 10;
             addResistor(nodeMap.get(netA) ?? -1, nodeMap.get(netK) ?? -1, rEq);
           } else {
@@ -948,6 +980,9 @@ export function solveCircuit(
         G[src.negNode][branchRow] -= 1;
         G[branchRow][src.negNode] -= 1;
       }
+      if (src.rInternal && src.rInternal > 0) {
+        G[branchRow][branchRow] -= src.rInternal;
+      }
       I[branchRow] = src.voltage;
     });
 
@@ -1006,7 +1041,8 @@ export function solveCircuit(
       const netK = pinToNetId.get(`${c.id}:K`) || pinToNetId.get(`${c.id}:2`) || pinToNetId.get(`${c.id}:neg`);
       const vA = netA ? (nodeVoltages[netA] ?? 0) : 0;
       const vK = netK ? (nodeVoltages[netK] ?? 0) : 0;
-      if (vA - vK < 0.1) {
+      const vThreshold = c.type === 'diode' ? 0.65 : 1.5;
+      if (vA - vK < vThreshold) {
         refinedConduction[c.id] = false;
         needsResolve = true;
       }
@@ -1253,14 +1289,27 @@ export function solveCircuit(
           energyKwh: kwh,
           formatted: `${kwh.toFixed(3).replace('.', ',')} kWh`,
         };
-      } else if (c.type === 'led' || c.type === 'diode') {
+      } else if (c.type === 'diode') {
         const netA = pinToNetId.get(`${c.id}:A`) || pinToNetId.get(`${c.id}:1`) || pinToNetId.get(`${c.id}:pos`);
         const netK = pinToNetId.get(`${c.id}:K`) || pinToNetId.get(`${c.id}:2`) || pinToNetId.get(`${c.id}:neg`);
         const vA = netA ? (nodeVoltages[netA] ?? 0) : 0;
         const vK = netK ? (nodeVoltages[netK] ?? 0) : 0;
         const vAK = vA - vK;
         const isConducting = refinedConduction[c.id] ?? false;
-        const vf = c.type === 'diode' ? 0.7 : (c.props.color === 'blue' || c.props.color === 'white' ? 3.0 : 2.0);
+        const iDiode = isConducting ? Math.max(0, (vAK - 0.7) / 5.0) : 0;
+
+        componentVoltages[c.id] = Math.round(Math.max(0, vAK) * 100) / 100;
+        componentCurrents[c.id] = Math.round(iDiode * 10000) / 10000;
+        componentPowers[c.id] = Math.round((vAK * iDiode) * 1000) / 1000;
+        operatingStates[c.id] = isConducting && iDiode > 0.0001;
+      } else if (c.type === 'led') {
+        const netA = pinToNetId.get(`${c.id}:A`) || pinToNetId.get(`${c.id}:1`) || pinToNetId.get(`${c.id}:pos`);
+        const netK = pinToNetId.get(`${c.id}:K`) || pinToNetId.get(`${c.id}:2`) || pinToNetId.get(`${c.id}:neg`);
+        const vA = netA ? (nodeVoltages[netA] ?? 0) : 0;
+        const vK = netK ? (nodeVoltages[netK] ?? 0) : 0;
+        const vAK = vA - vK;
+        const isConducting = refinedConduction[c.id] ?? false;
+        const vf = c.props.color === 'blue' || c.props.color === 'white' ? 3.0 : 2.0;
         const rEq = (vf / 0.0146) + 10;
         const iLed = isConducting ? Math.max(0, vAK / rEq) : 0;
 

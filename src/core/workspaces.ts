@@ -58,6 +58,7 @@ export const WORKSPACE_ELECTRONICS: WorkspaceConfig = {
   paletteIds: [
     'vcc',
     'dc_source',
+    'ac_source',
     'gnd',
     'resistor',
     'potentiometer',

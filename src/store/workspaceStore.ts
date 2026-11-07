@@ -27,6 +27,7 @@ import { extractNetlist, lintCircuit, getComponentPins } from '../core/netlist';
 import { migrateCircuitState } from '../core/migration';
 import { solveCircuit } from '../core/solver';
 import { simulationService, SimulationSnapshot } from '../core/simulationService';
+import { oscilloscopeService } from '../core/oscilloscopeService';
 
 const storage = StorageService.getInstance();
 const history = new HistoryManager(DEFAULT_HISTORY_LIMIT);
@@ -302,7 +303,15 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     } else {
       autoSaver.schedule(get().activeSlug, state);
     }
-    get().runLint();
+    const hasAc = state.components.some(c => c.type === 'ac_source');
+    const isDcMode = (get().config?.mode || 'rms') === 'dc';
+    if (hasAc && isDcMode) {
+      get().setTimeSpeed(0.1);
+    }
+    const hasOsc = state.components.some(c => c.type === 'oscilloscope');
+    if (hasOsc) {
+      oscilloscopeService.autoScale(state.components);
+    }
 
     // Sửa mạch khi đang chạy: tự biên dịch lại sau 100 ms debounce, giữ trạng thái động học
     if (get().isSimulating) {
@@ -454,10 +463,19 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   },
 
   toggleOscilloscopePanel: () => {
-    set(s => ({ oscilloscopePanelOpen: !s.oscilloscopePanelOpen }));
+    set(s => {
+      const next = !s.oscilloscopePanelOpen;
+      if (next) {
+        oscilloscopeService.autoScale(s.circuit.components);
+      }
+      return { oscilloscopePanelOpen: next };
+    });
   },
 
   setOscilloscopePanelOpen: (open: boolean) => {
+    if (open) {
+      oscilloscopeService.autoScale(get().circuit.components);
+    }
     set({ oscilloscopePanelOpen: open });
   },
 
@@ -483,6 +501,17 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     const count = circuit.components.filter(c => c.type === type).length + 1;
     const label = `${def.refPrefix}${count}`;
 
+    const currentMode = get().config?.mode || 'rms';
+    const initialProps = { ...(def.defaultProps || {}) };
+    if (type === 'ac_source' && currentMode === 'dc') {
+      initialProps.peakVoltage = 5;
+      initialProps.frequency = 50;
+      initialProps.dcOffset = 0;
+      initialProps.phase = 0;
+      delete initialProps.voltage;
+      delete initialProps.hasPE;
+    }
+
     const newComp: ComponentInstance = {
       id: `c_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
       type,
@@ -492,7 +521,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       flip: false,
       flipY: false,
       label,
-      props: { ...(def.defaultProps || {}) },
+      props: initialProps,
     };
 
     const nextState: CircuitState = {
@@ -500,11 +529,17 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       components: [...circuit.components, newComp],
     };
 
+    const nextTimeSpeed = type === 'ac_source' && currentMode === 'dc' ? 0.1 : get().timeSpeed;
+    if (type === 'ac_source' && currentMode === 'dc') {
+      simulationService.setTimeSpeed(0.1);
+    }
+
     set({
       circuit: nextState,
       selectedComponentIds: [newComp.id],
       selectedWireIds: [],
       rightPanelOpen: true,
+      timeSpeed: nextTimeSpeed,
       canUndo: history.canUndo(),
       canRedo: history.canRedo(),
     });
@@ -517,6 +552,9 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     set(s => {
       const comp = s.circuit.components.find(c => c.id === id);
       const isOsc = comp?.type === 'oscilloscope';
+      if (isOsc && !s.oscilloscopePanelOpen) {
+        oscilloscopeService.autoScale(s.circuit.components);
+      }
       if (isShift) {
         const exists = s.selectedComponentIds.includes(id);
         const nextIds = exists

@@ -4,6 +4,8 @@ import { oscilloscopeService, OscilloscopeSample } from '../../core/oscilloscope
 import { formatMeasure } from '../../core/measureFormat';
 import { useWorkspaceStore } from '../../store/workspaceStore';
 
+import { simulationService } from '../../core/simulationService';
+
 export const TIME_DIV_OPTIONS = [
   { label: '1 ms', value: 0.001 },
   { label: '2 ms', value: 0.002 },
@@ -28,7 +30,7 @@ export const VOLT_DIV_OPTIONS = [
 ];
 
 export const OscilloscopePanel: React.FC = () => {
-  const { setOscilloscopePanelOpen } = useWorkspaceStore();
+  const { setOscilloscopePanelOpen, circuit, timeSpeed } = useWorkspaceStore();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // Local control state for UI button display
@@ -43,6 +45,17 @@ export const OscilloscopePanel: React.FC = () => {
   const [trigMode, setTrigMode] = useState<'auto' | 'rising'>(oscilloscopeService.triggerMode);
   const [trigLevel, setTrigLevel] = useState<number>(oscilloscopeService.triggerLevel);
 
+  // Single-shot state
+  const [isCapturing, setIsCapturing] = useState<boolean>(false);
+  const [captureProgress, setCaptureProgress] = useState<number>(0);
+
+  // Stats line below canvas
+  const [statusText, setStatusText] = useState<{ windowMs: number; sampleCount: number; isFlat: boolean }>({
+    windowMs: 200,
+    sampleCount: 0,
+    isFlat: false,
+  });
+
   // Cursor readout
   const [cursorReadout, setCursorReadout] = useState<string | null>(null);
   const cursorPointRef = useRef<{ x: number; y: number } | null>(null);
@@ -55,6 +68,31 @@ export const OscilloscopePanel: React.FC = () => {
 
   const handleClear = () => {
     oscilloscopeService.clear();
+  };
+
+  const handleAutoSet = () => {
+    oscilloscopeService.autoScale(circuit.components);
+    setTimeDiv(oscilloscopeService.timePerDiv);
+    setVDiv1(oscilloscopeService.vPerDiv1);
+    setVDiv2(oscilloscopeService.vPerDiv2);
+    setOffset1(oscilloscopeService.offset1);
+    setOffset2(oscilloscopeService.offset2);
+  };
+
+  const handleSingleShot = () => {
+    if (isCapturing) return;
+    setIsCapturing(true);
+    setCaptureProgress(0);
+    const duration = 10 * timeDiv;
+    simulationService.runSingleShotAsync(
+      duration,
+      (pct) => setCaptureProgress(pct),
+      () => {
+        setIsCapturing(false);
+        oscilloscopeService.setHeld(true);
+        setIsHeld(true);
+      }
+    );
   };
 
   const handleTimeDivChange = (val: number) => {

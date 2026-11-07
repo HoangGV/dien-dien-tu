@@ -131,6 +131,74 @@ export const SymbolLabels: React.FC<{
 
 // 1. NGUỒN ĐIỆN XOAY CHIỀU (TCVN / SGK: 2 cực A - Pha, O - Trung tính, tùy chọn PE nối đất)
 export const ACSourceSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPinHover, hoveredPinId }) => {
+  const isSignal = comp.props.peakVoltage !== undefined;
+
+  if (isSignal) {
+    const pins: PinDef[] = [
+      { id: 'pos', label: '+', dx: 0, dy: -2, polarity: '+' },
+      { id: 'neg', label: '−', dx: 0, dy: 2, polarity: '-' },
+    ];
+    return (
+      <g>
+        {/* Terminal leads */}
+        <line x1={0} y1={-22} x2={0} y2={-40} stroke="#000000" strokeWidth={2} />
+        <line x1={0} y1={22} x2={0} y2={40} stroke="#000000" strokeWidth={2} />
+
+        {/* Round circle with neo-brutalist border */}
+        <circle cx={0} cy={0} r={22} fill="#FFFFFF" stroke="#000000" strokeWidth={2.5} />
+
+        {/* Sine wave symbol ~ inside */}
+        <path
+          d="M -11 0 Q -5.5 -10 0 0 Q 5.5 10 11 0"
+          fill="none"
+          stroke="#000000"
+          strokeWidth={2.5}
+          strokeLinecap="round"
+        />
+
+        {/* Polarities + and − */}
+        <UprightText
+          x={11}
+          y={-24}
+          rot={comp.rot}
+          flip={comp.flip}
+          flipY={comp.flipY}
+          fontSize={12}
+          fontWeight={900}
+          fill="#E5322D"
+        >
+          +
+        </UprightText>
+        <UprightText
+          x={11}
+          y={24}
+          rot={comp.rot}
+          flip={comp.flip}
+          flipY={comp.flipY}
+          fontSize={14}
+          fontWeight={900}
+          fill="#4169E1"
+        >
+          −
+        </UprightText>
+
+        {pins.map((p) => (
+          <PinDot
+            key={p.id}
+            pin={p}
+            rot={comp.rot}
+            flip={comp.flip}
+            flipY={comp.flipY}
+            onPointerDown={onPinPointerDown}
+            onHover={onPinHover}
+            isHovered={hoveredPinId === p.id}
+          />
+        ))}
+        <SymbolLabels label={comp.label} rot={comp.rot} flip={comp.flip} flipY={comp.flipY} yOffset={-46} />
+      </g>
+    );
+  }
+
   const hasPE = Boolean(comp.props.hasPE);
   const pins: PinDef[] = hasPE
     ? [

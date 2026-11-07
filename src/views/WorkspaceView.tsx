@@ -51,6 +51,14 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ slug }) => {
   const [lintModalOpen, setLintModalOpen] = useState(false);
   const [energyMult, setEnergyMult] = useState(simulationService.getEnergyMultiplier() || 1);
 
+  const [isHeavy, setIsHeavy] = useState(false);
+  useEffect(() => {
+    const unsub = simulationService.subscribe(() => {
+      setIsHeavy(simulationService.isHeavyCircuit);
+    });
+    return unsub;
+  }, []);
+
   // Viewport width measurement for 3 layout tiers
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
   useEffect(() => {
@@ -276,13 +284,13 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ slug }) => {
             </div>
           )}
 
-          {/* Speed Buttons [x0.1] [x1] [x10] & Tua nhanh kWh [x1] [x60] [x600] [x3600] */}
+          {/* Speed Buttons [x0.01] [x0.1] [x1] [x10] & Tua nhanh kWh [x1] [x60] [x600] [x3600] */}
           {isSimulating && (
             <div className="flex items-center gap-1.5">
               <div className="flex items-center border border-black bg-white overflow-hidden text-[9px] font-black">
-                {[0.1, 1.0, 10.0].map((spd) => {
-                  const label = spd === 0.1 ? '×0,1' : spd === 1.0 ? '×1' : '×10';
-                  const isActive = Math.abs(timeSpeed - spd) < 0.01;
+                {[0.01, 0.1, 1.0, 10.0].map((spd) => {
+                  const label = spd === 0.01 ? '×0,01' : spd === 0.1 ? '×0,1' : spd === 1.0 ? '×1' : '×10';
+                  const isActive = Math.abs(timeSpeed - spd) < 0.005;
                   return (
                     <button
                       key={spd}
@@ -297,6 +305,13 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ slug }) => {
                   );
                 })}
               </div>
+
+              {isHeavy && (
+                <div className="hidden lg:flex items-center gap-1 bg-[#FEF3C7] text-[#92400E] border border-black px-1.5 py-0.5 text-[9px] font-bold shadow-[1px_1px_0_#000]">
+                  <AlertTriangle size={10} strokeWidth={2.5} />
+                  <span>Mạch nặng: tốc độ thực tế thấp hơn tốc độ đã chọn</span>
+                </div>
+              )}
 
               <div className="flex items-center border border-black bg-white overflow-hidden text-[9px] font-black">
                 <span className="px-1 py-0.5 bg-[#EEF2FF] border-r border-black text-gray-600 font-bold">

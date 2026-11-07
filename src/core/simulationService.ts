@@ -777,6 +777,12 @@ export class SimulationService {
   /**
    * Internal animation loop bounded by requestAnimationFrame and 8ms budget.
    */
+  public isHeavyCircuit: boolean = false;
+
+  /**
+   * Internal animation loop bounded by requestAnimationFrame and 8ms budget.
+   * Performs sub-stepping for AC sources: dt = min(1 ms, 1/(100*f_max)).
+   */
   private loop = (timestamp: number) => {
     if (!this.isRunning) return;
 
@@ -787,11 +793,41 @@ export class SimulationService {
     const elapsedMs = timestamp - this.lastRafTimestamp;
     this.lastRafTimestamp = timestamp;
 
-    const dt = Math.min(0.1, Math.max(0.001, elapsedMs / 1000));
+    const dtReal = Math.min(0.1, Math.max(0.001, elapsedMs / 1000));
+    const targetSimDt = dtReal * this.timeSpeed;
+
+    // Detect AC sources and calculate sub-step size
+    const comps = this.compiledCircuit?.components || this.currentCircuitState?.components || [];
+    const acSources = comps.filter((c) => c.type === 'ac_source');
+    let fMax = 0;
+    for (const ac of acSources) {
+      const f = Number(ac.props.frequency || 50);
+      if (f > fMax) fMax = f;
+    }
+
+    const dtSub = fMax > 0
+      ? Math.max(10e-6, Math.min(0.001, 1 / (100 * fMax)))
+      : Math.max(10e-6, Math.min(0.001, targetSimDt));
+
+    const startMs = performance.now();
+    let remainingDt = targetSimDt;
+    let isHeavy = false;
+    let lastSnap: SimulationSnapshot | null = null;
 
     try {
-      const snapshot = this.step(dt);
-      this.listeners.forEach(fn => fn(snapshot));
+      while (remainingDt > 0) {
+        if (performance.now() - startMs > 8.0) {
+          isHeavy = true;
+          break; // Frame budget reached
+        }
+        const curDt = Math.min(remainingDt, dtSub);
+        lastSnap = this.step(curDt);
+        remainingDt -= curDt;
+      }
+      this.isHeavyCircuit = isHeavy;
+      if (lastSnap) {
+        this.listeners.forEach((fn) => fn(lastSnap!));
+      }
     } catch (e: any) {
       this.addLog(`Lỗi vòng lặp mô phỏng: ${e?.message || e}`);
       console.error('Simulation loop error:', e);
@@ -800,6 +836,91 @@ export class SimulationService {
     if (this.isRunning) {
       this.rafId = requestAnimationFrame(this.loop);
     }
+  };
+
+  /**
+   * Synchronous single shot: executes simulation until `duration` is reached.
+   */
+  public runSingleShotSync(duration: number): void {
+    if (!this.compiledCircuit && this.currentCircuitState) {
+      this.compile(this.currentCircuitState, this.currentMode);
+    }
+    const comps = this.compiledCircuit?.components || this.currentCircuitState?.components || [];
+    const acSources = comps.filter((c) => c.type === 'ac_source');
+    let fMax = 0;
+    for (const ac of acSources) {
+      const f = Number(ac.props.frequency || 50);
+      if (f > fMax) fMax = f;
+    }
+    const dt = fMax > 0
+      ? Math.max(10e-6, Math.min(0.001, 1 / (100 * fMax)))
+      : Math.max(10e-6, Math.min(0.001, duration / 500));
+
+    let timeElapsed = 0;
+    while (timeElapsed < duration - 1e-9) {
+      const stepDt = Math.min(duration - timeElapsed, dt);
+      this.step(stepDt);
+      timeElapsed += stepDt;
+    }
+    oscilloscopeService.setHeld(true);
+    if (this.lastSnapshot) {
+      this.listeners.forEach((fn) => fn(this.lastSnapshot!));
+    }
+  }
+
+  /**
+   * Async single shot with progress callback (8ms slices) for UI.
+   */
+  public runSingleShotAsync(
+    duration: number,
+    onProgress?: (pct: number) => void,
+    onComplete?: () => void
+  ): () => void {
+    if (!this.compiledCircuit && this.currentCircuitState) {
+      this.compile(this.currentCircuitState, this.currentMode);
+    }
+    const comps = this.compiledCircuit?.components || this.currentCircuitState?.components || [];
+    const acSources = comps.filter((c) => c.type === 'ac_source');
+    let fMax = 0;
+    for (const ac of acSources) {
+      const f = Number(ac.props.frequency || 50);
+      if (f > fMax) fMax = f;
+    }
+    const dt = fMax > 0
+      ? Math.max(10e-6, Math.min(0.001, 1 / (100 * fMax)))
+      : Math.max(10e-6, Math.min(0.001, duration / 500));
+
+    let timeElapsed = 0;
+    let cancelled = false;
+
+    const slice = () => {
+      if (cancelled) return;
+      const startMs = performance.now();
+      while (timeElapsed < duration - 1e-9 && performance.now() - startMs < 8.0) {
+        const stepDt = Math.min(duration - timeElapsed, dt);
+        this.step(stepDt);
+        timeElapsed += stepDt;
+      }
+
+      const pct = Math.min(100, Math.round((timeElapsed / duration) * 100));
+      onProgress?.(pct);
+
+      if (timeElapsed >= duration - 1e-9) {
+        oscilloscopeService.setHeld(true);
+        if (this.lastSnapshot) {
+          this.listeners.forEach((fn) => fn(this.lastSnapshot!));
+        }
+        onComplete?.();
+      } else {
+        requestAnimationFrame(slice);
+      }
+    };
+
+    requestAnimationFrame(slice);
+
+    return () => {
+      cancelled = true;
+    };
   };
 
   public start(state?: CircuitState, mode: 'rms' | 'dc' = 'rms') {
