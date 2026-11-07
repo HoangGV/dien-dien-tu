@@ -294,6 +294,31 @@ export function createPresetElectronicsQ(): CircuitState {
   return { components: [ohm, r1, r2], wires: [w1, w2, w3], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
 }
 
+// Preset (v): Mạch nạp tụ RC + Dao động kí ảo
+export function createPresetElectronicsV(): CircuitState {
+  const v: ComponentInstance = { id: 'src1', type: 'dc_source', x: 80, y: 140, rot: 0, flip: false, label: 'E', props: { voltage: 5 } };
+  const sw: ComponentInstance = { id: 'sw1', type: 'switch_2p', x: 180, y: 100, rot: 0, flip: false, label: 'K', props: { state: true } };
+  const r: ComponentInstance = { id: 'r1', type: 'resistor', x: 280, y: 100, rot: 0, flip: false, label: 'R', props: { resistance: 1000 } };
+  const c: ComponentInstance = { id: 'c1', type: 'capacitor_electrolytic', x: 380, y: 140, rot: 0, flip: false, label: 'C', props: { capacitance: 100, ratedVoltage: 16 } };
+  const osc: ComponentInstance = { id: 'osc1', type: 'oscilloscope', x: 500, y: 140, rot: 0, flip: false, label: 'OSC', props: {} };
+  const gnd: ComponentInstance = { id: 'gnd1', type: 'gnd', x: 80, y: 220, rot: 0, flip: false, label: '', props: {} };
+
+  const w1 = makePresetWire('w1', 'src1', 'pos', 'sw1', '1', [{ x: 80, y: 100 }, { x: 140, y: 100 }], 'phase');
+  const w2 = makePresetWire('w2', 'sw1', '2', 'r1', '1', [{ x: 220, y: 100 }, { x: 240, y: 100 }], 'phase');
+  const w3 = makePresetWire('w3', 'r1', '2', 'c1', 'pos', [{ x: 320, y: 100 }, { x: 340, y: 140 }], 'phase');
+  const w4 = makePresetWire('w4', 'c1', 'neg', 'src1', 'neg', [{ x: 420, y: 140 }, { x: 420, y: 180 }, { x: 80, y: 180 }], 'neutral');
+  const w_gnd = makePresetWire('w_gnd', 'src1', 'neg', 'gnd1', 'gnd', [{ x: 80, y: 180 }, { x: 80, y: 200 }], 'ground');
+  const w_ch1 = makePresetWire('w_ch1', 'c1', 'pos', 'osc1', 'ch1', [{ x: 340, y: 140 }, { x: 340, y: 80 }, { x: 460, y: 80 }, { x: 460, y: 120 }], 'phase');
+  const w_osc_gnd = makePresetWire('w_osc_gnd', 'c1', 'neg', 'osc1', 'gnd', [{ x: 420, y: 140 }, { x: 540, y: 140 }], 'neutral');
+
+  return {
+    components: [v, sw, r, c, osc, gnd],
+    wires: [w1, w2, w3, w4, w_gnd, w_ch1, w_osc_gnd],
+    junctions: [],
+    viewport: { x: 40, y: 40, zoom: 1 },
+  };
+}
+
 export const ELECTRONICS_PRESETS: Preset[] = [
   {
     id: 'el_f',
@@ -324,6 +349,12 @@ export const ELECTRONICS_PRESETS: Preset[] = [
     title: 'q) Đo điện trở: Ôm kế 2 chân + Cụm 1 kΩ nối tiếp 2 kΩ',
     description: 'Ôm kế bơm dòng thử đo chính xác tổng trở tương đương 3,00 kΩ khi mạch không có nguồn điện.',
     state: createPresetElectronicsQ(),
+  },
+  {
+    id: 'el_v',
+    title: 'v) Quá trình nạp tụ RC (Dao động kí ảo)',
+    description: 'Nguồn 5 V + điện trở 1 kΩ + tụ 100 µF + công tắc. Kênh CH1 đo điện áp tức thời trên tụ. Kì vọng: V_tụ tăng theo đường cong, đạt ≈ 3,16 V (63%) sau 0,1 s.',
+    state: createPresetElectronicsV(),
   },
 ];
 

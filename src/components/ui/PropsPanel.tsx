@@ -50,6 +50,7 @@ export const PropsPanel: React.FC<PropsPanelProps> = ({ isBottomSheet = false })
     rerouteWireAuto,
     setPEForSelected,
     resetKwh,
+    setOscilloscopePanelOpen,
   } = useWorkspaceStore();
 
   const selectedComp =
@@ -378,9 +379,51 @@ export const PropsPanel: React.FC<PropsPanelProps> = ({ isBottomSheet = false })
                 )}
               </div>
 
-              {/* 1. ĐO ĐẠC DỤNG CỤ ĐO (AMPE KẾ, VÔN KẾ, OÁT KẾ, ÔM KẾ, CÔNG TƠ ĐIỆN) */}
-              {['ammeter', 'voltmeter', 'wattmeter', 'ohmmeter', 'kwh_meter'].includes(selectedComp.type) ? (
+              {/* 1. ĐO ĐẠC DỤNG CỤ ĐO (AMPE KẾ, VÔN KẾ, OÁT KẾ, ÔM KẾ, CÔNG TƠ ĐIỆN, DAO ĐỘNG KÍ) */}
+              {['ammeter', 'voltmeter', 'wattmeter', 'ohmmeter', 'kwh_meter', 'oscilloscope'].includes(selectedComp.type) ? (
                 <div className="space-y-2">
+                  {/* DAO ĐỘNG KÍ ẢO */}
+                  {selectedComp.type === 'oscilloscope' && (() => {
+                    const v1 = Number(selectedComp.props._vCh1 ?? 0);
+                    const v2 = Number(selectedComp.props._vCh2 ?? 0);
+                    return (
+                      <div className="space-y-1.5">
+                        <div className="bg-white border-2 border-black p-2 rounded space-y-1">
+                          <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider text-center">
+                            Điện áp tức thời
+                          </div>
+                          <div className="grid grid-cols-2 gap-1.5 text-center pt-0.5">
+                            <div className="p-1 bg-[#EEF2FF] border border-[#38BDF8] rounded">
+                              <span className="text-[9px] font-black text-[#0284C7] block uppercase">CH1</span>
+                              <span className="text-[13px] font-mono font-black text-[#0284C7]">
+                                {isSimulating ? formatMeasure(v1, 'voltage') : '0,00 V'}
+                              </span>
+                            </div>
+                            <div className="p-1 bg-[#FEF2F2] border border-[#F87171] rounded">
+                              <span className="text-[9px] font-black text-[#DC2626] block uppercase">CH2</span>
+                              <span className="text-[13px] font-mono font-black text-[#DC2626]">
+                                {isSimulating ? formatMeasure(v2, 'voltage') : '0,00 V'}
+                              </span>
+                            </div>
+                          </div>
+                          {!isSimulating && (
+                            <p className="text-[9px] text-gray-500 italic text-center mt-0.5">Bấm CHẠY để đo dạng sóng</p>
+                          )}
+                        </div>
+
+                        <button
+                          onClick={() => setOscilloscopePanelOpen(true)}
+                          className="w-full h-7 bg-[#FFD84D] hover:bg-black hover:text-white text-black border-2 border-black font-black text-[10px] uppercase shadow-[1px_1px_0_#000] cursor-pointer"
+                        >
+                          📈 MỞ BẢNG ĐỒ THỊ
+                        </button>
+
+                        <div className="p-1 bg-[#EEF2FF] border border-[#C7D2FE] text-[#3730A3] text-[9px] rounded italic">
+                          ℹ️ CH1 (xanh dương), CH2 (đỏ), GND (chuẩn đất). Trở kháng mỗi kênh: 10 MΩ.
+                        </div>
+                      </div>
+                    );
+                  })()}
                   {/* CÔNG TƠ ĐIỆN: Đo điện năng tiêu thụ E (kWh) */}
                   {selectedComp.type === 'kwh_meter' && (() => {
                     const meterData = simulationSnapshot?.meters?.[selectedComp.id];

@@ -94,6 +94,9 @@ interface WorkspaceStore {
 
   leftPanelOpen: boolean;
   rightPanelOpen: boolean;
+  oscilloscopePanelOpen: boolean;
+  toggleOscilloscopePanel: () => void;
+  setOscilloscopePanelOpen: (open: boolean) => void;
 
   canUndo: boolean;
   canRedo: boolean;
@@ -219,6 +222,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 
   leftPanelOpen: true,
   rightPanelOpen: false,
+  oscilloscopePanelOpen: false,
 
   canUndo: false,
   canRedo: false,
@@ -449,6 +453,14 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     set({ rightPanelOpen: false });
   },
 
+  toggleOscilloscopePanel: () => {
+    set(s => ({ oscilloscopePanelOpen: !s.oscilloscopePanelOpen }));
+  },
+
+  setOscilloscopePanelOpen: (open: boolean) => {
+    set({ oscilloscopePanelOpen: open });
+  },
+
   setStatusMessage: (msg: string | null) => {
     set({ statusMessage: msg });
   },
@@ -503,6 +515,8 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 
   selectComponent: (id: string, isShift = false) => {
     set(s => {
+      const comp = s.circuit.components.find(c => c.id === id);
+      const isOsc = comp?.type === 'oscilloscope';
       if (isShift) {
         const exists = s.selectedComponentIds.includes(id);
         const nextIds = exists
@@ -511,12 +525,14 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
         return {
           selectedComponentIds: nextIds,
           rightPanelOpen: nextIds.length > 0,
+          oscilloscopePanelOpen: isOsc ? true : s.oscilloscopePanelOpen,
         };
       }
       return {
         selectedComponentIds: [id],
         selectedWireIds: [],
         rightPanelOpen: true,
+        oscilloscopePanelOpen: isOsc ? true : s.oscilloscopePanelOpen,
       };
     });
   },
@@ -1695,14 +1711,18 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 }));
 
 // Subscribe to live simulation snapshot updates (throttled to <= 10 Hz for React state)
-simulationService.subscribe((snapshot) => {
-  const now = performance.now();
-  if (now - lastUiThrottleTime >= 100) {
-    lastUiThrottleTime = now;
-    useWorkspaceStore.setState({
-      simTime: snapshot.simTime,
-      sourceSummaryStr: snapshot.sourceStats.summaryStr,
-      simulationSnapshot: snapshot,
+queueMicrotask(() => {
+  if (typeof simulationService !== 'undefined' && simulationService?.subscribe) {
+    simulationService.subscribe((snapshot) => {
+      const now = performance.now();
+      if (now - lastUiThrottleTime >= 100) {
+        lastUiThrottleTime = now;
+        useWorkspaceStore.setState({
+          simTime: snapshot.simTime,
+          sourceSummaryStr: snapshot.sourceStats.summaryStr,
+          simulationSnapshot: snapshot,
+        });
+      }
     });
   }
 });

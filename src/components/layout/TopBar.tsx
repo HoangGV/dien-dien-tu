@@ -72,6 +72,8 @@ export const TopBar: React.FC<TopBarProps> = ({ svgRef }) => {
     updateViewport,
     runLint,
     restoreAllDamaged,
+    oscilloscopePanelOpen,
+    toggleOscilloscopePanel,
   } = useWorkspaceStore();
 
   const { isInstallable, install } = usePWAInstall();
@@ -192,6 +194,13 @@ export const TopBar: React.FC<TopBarProps> = ({ svgRef }) => {
       label: 'Hiện / ẩn chân PE của mọi thiết bị',
       icon: <ShieldCheck size={14} />,
       onClick: () => toggleAllPE(),
+    },
+    {
+      id: 'toggle_scope_panel',
+      label: 'Đồ thị (Dao động kí)',
+      icon: <Activity size={14} />,
+      active: oscilloscopePanelOpen,
+      onClick: () => toggleOscilloscopePanel(),
     },
   ];
 

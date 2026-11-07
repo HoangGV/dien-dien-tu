@@ -664,7 +664,36 @@ export function solveCircuit(
         const net1 = pinToNetId.get(`${c.id}:1`) || pinToNetId.get(`${c.id}:pos`);
         const net2 = pinToNetId.get(`${c.id}:2`) || pinToNetId.get(`${c.id}:neg`);
         if (net1 && net2) {
-          addResistor(nodeMap.get(net1) ?? -1, nodeMap.get(net2) ?? -1, 1e7);
+          const u1 = nodeMap.get(net1) ?? -1;
+          const u2 = nodeMap.get(net2) ?? -1;
+          const capVal = Number(c.props.capacitance) || 100;
+          // Farads: ceramic is nF, electrolytic is µF
+          const cFarad = c.type === 'capacitor_ceramic' ? capVal * 1e-9 : capVal * 1e-6;
+          if (dtSeconds > 0 && cFarad > 0) {
+            const Req = Math.max(0.001, dtSeconds / cFarad);
+            const vPrev = Number(c.props._vCap ?? 0);
+            addResistor(u1, u2, Req);
+            const Ieq = vPrev / Req;
+            if (u1 >= 0) I[u1] += Ieq;
+            if (u2 >= 0) I[u2] -= Ieq;
+          } else {
+            addResistor(u1, u2, 1e7);
+          }
+        }
+      } else if (c.type === 'oscilloscope') {
+        const netCh1 = pinToNetId.get(`${c.id}:ch1`);
+        const netCh2 = pinToNetId.get(`${c.id}:ch2`);
+        const netGnd = pinToNetId.get(`${c.id}:gnd`);
+        const uGnd = netGnd ? (nodeMap.get(netGnd) ?? -1) : -1;
+        const uRef = uGnd >= 0 ? uGnd : -1;
+
+        if (netCh1) {
+          const uCh1 = nodeMap.get(netCh1) ?? -1;
+          if (uCh1 >= 0) addResistor(uCh1, uRef, 1e7);
+        }
+        if (netCh2) {
+          const uCh2 = nodeMap.get(netCh2) ?? -1;
+          if (uCh2 >= 0) addResistor(uCh2, uRef, 1e7);
         }
       } else if (c.type === 'ammeter') {
         const net1 = pinToNetId.get(`${c.id}:pos`) || pinToNetId.get(`${c.id}:1`);
@@ -1246,8 +1275,15 @@ export function solveCircuit(
         const v2 = net2 ? (nodeVoltages[net2] ?? 0) : 0;
         const vCap = v1 - v2;
         signedCapVoltages[c.id] = vCap;
+        c.props._vCap = vCap;
+        c.props._voltage = Math.abs(vCap);
         componentVoltages[c.id] = Math.round(Math.abs(vCap) * 100) / 100;
-        componentCurrents[c.id] = 0; // DC steady state
+        const capVal = Number(c.props.capacitance) || 100;
+        const cFarad = c.type === 'capacitor_ceramic' ? capVal * 1e-9 : capVal * 1e-6;
+        const vPrev = Number(c.props._vCapPrev ?? 0);
+        c.props._vCapPrev = vCap;
+        const iCap = dtSeconds > 0 && cFarad > 0 ? (cFarad * Math.abs(vCap - vPrev)) / dtSeconds : 0;
+        componentCurrents[c.id] = Math.round(iCap * 1000) / 1000;
 
         if (c.type === 'capacitor_electrolytic' && vCap < -0.5) {
           statusMessages.push(`CẢNH BÁO: Tụ hóa ${c.label} bị đấu ngược cực! (+ nối âm, − nối dương).`);
@@ -1325,6 +1361,21 @@ export function solveCircuit(
         componentCurrents[c.id] = Math.round(iCoil * 1000) / 1000;
         componentPowers[c.id] = Math.round(vSup * iCoil * 100) / 100;
         operatingStates[c.id] = trRes.isEnergized;
+      } else if (c.type === 'oscilloscope') {
+        const netCh1 = pinToNetId.get(`${c.id}:ch1`);
+        const netCh2 = pinToNetId.get(`${c.id}:ch2`);
+        const netGnd = pinToNetId.get(`${c.id}:gnd`);
+        const vGnd = netGnd ? (nodeVoltages[netGnd] ?? 0) : 0;
+        const vCh1 = netCh1 ? (nodeVoltages[netCh1] ?? 0) : 0;
+        const vCh2 = netCh2 ? (nodeVoltages[netCh2] ?? 0) : 0;
+        const v1 = vCh1 - vGnd;
+        const v2 = vCh2 - vGnd;
+        c.props._vCh1 = v1;
+        c.props._vCh2 = v2;
+        componentVoltages[c.id] = Math.round(Math.max(Math.abs(v1), Math.abs(v2)) * 100) / 100;
+        componentCurrents[c.id] = 0;
+        componentPowers[c.id] = 0;
+        operatingStates[c.id] = true;
       }
     }
 

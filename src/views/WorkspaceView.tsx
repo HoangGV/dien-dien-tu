@@ -8,6 +8,7 @@ import { PropsPanel } from '../components/ui/PropsPanel';
 import { ToolStrip } from '../components/ui/ToolStrip';
 import { Canvas } from '../components/ui/Canvas';
 import { LintModal } from '../components/modals/LintModal';
+import { OscilloscopePanel } from '../components/ui/OscilloscopePanel';
 
 export interface WorkspaceViewProps {
   slug: string;
@@ -36,6 +37,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ slug }) => {
     selectedWireIds,
     rightPanelOpen,
     toggleRightPanel,
+    oscilloscopePanelOpen,
     editorMode,
     cancelWiring,
     isSimulating,
@@ -228,6 +230,13 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ slug }) => {
         {!fullFrameMode && isTier3 && rightPanelOpen && (
           <div className="absolute left-0 right-0 bottom-0 z-30 pointer-events-auto">
             <PropsPanel isBottomSheet={true} />
+          </div>
+        )}
+
+        {/* Oscilloscope Graph Floating Panel */}
+        {oscilloscopePanelOpen && (
+          <div className="absolute left-2 bottom-2 z-25 pointer-events-auto max-h-[calc(100%-16px)] overflow-y-auto">
+            <OscilloscopePanel />
           </div>
         )}
       </div>

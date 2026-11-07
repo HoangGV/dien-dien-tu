@@ -1120,6 +1120,102 @@ export const InstrumentSymbol: React.FC<SymbolProps & { meterKind: 'A' | 'V' | '
   );
 };
 
+// 13b. DAO ĐỘNG KÍ ẢO (OSCILLOSCOPE)
+export const OscilloscopeSymbol: React.FC<SymbolProps> = ({
+  comp,
+  onPinPointerDown,
+  onPinHover,
+  hoveredPinId,
+}) => {
+  const pins: PinDef[] = [
+    { id: 'ch1', label: 'CH1', dx: -2, dy: -1 },
+    { id: 'ch2', label: 'CH2', dx: -2, dy: 1 },
+    { id: 'gnd', label: 'GND', dx: 2, dy: 0, polarity: '-' },
+  ];
+
+  return (
+    <g>
+      {/* Vỏ máy dao động kí chữ nhật */}
+      <rect
+        x={-28}
+        y={-22}
+        width={56}
+        height={44}
+        fill="#FFFFFF"
+        stroke="#000000"
+        strokeWidth={2}
+        rx={3}
+      />
+
+      {/* Màn hình hiển thị nhỏ (LCD/CRT) */}
+      <rect
+        x={-12}
+        y={-16}
+        width={34}
+        height={32}
+        fill="#090D16"
+        stroke="#000000"
+        strokeWidth={1.5}
+        rx={1}
+      />
+
+      {/* Lưới tọa độ thu nhỏ trong màn hình */}
+      <line x1={-12} y1={0} x2={22} y2={0} stroke="#1E293B" strokeWidth={1} strokeDasharray="1 1" />
+      <line x1={5} y1={-16} x2={5} y2={16} stroke="#1E293B" strokeWidth={1} strokeDasharray="1 1" />
+
+      {/* Đồ thị dạng sóng minh họa */}
+      <path
+        d="M -10 4 Q -5 -8, 0 0 T 10 -4 T 20 2"
+        fill="none"
+        stroke="#38BDF8"
+        strokeWidth={1.5}
+      />
+      <path
+        d="M -10 -2 Q -4 6, 2 -1 T 12 5 T 20 -1"
+        fill="none"
+        stroke="#F87171"
+        strokeWidth={1.2}
+      />
+
+      {/* Nhãn chữ OSC đứng thẳng theo phong cách neo-brutalism */}
+      <UprightText
+        x={-20}
+        y={0}
+        rot={comp.rot}
+        flip={comp.flip}
+        flipY={comp.flipY}
+        fontSize={8}
+        fontWeight={900}
+        fill="#000000"
+      >
+        OSC
+      </UprightText>
+
+      {/* Dây nối chân ra mép */}
+      {/* CH1 (-40, -20) -> (-28, -20) */}
+      <line x1={-40} y1={-20} x2={-28} y2={-20} stroke="#2563EB" strokeWidth={2} />
+      {/* CH2 (-40, 20) -> (-28, 20) */}
+      <line x1={-40} y1={20} x2={-28} y2={20} stroke="#DC2626" strokeWidth={2} />
+      {/* GND (40, 0) -> (28, 0) */}
+      <line x1={28} y1={0} x2={40} y2={0} stroke="#000000" strokeWidth={2} />
+
+      {pins.map((p) => (
+        <PinDot
+          key={p.id}
+          pin={p}
+          rot={comp.rot}
+          flip={comp.flip}
+          flipY={comp.flipY}
+          onPointerDown={onPinPointerDown}
+          onHover={onPinHover}
+          isHovered={hoveredPinId === p.id}
+        />
+      ))}
+      <SymbolLabels label={comp.label} rot={comp.rot} flip={comp.flip} flipY={comp.flipY} yOffset={24} />
+    </g>
+  );
+};
+
 // 14. THIẾT BỊ ĐIỆN KHÁC (BẾP, ĐIỀU HÒA, TỦ LẠNH, NỒI CƠM... - 2 chân A và O, tùy chọn chân PE)
 export const GenericApplianceSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPinHover, hoveredPinId }) => {
   const hasPE = Boolean(comp.props.hasPE);

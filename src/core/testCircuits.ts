@@ -17,7 +17,9 @@ import {
   createPresetHouseholdK,
   createPresetHouseholdM,
   createPresetSensorR,
+  createPresetElectronicsV,
 } from './presets';
+import { oscilloscopeService } from './oscilloscopeService';
 
 // Helper to make a wire
 function makeWire(
@@ -1729,6 +1731,123 @@ export const ALL_SOLVER_TEST_CASES: SolverTestCase[] = [
       const passed = isEnergized1 === true && isEnergizedAt5s === true && isEnergizedAt11s === false;
       return {
         actualStr: `IN cao: ${isEnergized1 ? 'Hút' : 'Chưa hút'}; IN thấp tại t=5s: ${isEnergizedAt5s ? 'Vẫn hút' : 'Đã nhả'}; tại t=11s: ${isEnergizedAt11s ? 'Vẫn hút' : 'Đã nhả'}`,
+        passed,
+      };
+    },
+  }),
+  defineTestCase({
+    id: 'osc1_rc_charge_0_1s',
+    stt: 53,
+    group: 'Dụng cụ đo – công tơ',
+    name: 'Ca 53: Mạch (v) nạp tụ RC: Tại t = 0,1 s, điện áp tụ đo trên kênh CH1 đạt ≈ 3,16 V (63%)',
+    expectedStr: 'V_CH1 tại t = 0,1 s nằm trong khoảng 3,16 V ± 2% (3,10 V – 3,22 V)',
+    toleranceStr: 'Sai số ± 2%',
+    createCircuit: () => {
+      return createPresetElectronicsV();
+    },
+    evaluate: (circ) => {
+      const sim = new SimulationService();
+      sim.compile(circ, 'dc');
+      oscilloscopeService.clear();
+
+      // Step simulation by dt = 0.005s (5ms) up to 0.1s (20 steps)
+      const dt = 0.005;
+      const targetTime = 0.1;
+      const totalSteps = Math.round(targetTime / dt);
+      for (let i = 0; i < totalSteps; i++) {
+        sim.step(dt);
+      }
+      const samples = oscilloscopeService.getSamples();
+      const lastSample = samples[samples.length - 1];
+      const vCh1 = lastSample ? lastSample.v1 : 0;
+      // Exact theoretical: 5 * (1 - e^(-1)) = 3.1606 V
+      const target = 5.0 * (1 - Math.exp(-1.0));
+      const errorPct = (Math.abs(vCh1 - target) / target) * 100;
+      const passed = errorPct <= 2.0;
+      return {
+        actualStr: `t = ${sim.getSimTime().toFixed(3)} s: V_CH1 = ${vCh1.toFixed(3)} V (lí thuyết = ${target.toFixed(3)} V, sai lệch = ${errorPct.toFixed(2)}%)`,
+        passed,
+      };
+    },
+  }),
+  defineTestCase({
+    id: 'osc2_ring_buffer_4000_chronological',
+    stt: 54,
+    group: 'Dụng cụ đo – công tơ',
+    name: 'Ca 54: Bộ đệm dao động kí ảo: Giới hạn 4000 mẫu/kênh và luôn theo thứ tự thời gian tăng dần',
+    expectedStr: 'Số mẫu không vượt quá 4000; thứ tự thời gian t[i] <= t[i+1]',
+    toleranceStr: 'Chính xác',
+    createCircuit: () => {
+      return createPresetElectronicsV();
+    },
+    evaluate: () => {
+      oscilloscopeService.clear();
+      // Push 5000 samples
+      for (let i = 0; i < 5000; i++) {
+        const t = i * 0.0001; // 0.1 ms each
+        const v1 = 5 * Math.sin(2 * Math.PI * 50 * t);
+        const v2 = 2.5 * Math.cos(2 * Math.PI * 50 * t);
+        oscilloscopeService.recordSample(t, v1, v2);
+      }
+      const samples = oscilloscopeService.getSamples();
+      const countOk = samples.length === 4000;
+      let chronological = true;
+      for (let i = 1; i < samples.length; i++) {
+        if (samples[i].t < samples[i - 1].t) {
+          chronological = false;
+          break;
+        }
+      }
+      const firstT = samples[0]?.t ?? 0;
+      const lastT = samples[samples.length - 1]?.t ?? 0;
+      const timeOrderOk = Math.abs(firstT - 0.1) < 1e-4 && Math.abs(lastT - 0.4999) < 1e-4;
+
+      const passed = countOk && chronological && timeOrderOk;
+      return {
+        actualStr: `Số mẫu: ${samples.length}/4000; Thời gian từ ${firstT.toFixed(4)} s đến ${lastT.toFixed(4)} s; Thứ tự thời gian: ${chronological ? 'ĐÚNG (t_i <= t_{i+1})' : 'SAI'}`,
+        passed,
+      };
+    },
+  }),
+  defineTestCase({
+    id: 'osc3_non_invasive_10meg',
+    stt: 55,
+    group: 'Dụng cụ đo – công tơ',
+    name: 'Ca 55: Trở kháng vào dao động kí 10 MΩ không ảnh hưởng mạch: Sai lệch U, I < 0,1%',
+    expectedStr: 'Điện áp và dòng điện của mạch khi có và không có dao động kí sai lệch < 0,1%',
+    toleranceStr: 'Sai lệch < 0,1%',
+    createCircuit: () => {
+      return createPresetElectronicsV();
+    },
+    evaluate: (circWithOsc) => {
+      // 1. Mạch có dao động kí
+      const simWith = new SimulationService();
+      simWith.compile(circWithOsc, 'dc');
+      const snapWith = simWith.step(0.05); // step 50 ms
+      const vCapWith = snapWith.solverResult?.componentVoltages?.['c1'] ?? 0;
+      const iCapWith = snapWith.solverResult?.componentCurrents?.['c1'] ?? 0;
+
+      // 2. Mạch không có dao động kí (bỏ linh kiện osc1 và các dây nối vào osc1)
+      const freshCirc = createPresetElectronicsV();
+      const circWithout = {
+        ...freshCirc,
+        components: freshCirc.components.filter((c) => c.type !== 'oscilloscope'),
+        wires: freshCirc.wires.filter(
+          (w) => w.from.compId !== 'osc1' && w.to.compId !== 'osc1'
+        ),
+      };
+      const simWithout = new SimulationService();
+      simWithout.compile(circWithout, 'dc');
+      const snapWithout = simWithout.step(0.05);
+      const vCapWithout = snapWithout.solverResult?.componentVoltages?.['c1'] ?? 0;
+      const iCapWithout = snapWithout.solverResult?.componentCurrents?.['c1'] ?? 0;
+
+      const diffVPct = (Math.abs(vCapWith - vCapWithout) / Math.max(vCapWithout, 1e-6)) * 100;
+      const diffIPct = (Math.abs(iCapWith - iCapWithout) / Math.max(iCapWithout, 1e-6)) * 100;
+
+      const passed = diffVPct < 0.1 && diffIPct < 0.1;
+      return {
+        actualStr: `Không OSC: V_tụ = ${vCapWithout.toFixed(4)} V, I = ${(iCapWithout * 1000).toFixed(4)} mA; Có OSC (10 MΩ): V_tụ = ${vCapWith.toFixed(4)} V, I = ${(iCapWith * 1000).toFixed(4)} mA; Sai lệch V: ${diffVPct.toFixed(4)}%, Sai lệch I: ${diffIPct.toFixed(4)}%`,
         passed,
       };
     },

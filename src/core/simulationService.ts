@@ -22,6 +22,7 @@ import {
   Net,
   CaseStatus,
 } from './model';
+import { oscilloscopeService } from './oscilloscopeService';
 import { COMPONENT_MAP, COMPONENT_REGISTRY, getComponentDef } from './registry';
 import { extractNetlist, getComponentPins } from './netlist';
 import {
@@ -742,6 +743,14 @@ export class SimulationService {
     this.stepCount++;
     this.simTime += dtSim;
 
+    // Record oscilloscope samples if an oscilloscope is present in the circuit
+    const osc = components.find(c => c.type === 'oscilloscope');
+    if (osc) {
+      const v1 = Number(osc.props._vCh1 ?? 0);
+      const v2 = Number(osc.props._vCh2 ?? 0);
+      oscilloscopeService.addSample(this.simTime, v1, v2);
+    }
+
     const snapshot: SimulationSnapshot = {
       time: this.simTime,
       simTime: this.simTime,
@@ -824,11 +833,15 @@ export class SimulationService {
     this.particles = [];
     this.thermalStates = {};
     this.wireThermalStates = {};
+    oscilloscopeService.clear();
     this.addLog('Đặt lại mô phỏng về trạng thái ban đầu.');
     if (this.currentCircuitState) {
       for (const c of this.currentCircuitState.components) {
         if (c.type === 'kwh_meter') {
           c.props.kwh = 0;
+        } else if (c.type === 'capacitor_ceramic' || c.type === 'capacitor_electrolytic') {
+          c.props._vCap = 0;
+          c.props._vCapPrev = 0;
         }
       }
       const snap = this.step(0);
