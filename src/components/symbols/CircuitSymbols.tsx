@@ -1541,7 +1541,19 @@ export const SensorModuleSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDo
 
   const sensorType = comp.props.sensorType || 'light';
   const labelText =
-    sensorType === 'temperature' ? 'NHIỆT ĐỘ' : sensorType === 'humidity' ? 'ĐỘ ẨM' : 'ÁNH SÁNG';
+    sensorType === 'temperature' || sensorType === 'temp'
+      ? 'NHIỆT ĐỘ'
+      : sensorType === 'humidity'
+      ? 'ĐỘ ẨM'
+      : sensorType === 'gas'
+      ? 'KHÍ GAS'
+      : sensorType === 'smoke'
+      ? 'KHÓI'
+      : sensorType === 'pir'
+      ? 'HỒNG NGOẠI'
+      : sensorType === 'ultrasonic'
+      ? 'SIÊU ÂM'
+      : 'ÁNH SÁNG';
 
   const pins: PinDef[] = [
     { id: 'vcc', label: 'VCC', dx: -2, dy: -1, polarity: '+' },
@@ -1743,6 +1755,157 @@ export const RelayModuleSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDow
       <line x1={-50} y1={0} x2={-34} y2={0} stroke="#000000" strokeWidth={2} />
       <line x1={-50} y1={24} x2={-34} y2={24} stroke="#000000" strokeWidth={2} />
       {/* Phải: NO (50, -24), COM (50, 0), NC (50, 24) */}
+      <line x1={34} y1={-24} x2={50} y2={-24} stroke="#000000" strokeWidth={2} />
+      <line x1={34} y1={0} x2={50} y2={0} stroke="#000000" strokeWidth={2} />
+      <line x1={34} y1={24} x2={50} y2={24} stroke="#000000" strokeWidth={2} />
+
+      {pins.map((p) => (
+        <PinDot
+          key={p.id}
+          pin={p}
+          rot={comp.rot}
+          flip={comp.flip}
+          flipY={comp.flipY}
+          onPointerDown={onPinPointerDown}
+          onHover={onPinHover}
+          isHovered={hoveredPinId === p.id}
+        />
+      ))}
+    </g>
+  );
+};
+
+// ----------------------------------------------------
+// RƠ LE THỜI GIAN (time_relay)
+// Chân: VCC, GND, IN (trái), NO, COM, NC (phải)
+// ----------------------------------------------------
+export const TimeRelaySymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPinHover, hoveredPinId }) => {
+  const { simulationSnapshot } = useWorkspaceStore();
+  const kinetics = simulationSnapshot?.componentKinetics?.[comp.id];
+  const isEnergized = Boolean(kinetics?.isOperating ?? comp.props._isEnergized);
+  const isCounting = Boolean(comp.props._isCounting);
+  const mode = comp.props.mode || 'on_delay';
+  const delayTime = comp.props.delayTime ?? 10;
+  const modeLabel = mode === 'off_delay' ? 'TRỄ NGẮT' : 'TRỄ BẬT';
+
+  const pins: PinDef[] = [
+    { id: 'vcc', label: 'VCC', dx: -2.5, dy: -1.2, polarity: '+' },
+    { id: 'gnd', label: 'GND', dx: -2.5, dy: 0, polarity: '-' },
+    { id: 'in', label: 'IN', dx: -2.5, dy: 1.2 },
+    { id: 'no', label: 'NO', dx: 2.5, dy: -1.2 },
+    { id: 'com', label: 'COM', dx: 2.5, dy: 0 },
+    { id: 'nc', label: 'NC', dx: 2.5, dy: 1.2 },
+  ];
+
+  return (
+    <g>
+      {/* Khung rơ le thời gian */}
+      <rect
+        x={-34}
+        y={-28}
+        width={68}
+        height={56}
+        fill="#FFFFFF"
+        stroke="#000000"
+        strokeWidth={2}
+        rx={3}
+      />
+
+      {/* Header bar */}
+      <rect
+        x={-34}
+        y={-28}
+        width={68}
+        height={11}
+        fill="#EDE9FE"
+        stroke="#000000"
+        strokeWidth={1}
+      />
+      <UprightText
+        x={0}
+        y={-22.5}
+        rot={comp.rot}
+        flip={comp.flip}
+        flipY={comp.flipY}
+        fontSize={6.5}
+        fontWeight={900}
+        fill="#6D28D9"
+      >
+        RƠ LE THỜI GIAN
+      </UprightText>
+
+      {/* Chế độ & Thời gian trễ */}
+      <UprightText
+        x={-10}
+        y={-7}
+        rot={comp.rot}
+        flip={comp.flip}
+        flipY={comp.flipY}
+        fontSize={7.5}
+        fontWeight={900}
+        fill="#1F2937"
+      >
+        {modeLabel}
+      </UprightText>
+
+      <UprightText
+        x={-10}
+        y={4}
+        rot={comp.rot}
+        flip={comp.flip}
+        flipY={comp.flipY}
+        fontSize={7}
+        fontWeight={800}
+        fill="#4B5563"
+      >
+        {`T = ${delayTime}s`}
+      </UprightText>
+
+      {/* Đèn LED trạng thái hút (Xanh khi hút, xám khi nhả, vàng cam nhấp nháy khi đang đếm) */}
+      <circle
+        cx={-22}
+        cy={18}
+        r={3}
+        fill={isEnergized ? '#10B981' : isCounting ? '#F59E0B' : '#D1D5DB'}
+        stroke="#000000"
+        strokeWidth={1}
+      />
+      {isEnergized && (
+        <circle cx={-22} cy={18} r={5} fill="none" stroke="#10B981" strokeWidth={1} opacity={0.6} />
+      )}
+      {isCounting && (
+        <circle cx={-22} cy={18} r={5} fill="none" stroke="#F59E0B" strokeWidth={1} opacity={0.6} />
+      )}
+      <UprightText
+        x={-10}
+        y={18}
+        rot={comp.rot}
+        flip={comp.flip}
+        flipY={comp.flipY}
+        fontSize={7}
+        fontWeight={800}
+        fill={isEnergized ? '#059669' : isCounting ? '#D97706' : '#6B7280'}
+      >
+        {isEnergized ? 'HÚT' : isCounting ? 'ĐẾM...' : 'NHẢ'}
+      </UprightText>
+
+      {/* Sơ đồ tiếp điểm giữa COM, NO, NC */}
+      <circle cx={14} cy={0} r={2} fill="#000" />
+      <circle cx={22} cy={-16} r={2} fill="#000" />
+      <circle cx={22} cy={16} r={2} fill="#000" />
+      <line
+        x1={14}
+        y1={0}
+        x2={21}
+        y2={isEnergized ? -14 : 14}
+        stroke={isEnergized ? '#059669' : '#000000'}
+        strokeWidth={2}
+      />
+
+      {/* Dây nối chân ra mép */}
+      <line x1={-50} y1={-24} x2={-34} y2={-24} stroke="#000000" strokeWidth={2} />
+      <line x1={-50} y1={0} x2={-34} y2={0} stroke="#000000" strokeWidth={2} />
+      <line x1={-50} y1={24} x2={-34} y2={24} stroke="#000000" strokeWidth={2} />
       <line x1={34} y1={-24} x2={50} y2={-24} stroke="#000000" strokeWidth={2} />
       <line x1={34} y1={0} x2={50} y2={0} stroke="#000000" strokeWidth={2} />
       <line x1={34} y1={24} x2={50} y2={24} stroke="#000000" strokeWidth={2} />

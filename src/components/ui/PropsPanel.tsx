@@ -219,6 +219,8 @@ export const PropsPanel: React.FC<PropsPanelProps> = ({ isBottomSheet = false })
               {def.propsSchema &&
                 def.propsSchema.map((schema) => {
                   if (selectedComp.type === 'led' && schema.key === 'color') return null;
+                  if (selectedComp.type === 'sensor_module' && selectedComp.props.sensorType === 'pir' && (schema.key === 'envValue' || schema.key === 'threshold' || schema.key === 'triggerCondition')) return null;
+                  if (selectedComp.type === 'sensor_module' && selectedComp.props.sensorType !== 'pir' && schema.key === 'motionDetected') return null;
                   const currentVal = selectedComp.props[schema.key] ?? schema.default;
 
                   return (
@@ -261,6 +263,18 @@ export const PropsPanel: React.FC<PropsPanelProps> = ({ isBottomSheet = false })
                             minVal = 0;
                             maxVal = 100;
                             unit = '%RH';
+                          } else if (sType === 'gas') {
+                            minVal = 0;
+                            maxVal = 1000;
+                            unit = 'ppm';
+                          } else if (sType === 'smoke') {
+                            minVal = 0;
+                            maxVal = 100;
+                            unit = '%';
+                          } else if (sType === 'ultrasonic') {
+                            minVal = 2;
+                            maxVal = 400;
+                            unit = 'cm';
                           } else {
                             minVal = 0;
                             maxVal = 100;
@@ -612,15 +626,17 @@ export const PropsPanel: React.FC<PropsPanelProps> = ({ isBottomSheet = false })
                               {selectedComp.props._doHigh ? 'CAO (HIGH ~5V)' : 'THẤP (LOW ~0V)'}
                             </span>
                           </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-gray-600 font-sans text-[10px]">Điện áp AO:</span>
-                            <span className="font-bold text-black font-mono">
-                              {selectedComp.props._aoVoltage != null ? `${selectedComp.props._aoVoltage.toFixed(2).replace('.', ',')} V` : '—'}
-                            </span>
-                          </div>
+                          {selectedComp.props.sensorType !== 'pir' && (
+                            <div className="flex items-center justify-between">
+                              <span className="text-gray-600 font-sans text-[10px]">Điện áp AO:</span>
+                              <span className="font-bold text-black font-mono">
+                                {selectedComp.props._aoVoltage != null ? `${selectedComp.props._aoVoltage.toFixed(2).replace('.', ',')} V` : '—'}
+                              </span>
+                            </div>
+                          )}
                         </div>
                       )}
-                      {selectedComp.type === 'relay_module_1ch' && (
+                      {(selectedComp.type === 'relay_module_1ch' || selectedComp.type === 'time_relay') && (
                         <div className="pt-1 border-t border-black/10 space-y-1">
                           <div className="flex items-center justify-between">
                             <span className="text-gray-600 font-sans text-[10px]">Trạng thái Rơ le:</span>
@@ -632,6 +648,14 @@ export const PropsPanel: React.FC<PropsPanelProps> = ({ isBottomSheet = false })
                               {selectedComp.props._isEnergized ? 'HÚT (ĐÓNG COM–NO)' : 'NHẢ (ĐÓNG COM–NC)'}
                             </span>
                           </div>
+                          {selectedComp.type === 'time_relay' && selectedComp.props._isCounting && (
+                            <div className="flex items-center justify-between text-[10px] font-bold text-[#D97706] bg-[#FFFBEB] px-1.5 py-0.5 border border-[#F59E0B]">
+                              <span>Đang đếm:</span>
+                              <span className="font-mono">
+                                {selectedComp.props._timer != null ? selectedComp.props._timer.toFixed(1).replace('.', ',') : '0,0'} / {selectedComp.props.delayTime ?? 10} s
+                              </span>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>

@@ -145,6 +145,7 @@ export const WORKSPACE_SENSOR_CONTROL: WorkspaceConfig = {
     'ohmmeter',
     'sensor_module',
     'relay_module_1ch',
+    'time_relay',
     'boundary',
     'textbox',
   ],

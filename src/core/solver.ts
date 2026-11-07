@@ -276,7 +276,7 @@ export function solveOhmmeterResistance(
       const nVcc = pinToNetId.get(`${c.id}:vcc`);
       const nGnd = pinToNetId.get(`${c.id}:gnd`);
       if (nVcc && nGnd) addResistor(nodeMap.get(nVcc) ?? -1, nodeMap.get(nGnd) ?? -1, 1000);
-    } else if (c.type === 'relay_module_1ch') {
+    } else if (c.type === 'relay_module_1ch' || c.type === 'time_relay') {
       const nVcc = pinToNetId.get(`${c.id}:vcc`);
       const nGnd = pinToNetId.get(`${c.id}:gnd`);
       if (nVcc && nGnd) addResistor(nodeMap.get(nVcc) ?? -1, nodeMap.get(nGnd) ?? -1, 1000);
@@ -459,15 +459,44 @@ export function solveCircuit(
   const computeSensorDoHigh = (c: ComponentInstance, isPowered: boolean, prevDoHigh?: boolean): boolean => {
     if (!isPowered) return false;
     const sensorType = c.props.sensorType || 'light';
+
+    if (sensorType === 'pir') {
+      return Boolean(c.props.motionDetected);
+    }
+
     let minVal = 0, maxVal = 100;
-    if (sensorType === 'temp') {
+    let defaultThresh = 50;
+    let defaultCond: 'below' | 'above' = 'below';
+
+    if (sensorType === 'temperature' || sensorType === 'temp') {
       minVal = -10;
       maxVal = 80;
+      defaultThresh = 35;
+      defaultCond = 'above';
+    } else if (sensorType === 'humidity') {
+      minVal = 0;
+      maxVal = 100;
+      defaultThresh = 70;
+      defaultCond = 'above';
+    } else if (sensorType === 'gas') {
+      minVal = 0;
+      maxVal = 1000;
+      defaultThresh = 300;
+      defaultCond = 'above';
+    } else if (sensorType === 'smoke') {
+      minVal = 0;
+      maxVal = 100;
+      defaultThresh = 30;
+      defaultCond = 'above';
+    } else if (sensorType === 'ultrasonic') {
+      minVal = 2;
+      maxVal = 400;
+      defaultThresh = 50;
+      defaultCond = 'below';
     }
-    const curVal = Number(c.props.envValue ?? (sensorType === 'temp' ? 25 : sensorType === 'humidity' ? 60 : 50));
-    const defaultThresh = sensorType === 'light' ? 50 : sensorType === 'temp' ? 35 : 70;
+
+    const curVal = Number(c.props.envValue ?? defaultThresh);
     const threshold = Number(c.props.threshold ?? defaultThresh);
-    const defaultCond = sensorType === 'light' ? 'below' : 'above';
     const triggerCond = c.props.triggerCondition || defaultCond;
 
     const span = maxVal - minVal;
@@ -501,6 +530,57 @@ export function solveCircuit(
       return vInRel > lowThreshold;
     } else {
       return vInRel >= highThreshold;
+    }
+  };
+
+  const computeTimeRelay = (
+    c: ComponentInstance,
+    vSup: number,
+    vInRel: number,
+    dt: number
+  ): { isEnergized: boolean; timer: number; isCounting: boolean } => {
+    const mode = c.props.mode || 'on_delay';
+    const delayTime = Math.max(1, Number(c.props.delayTime) || 10);
+    const timer = Number(c.props._timer ?? 0);
+    const prevEnergized = Boolean(c.props._isEnergized ?? false);
+
+    if (vSup < 3.5) {
+      return { isEnergized: false, timer: 0, isCounting: false };
+    }
+
+    const isHigh = vInRel >= 0.6 * vSup;
+
+    if (mode === 'on_delay') {
+      if (isHigh) {
+        if (prevEnergized) {
+          return { isEnergized: true, timer: delayTime, isCounting: false };
+        } else {
+          const nextTimer = timer + dt;
+          if (nextTimer >= delayTime) {
+            return { isEnergized: true, timer: delayTime, isCounting: false };
+          } else {
+            return { isEnergized: false, timer: nextTimer, isCounting: true };
+          }
+        }
+      } else {
+        return { isEnergized: false, timer: 0, isCounting: false };
+      }
+    } else {
+      // off_delay
+      if (isHigh) {
+        return { isEnergized: true, timer: 0, isCounting: false };
+      } else {
+        if (prevEnergized) {
+          const nextTimer = timer + dt;
+          if (nextTimer >= delayTime) {
+            return { isEnergized: false, timer: 0, isCounting: false };
+          } else {
+            return { isEnergized: true, timer: nextTimer, isCounting: true };
+          }
+        } else {
+          return { isEnergized: false, timer: 0, isCounting: false };
+        }
+      }
     }
   };
 
@@ -769,12 +849,21 @@ export function solveCircuit(
 
         const sensorType = c.props.sensorType || 'light';
         let minVal = 0, maxVal = 100;
-        if (sensorType === 'temp') {
+        if (sensorType === 'temperature' || sensorType === 'temp') {
           minVal = -10;
           maxVal = 80;
+        } else if (sensorType === 'gas') {
+          minVal = 0;
+          maxVal = 1000;
+        } else if (sensorType === 'smoke') {
+          minVal = 0;
+          maxVal = 100;
+        } else if (sensorType === 'ultrasonic') {
+          minVal = 2;
+          maxVal = 400;
         }
-        const curVal = Number(c.props.envValue ?? (sensorType === 'temp' ? 25 : sensorType === 'humidity' ? 60 : 50));
-        const k = Math.max(0.0001, Math.min(0.9999, (curVal - minVal) / (maxVal - minVal)));
+        const curVal = Number(c.props.envValue ?? (sensorType === 'temp' || sensorType === 'temperature' ? 25 : sensorType === 'humidity' ? 60 : sensorType === 'gas' ? 300 : sensorType === 'ultrasonic' ? 50 : 50));
+        const k = Math.max(0.0001, Math.min(0.9999, (curVal - minVal) / Math.max(1, maxVal - minVal)));
 
         if (uAo >= 0) {
           const isPowered = controlStates?.sensorPowered?.[c.id] ?? true;
@@ -785,7 +874,7 @@ export function solveCircuit(
             addResistor(uAo, uGnd, 100);
           }
         }
-      } else if (c.type === 'relay_module_1ch') {
+      } else if (c.type === 'relay_module_1ch' || c.type === 'time_relay') {
         const netVcc = pinToNetId.get(`${c.id}:vcc`) || pinToNetId.get(`${c.id}:VCC`);
         const netGnd = pinToNetId.get(`${c.id}:gnd`) || pinToNetId.get(`${c.id}:GND`);
         const netIn = pinToNetId.get(`${c.id}:in`) || pinToNetId.get(`${c.id}:IN`);
@@ -870,7 +959,7 @@ export function solveCircuit(
       const assumedPowered = vSources.length > 0;
       initialControlStates.sensorPowered[c.id] = assumedPowered;
       initialControlStates.sensorDoHigh[c.id] = computeSensorDoHigh(c, assumedPowered, c.props._doHigh);
-    } else if (c.type === 'relay_module_1ch') {
+    } else if (c.type === 'relay_module_1ch' || c.type === 'time_relay') {
       initialControlStates.relayEnergized[c.id] = Boolean(c.props._isEnergized);
     }
   }
@@ -933,6 +1022,21 @@ export function solveCircuit(
 
       if (refinedControlStates.relayEnergized[c.id] !== isEnergized) {
         refinedControlStates.relayEnergized[c.id] = isEnergized;
+        needsResolve = true;
+      }
+    } else if (c.type === 'time_relay') {
+      const netVcc = pinToNetId.get(`${c.id}:vcc`) || pinToNetId.get(`${c.id}:VCC`);
+      const netGnd = pinToNetId.get(`${c.id}:gnd`) || pinToNetId.get(`${c.id}:GND`);
+      const netIn = pinToNetId.get(`${c.id}:in`) || pinToNetId.get(`${c.id}:IN`);
+      const vVcc = netVcc ? (nodeVoltages[netVcc] ?? 0) : 0;
+      const vGnd = netGnd ? (nodeVoltages[netGnd] ?? 0) : 0;
+      const vIn = netIn ? (nodeVoltages[netIn] ?? 0) : 0;
+      const vSup = vVcc - vGnd;
+      const vInRel = vIn - vGnd;
+      const trRes = computeTimeRelay(c, vSup, vInRel, dtSeconds);
+
+      if (refinedControlStates.relayEnergized[c.id] !== trRes.isEnergized) {
+        refinedControlStates.relayEnergized[c.id] = trRes.isEnergized;
         needsResolve = true;
       }
     }
@@ -1201,6 +1305,26 @@ export function solveCircuit(
         componentCurrents[c.id] = Math.round(iCoil * 1000) / 1000;
         componentPowers[c.id] = Math.round(vSup * iCoil * 100) / 100;
         operatingStates[c.id] = isEnergized;
+      } else if (c.type === 'time_relay') {
+        const netVcc = pinToNetId.get(`${c.id}:vcc`) || pinToNetId.get(`${c.id}:VCC`);
+        const netGnd = pinToNetId.get(`${c.id}:gnd`) || pinToNetId.get(`${c.id}:GND`);
+        const netIn = pinToNetId.get(`${c.id}:in`) || pinToNetId.get(`${c.id}:IN`);
+        const vVcc = netVcc ? (nodeVoltages[netVcc] ?? 0) : 0;
+        const vGnd = netGnd ? (nodeVoltages[netGnd] ?? 0) : 0;
+        const vIn = netIn ? (nodeVoltages[netIn] ?? 0) : 0;
+        const vSup = Math.max(0, vVcc - vGnd);
+        const vInRel = Math.max(0, vIn - vGnd);
+
+        const trRes = computeTimeRelay(c, vSup, vInRel, dtSeconds);
+        c.props._isEnergized = trRes.isEnergized;
+        c.props._timer = trRes.timer;
+        c.props._isCounting = trRes.isCounting;
+
+        componentVoltages[c.id] = Math.round(vSup * 100) / 100;
+        const iCoil = trRes.isEnergized ? vSup / 70 : vSup / 1000;
+        componentCurrents[c.id] = Math.round(iCoil * 1000) / 1000;
+        componentPowers[c.id] = Math.round(vSup * iCoil * 100) / 100;
+        operatingStates[c.id] = trRes.isEnergized;
       }
     }
 

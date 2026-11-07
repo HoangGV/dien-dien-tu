@@ -11,10 +11,13 @@ export interface PresetsModalProps {
 }
 
 export const PresetsModal: React.FC<PresetsModalProps> = ({ isOpen, onClose }) => {
-  const { config, setCircuit } = useWorkspaceStore();
+  const { config, setCircuit, setStatusMessage } = useWorkspaceStore();
 
   const handleApplyPreset = (preset: Preset) => {
     setCircuit(preset.state, true);
+    if (preset.expectation) {
+      setStatusMessage(preset.expectation);
+    }
     onClose();
   };
 
