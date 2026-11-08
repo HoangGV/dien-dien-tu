@@ -18,6 +18,8 @@ import {
   createPresetHouseholdM,
   createPresetSensorR,
   createPresetElectronicsV,
+  createPresetElectronicsX,
+  createPresetElectronicsY,
 } from './presets';
 import { oscilloscopeService } from './oscilloscopeService';
 
@@ -1848,6 +1850,126 @@ export const ALL_SOLVER_TEST_CASES: SolverTestCase[] = [
       const passed = diffVPct < 0.1 && diffIPct < 0.1;
       return {
         actualStr: `Không OSC: V_tụ = ${vCapWithout.toFixed(4)} V, I = ${(iCapWithout * 1000).toFixed(4)} mA; Có OSC (10 MΩ): V_tụ = ${vCapWith.toFixed(4)} V, I = ${(iCapWith * 1000).toFixed(4)} mA; Sai lệch V: ${diffVPct.toFixed(4)}%, Sai lệch I: ${diffIPct.toFixed(4)}%`,
+        passed,
+      };
+    },
+  }),
+  defineTestCase({
+    id: 'osc4_rc_single_shot_1s',
+    stt: 56,
+    group: 'Dụng cụ đo – công tơ',
+    name: 'Ca 56: Mạch RC (v) chụp 1 s mô phỏng: V(0,1 s) ≈ 3,16 V (±2%), V(1,0 s) ≈ 4,9–5,0 V',
+    expectedStr: 'V(0,1 s) ≈ 3,16 V (±2%), V(1,0 s) ≈ 4,9–5,0 V',
+    toleranceStr: 'V(0,1 s) sai lệch ±2%, V(1,0 s) trong khoảng 4,9–5,0 V',
+    createCircuit: () => {
+      return createPresetElectronicsV();
+    },
+    evaluate: (circuit) => {
+      oscilloscopeService.clear();
+      const sim = new SimulationService();
+      sim.compile(circuit, 'dc');
+      sim.runSingleShotSync(1.0);
+      const samples = oscilloscopeService.getSamples();
+      let sampleAt01 = samples[0];
+      let dist01 = Math.abs((sampleAt01?.t ?? 0) - 0.1);
+      for (const s of samples) {
+        const d = Math.abs(s.t - 0.1);
+        if (d < dist01) {
+          dist01 = d;
+          sampleAt01 = s;
+        }
+      }
+      const lastSample = samples[samples.length - 1];
+      const vAt01 = sampleAt01?.v1 ?? 0;
+      const vEnd = lastSample?.v1 ?? 0;
+
+      const v01Ok = Math.abs(vAt01 - 3.16) <= 3.16 * 0.02 + 0.01;
+      const vEndOk = vEnd >= 4.9 && vEnd <= 5.01;
+      const passed = v01Ok && vEndOk;
+      return {
+        actualStr: `V(t=0,1s) = ${vAt01.toFixed(3)} V (kì vọng 3,16 V ± 2%); V(t=${lastSample?.t.toFixed(3)}s) = ${vEnd.toFixed(3)} V (kì vọng 4,9–5,0 V)`,
+        passed,
+      };
+    },
+  }),
+  defineTestCase({
+    id: 'osc5_ac_source_100ms',
+    stt: 57,
+    group: 'Dụng cụ đo – công tơ',
+    name: 'Ca 57: Nguồn xoay chiều 5 V đỉnh 50 Hz chụp 100 ms: Đỉnh ±5 V (±2%), Chu kì 20 ms (±2%)',
+    expectedStr: 'max ≈ +5 V (±2%), min ≈ -5 V (±2%), chu kì giữa 2 lần cắt lên 0 V = 20 ms (±2%)',
+    toleranceStr: 'Biên độ ±2%, chu kì ±2%',
+    createCircuit: () => {
+      return createPresetElectronicsX();
+    },
+    evaluate: (circuit) => {
+      oscilloscopeService.clear();
+      const sim = new SimulationService();
+      sim.compile(circuit, 'dc');
+      sim.runSingleShotSync(0.1);
+      const samples = oscilloscopeService.getSamples();
+      let maxV = -Infinity;
+      let minV = Infinity;
+      for (const s of samples) {
+        if (s.v1 > maxV) maxV = s.v1;
+        if (s.v1 < minV) minV = s.v1;
+      }
+      const zeroCrossings: number[] = [];
+      for (let i = 1; i < samples.length; i++) {
+        if (samples[i - 1].v1 <= 0 && samples[i].v1 > 0) {
+          const t0 = samples[i - 1].t;
+          const t1 = samples[i].t;
+          const v0 = samples[i - 1].v1;
+          const v1 = samples[i].v1;
+          const tCross = t0 + (-v0 / (v1 - v0)) * (t1 - t0);
+          zeroCrossings.push(tCross);
+        }
+      }
+      let avgPeriod = 0;
+      if (zeroCrossings.length >= 2) {
+        let totalT = 0;
+        for (let i = 1; i < zeroCrossings.length; i++) {
+          totalT += (zeroCrossings[i] - zeroCrossings[i - 1]);
+        }
+        avgPeriod = totalT / (zeroCrossings.length - 1);
+      }
+      const maxOk = Math.abs(maxV - 5.0) <= 5.0 * 0.02;
+      const minOk = Math.abs(minV - (-5.0)) <= 5.0 * 0.02;
+      const periodOk = Math.abs(avgPeriod - 0.020) <= 0.020 * 0.02;
+      const passed = maxOk && minOk && periodOk;
+      return {
+        actualStr: `V_max = ${maxV.toFixed(3)} V (kì vọng +5 V ± 2%); V_min = ${minV.toFixed(3)} V (kì vọng -5 V ± 2%); Chu kì T = ${(avgPeriod * 1000).toFixed(2)} ms (kì vọng 20 ms ± 2%)`,
+        passed,
+      };
+    },
+  }),
+  defineTestCase({
+    id: 'osc6_half_wave_rectifier',
+    stt: 58,
+    group: 'Dụng cụ đo – công tơ',
+    name: 'Ca 58: Mạch chỉnh lưu nửa chu kì (y): Đỉnh CH2 ≈ 4,3 V (±0,15 V), V_min ≥ -0,05 V',
+    expectedStr: 'V_peak(CH2) ≈ 4,3 V (±0,15 V), V_min(CH2) ≥ -0,05 V',
+    toleranceStr: 'Đỉnh 4,15–4,45 V; V_min ≥ -0,05 V',
+    createCircuit: () => {
+      return createPresetElectronicsY();
+    },
+    evaluate: (circuit) => {
+      oscilloscopeService.clear();
+      const sim = new SimulationService();
+      sim.compile(circuit, 'dc');
+      sim.runSingleShotSync(0.1);
+      const samples = oscilloscopeService.getSamples();
+      let maxV2 = -Infinity;
+      let minV2 = Infinity;
+      for (const s of samples) {
+        if (s.v2 > maxV2) maxV2 = s.v2;
+        if (s.v2 < minV2) minV2 = s.v2;
+      }
+      const peakOk = Math.abs(maxV2 - 4.3) <= 0.15;
+      const minOk = minV2 >= -0.05;
+      const passed = peakOk && minOk;
+      return {
+        actualStr: `V_đỉnh(CH2) = ${maxV2.toFixed(3)} V (kì vọng 4,3 V ± 0,15 V); V_min(CH2) = ${minV2.toFixed(3)} V (kì vọng ≥ -0,05 V)`,
         passed,
       };
     },

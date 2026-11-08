@@ -253,9 +253,9 @@ export const OscilloscopePanel: React.FC = () => {
       ctx.fillText('2', 10, yZero2 + 3);
     }
 
-    // 4. Fetch samples from Ring Buffer
-    const samples = oscilloscopeService.getSamples();
-    if (samples.length === 0) {
+    // 4. Fetch samples from buffer & compute window
+    const allSamples = oscilloscopeService.getSamples();
+    if (allSamples.length === 0) {
       // Empty buffer notice
       ctx.fillStyle = '#64748B';
       ctx.font = 'bold 12px sans-serif';
@@ -265,77 +265,110 @@ export const OscilloscopePanel: React.FC = () => {
     }
 
     const tSpan = 10 * timeDiv;
-    const tLatest = samples[samples.length - 1].t;
-
+    const tLatest = allSamples[allSamples.length - 1].t;
     let tStart = Math.max(0, tLatest - tSpan);
 
-    // Simple Trigger (rising edge alignment on CH1 if enabled)
-    if (trigMode === 'rising' && ch1On) {
-      // Find latest rising edge crossing trigLevel in buffer
+    // Rising edge trigger on CH1
+    if (trigMode === 'rising' && ch1On && allSamples.length > 1) {
       let edgeIdx = -1;
-      for (let i = samples.length - 1; i >= 1; i--) {
-        if (samples[i - 1].v1 < trigLevel && samples[i].v1 >= trigLevel) {
-          // Found rising edge
+      for (let i = allSamples.length - 1; i >= 1; i--) {
+        if (allSamples[i - 1].v1 < trigLevel && allSamples[i].v1 >= trigLevel) {
           edgeIdx = i;
           break;
         }
       }
       if (edgeIdx >= 0) {
-        const tEdge = samples[edgeIdx].t;
-        // Align trigger edge to middle of screen (5th div)
+        const tEdge = allSamples[edgeIdx].t;
         tStart = tEdge - 5 * timeDiv;
       }
     }
 
-    // Draw Channel 1 (Blue)
-    if (ch1On) {
-      ctx.strokeStyle = '#38BDF8';
+    const windowSamples = oscilloscopeService.getSamplesForWindow(tStart, tSpan);
+
+    // Flatness detection on CH1
+    let minV1 = Infinity;
+    let maxV1 = -Infinity;
+    for (let i = 0; i < windowSamples.length; i++) {
+      const v = windowSamples[i].v1;
+      if (v < minV1) minV1 = v;
+      if (v > maxV1) maxV1 = v;
+    }
+    const fullScale1 = 8 * vDiv1;
+    const isFlat = ch1On && windowSamples.length > 5 && maxV1 - minV1 < 0.02 * fullScale1;
+
+    setStatusText({
+      windowMs: Math.round(tSpan * 1000),
+      sampleCount: windowSamples.length,
+      isFlat,
+    });
+
+    const drawWaveform = (
+      valGetter: (s: OscilloscopeSample) => number,
+      color: string,
+      vDiv: number,
+      offset: number
+    ) => {
+      if (windowSamples.length === 0) return;
+      ctx.strokeStyle = color;
       ctx.lineWidth = 2;
       ctx.beginPath();
-      let started = false;
 
-      for (let i = 0; i < samples.length; i++) {
-        const s = samples[i];
-        if (s.t < tStart) continue;
-        if (s.t > tStart + tSpan) break;
-
-        const x = ((s.t - tStart) / tSpan) * width;
-        const y = yMid - offset1 * dy - (s.v1 / vDiv1) * dy;
-
-        if (!started) {
-          ctx.moveTo(x, y);
-          started = true;
-        } else {
-          ctx.lineTo(x, y);
+      if (windowSamples.length <= width) {
+        let started = false;
+        for (let i = 0; i < windowSamples.length; i++) {
+          const s = windowSamples[i];
+          if (s.t < tStart || s.t > tStart + tSpan) continue;
+          const x = ((s.t - tStart) / tSpan) * width;
+          const y = yMid - offset * dy - (valGetter(s) / vDiv) * dy;
+          if (!started) {
+            ctx.moveTo(x, y);
+            started = true;
+          } else {
+            ctx.lineTo(x, y);
+          }
         }
-      }
-      ctx.stroke();
-    }
+        ctx.stroke();
+      } else {
+        // Peak detect (column min-max)
+        const colMin = new Float64Array(width).fill(Infinity);
+        const colMax = new Float64Array(width).fill(-Infinity);
+        const colHas = new Uint8Array(width);
 
-    // Draw Channel 2 (Red)
-    if (ch2On) {
-      ctx.strokeStyle = '#F87171';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      let started = false;
-
-      for (let i = 0; i < samples.length; i++) {
-        const s = samples[i];
-        if (s.t < tStart) continue;
-        if (s.t > tStart + tSpan) break;
-
-        const x = ((s.t - tStart) / tSpan) * width;
-        const y = yMid - offset2 * dy - (s.v2 / vDiv2) * dy;
-
-        if (!started) {
-          ctx.moveTo(x, y);
-          started = true;
-        } else {
-          ctx.lineTo(x, y);
+        for (let i = 0; i < windowSamples.length; i++) {
+          const s = windowSamples[i];
+          if (s.t < tStart || s.t > tStart + tSpan) continue;
+          let col = Math.floor(((s.t - tStart) / tSpan) * width);
+          if (col < 0) col = 0;
+          if (col >= width) col = width - 1;
+          const v = valGetter(s);
+          if (v < colMin[col]) colMin[col] = v;
+          if (v > colMax[col]) colMax[col] = v;
+          colHas[col] = 1;
         }
+
+        let started = false;
+        let prevY = yMid;
+        for (let c = 0; c < width; c++) {
+          if (!colHas[c]) continue;
+          const yTop = yMid - offset * dy - (colMax[c] / vDiv) * dy;
+          const yBot = yMid - offset * dy - (colMin[c] / vDiv) * dy;
+          if (!started) {
+            ctx.moveTo(c, yTop);
+            ctx.lineTo(c, yBot);
+            started = true;
+          } else {
+            ctx.lineTo(c, prevY);
+            ctx.lineTo(c, yTop);
+            ctx.lineTo(c, yBot);
+          }
+          prevY = yBot;
+        }
+        ctx.stroke();
       }
-      ctx.stroke();
-    }
+    };
+
+    if (ch1On) drawWaveform((s) => s.v1, '#38BDF8', vDiv1, offset1);
+    if (ch2On) drawWaveform((s) => s.v2, '#F87171', vDiv2, offset2);
 
     // 5. Cursor line & Readout
     if (cursorPointRef.current) {
@@ -417,6 +450,21 @@ export const OscilloscopePanel: React.FC = () => {
         </div>
         <div className="flex items-center gap-1.5">
           <button
+            onClick={handleAutoSet}
+            className="px-2 py-0.5 border-2 border-black bg-[#A7F3D0] hover:bg-[#6EE7B7] text-black text-[10px] font-black uppercase flex items-center gap-1 cursor-pointer transition-transform active:translate-x-0.5 active:translate-y-0.5"
+            title="Tự động căn chỉnh thang đo"
+          >
+            TỰ ĐẶT
+          </button>
+          <button
+            onClick={handleSingleShot}
+            disabled={isCapturing}
+            className="px-2 py-0.5 border-2 border-black bg-[#C7D2FE] hover:bg-[#A5B4FC] text-black text-[10px] font-black uppercase flex items-center gap-1 cursor-pointer disabled:opacity-50 transition-transform active:translate-x-0.5 active:translate-y-0.5"
+            title="Chụp dữ liệu một màn hình theo ngân sách khung"
+          >
+            {isCapturing ? `Đang chụp… ${captureProgress}%` : 'CHỤP 1 LẦN'}
+          </button>
+          <button
             onClick={toggleHold}
             className={`px-2 py-0.5 border-2 border-black text-[10px] font-black uppercase flex items-center gap-1 cursor-pointer transition-transform active:translate-x-0.5 active:translate-y-0.5 ${
               isHeld ? 'bg-[#EF4444] text-white' : 'bg-[#FFD84D] text-black hover:bg-[#FFE37A]'
@@ -442,6 +490,16 @@ export const OscilloscopePanel: React.FC = () => {
         </div>
       </div>
 
+      {/* Progress Bar when Single-Shot Capturing */}
+      {isCapturing && (
+        <div className="w-full bg-[#E0E7FF] border-2 border-black p-1 flex items-center gap-2">
+          <span className="text-[10px] font-black uppercase text-[#1E1B4B]">Đang chụp… {captureProgress}%</span>
+          <div className="flex-1 bg-white border border-black h-3 overflow-hidden">
+            <div className="bg-[#4F46E5] h-full transition-all duration-75" style={{ width: `${captureProgress}%` }} />
+          </div>
+        </div>
+      )}
+
       {/* 2. Cursor Readout Banner */}
       <div className="h-6 bg-[#0F172A] border-2 border-black px-2 flex items-center justify-between text-[11px] font-mono font-bold text-white">
         <div className="flex items-center gap-4">
@@ -466,6 +524,22 @@ export const OscilloscopePanel: React.FC = () => {
           onMouseLeave={handleMouseLeave}
           className="w-full h-auto cursor-crosshair block"
         />
+      </div>
+
+      {/* 3.1 Status Line under Canvas */}
+      <div className="flex items-center justify-between text-[10px] font-mono font-bold bg-[#F1F5F9] border-2 border-black px-2 py-1">
+        <div className="flex items-center gap-2 text-black">
+          <span>Cửa sổ: {statusText.windowMs} ms</span>
+          <span>|</span>
+          <span>Mẫu: {statusText.sampleCount}</span>
+          <span>|</span>
+          <span>Tốc độ: ×{timeSpeed === 0.01 ? '0,01' : timeSpeed === 0.1 ? '0,1' : timeSpeed}</span>
+        </div>
+        {statusText.isFlat && (
+          <div className="text-[#DC2626] font-sans font-black flex items-center gap-1 animate-pulse">
+            <span>⚠️ Đường gần phẳng: thử tăng thời gian/ô hoặc bấm TỰ ĐẶT</span>
+          </div>
+        )}
       </div>
 
       {/* 4. Controls Deck (Time/div, CH1, CH2, Trigger) */}

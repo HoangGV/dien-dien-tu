@@ -409,7 +409,7 @@ export function solveCircuit(
         const dcOffset = Number(src.props.dcOffset ?? 0);
         const phaseDeg = Number(src.props.phase ?? 0);
         const phaseRad = (phaseDeg * Math.PI) / 180;
-        vVal = dcOffset + vPeak * Math.sin(2 * Math.PI * freq * simTime + phaseRad);
+        vVal = dcOffset + vPeak * Math.sin(2 * Math.PI * freq * timeSec + phaseRad);
       } else {
         vVal = Number(src.props.voltage) || 220;
       }
@@ -856,8 +856,8 @@ export function solveCircuit(
             const vf = 0.7; // Silicon barrier 0.7 V
             addResistor(uA, uK, rd);
             const ieq = vf / rd;
-            if (uA >= 0) I[uA] -= ieq;
-            if (uK >= 0) I[uK] += ieq;
+            if (uA >= 0) I[uA] += ieq;
+            if (uK >= 0) I[uK] -= ieq;
           } else {
             addResistor(uA, uK, 1e7);
           }
@@ -1036,13 +1036,23 @@ export function solveCircuit(
   let needsResolve = false;
   const refinedConduction = { ...initialConduction };
   for (const c of components) {
-    if (c.type === 'led' || c.type === 'diode') {
+    if (c.type === 'diode') {
       const netA = pinToNetId.get(`${c.id}:A`) || pinToNetId.get(`${c.id}:1`) || pinToNetId.get(`${c.id}:pos`);
       const netK = pinToNetId.get(`${c.id}:K`) || pinToNetId.get(`${c.id}:2`) || pinToNetId.get(`${c.id}:neg`);
       const vA = netA ? (nodeVoltages[netA] ?? 0) : 0;
       const vK = netK ? (nodeVoltages[netK] ?? 0) : 0;
-      const vThreshold = c.type === 'diode' ? 0.65 : 1.5;
-      if (vA - vK < vThreshold) {
+      const iDiode = (vA - vK - 0.7) / 5.0;
+      const shouldConduct = (vA - vK >= 0.70) && (iDiode > 0);
+      if (refinedConduction[c.id] !== shouldConduct) {
+        refinedConduction[c.id] = shouldConduct;
+        needsResolve = true;
+      }
+    } else if (c.type === 'led') {
+      const netA = pinToNetId.get(`${c.id}:A`) || pinToNetId.get(`${c.id}:1`) || pinToNetId.get(`${c.id}:pos`);
+      const netK = pinToNetId.get(`${c.id}:K`) || pinToNetId.get(`${c.id}:2`) || pinToNetId.get(`${c.id}:neg`);
+      const vA = netA ? (nodeVoltages[netA] ?? 0) : 0;
+      const vK = netK ? (nodeVoltages[netK] ?? 0) : 0;
+      if (vA - vK < 1.5) {
         refinedConduction[c.id] = false;
         needsResolve = true;
       }
@@ -1775,12 +1785,27 @@ export function solveCircuit(
   let openCircuit: OpenCircuitInfo | undefined;
   if (acSources.length > 0) {
     const src = acSources[0];
-    const srcANet = pinToNetId.get(`${src.id}:A`);
-    const srcONet = pinToNetId.get(`${src.id}:O`);
+    const isSignal = src.props.peakVoltage !== undefined;
+    const srcANet = isSignal
+      ? (pinToNetId.get(`${src.id}:pos`) || pinToNetId.get(`${src.id}:A`))
+      : pinToNetId.get(`${src.id}:A`);
+    const srcONet = isSignal
+      ? (pinToNetId.get(`${src.id}:neg`) || pinToNetId.get(`${src.id}:O`))
+      : pinToNetId.get(`${src.id}:O`);
     if (!srcANet) {
-      openCircuit = { isOpen: true, reason: 'Mạch hở: Nguồn điện chưa nối dây ở cực Pha (A)', componentId: src.id, missingPinId: 'A' };
+      openCircuit = {
+        isOpen: true,
+        reason: isSignal ? 'Mạch hở: Nguồn chưa nối cực (+)' : 'Mạch hở: Nguồn điện chưa nối dây ở cực Pha (A)',
+        componentId: src.id,
+        missingPinId: isSignal ? 'pos' : 'A',
+      };
     } else if (!srcONet) {
-      openCircuit = { isOpen: true, reason: 'Mạch hở: Nguồn điện chưa nối dây ở cực Trung tính (O)', componentId: src.id, missingPinId: 'O' };
+      openCircuit = {
+        isOpen: true,
+        reason: isSignal ? 'Mạch hở: Nguồn chưa nối cực (−)' : 'Mạch hở: Nguồn điện chưa nối dây ở cực Trung tính (O)',
+        componentId: src.id,
+        missingPinId: isSignal ? 'neg' : 'O',
+      };
     } else {
       const loads = components.filter(c => ['ceiling_fan', 'lamp', 'lamp_fluorescent', 'appliance_generic', 'electric_bell'].includes(c.type));
       for (const ld of loads) {

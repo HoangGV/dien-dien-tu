@@ -110,6 +110,7 @@ export class OscilloscopeService {
     this.coarseSampleInterval = 1;
     this.coarseStepCounter = 0;
     this.lastSampleTime = -1;
+    this.isHeld = false;
   }
 
   /**

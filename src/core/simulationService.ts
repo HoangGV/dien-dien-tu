@@ -857,6 +857,7 @@ export class SimulationService {
       : Math.max(10e-6, Math.min(0.001, duration / 500));
 
     let timeElapsed = 0;
+    oscilloscopeService.setHeld(false);
     while (timeElapsed < duration - 1e-9) {
       const stepDt = Math.min(duration - timeElapsed, dt);
       this.step(stepDt);
@@ -892,6 +893,7 @@ export class SimulationService {
 
     let timeElapsed = 0;
     let cancelled = false;
+    oscilloscopeService.setHeld(false);
 
     const slice = () => {
       if (cancelled) return;
@@ -1089,8 +1091,12 @@ export class SimulationService {
   }
 
   public setSpeed(speed: number) {
-    this.timeSpeed = Math.max(0.1, Math.min(10, speed));
+    this.timeSpeed = Math.max(0.01, Math.min(10, speed));
     this.addLog(`Tốc độ mô phỏng đặt thành ×${this.timeSpeed}`);
+  }
+
+  public setTimeSpeed(speed: number) {
+    this.setSpeed(speed);
   }
 
   public subscribe(listener: SnapshotListener): () => void {

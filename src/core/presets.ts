@@ -319,6 +319,121 @@ export function createPresetElectronicsV(): CircuitState {
   };
 }
 
+// Preset (x): Nguồn xoay chiều sin 5 V đỉnh, 50 Hz + Dao động kí
+export function createPresetElectronicsX(): CircuitState {
+  const ac: ComponentInstance = {
+    id: 'src1',
+    type: 'ac_source',
+    x: 100,
+    y: 140,
+    rot: 0,
+    flip: false,
+    label: 'U~',
+    props: { peakVoltage: 5, frequency: 50, dcOffset: 0, phase: 0 },
+  };
+  const osc: ComponentInstance = {
+    id: 'osc1',
+    type: 'oscilloscope',
+    x: 340,
+    y: 140,
+    rot: 0,
+    flip: false,
+    label: 'OSC',
+    props: {},
+  };
+  const gnd: ComponentInstance = {
+    id: 'gnd1',
+    type: 'gnd',
+    x: 100,
+    y: 220,
+    rot: 0,
+    flip: false,
+    label: '',
+    props: {},
+  };
+
+  const w_ch1 = makePresetWire('w_ch1', 'src1', 'pos', 'osc1', 'ch1', [{ x: 100, y: 110 }, { x: 300, y: 110 }, { x: 300, y: 120 }], 'phase');
+  const w_gnd = makePresetWire('w_gnd', 'src1', 'neg', 'osc1', 'gnd', [{ x: 100, y: 170 }, { x: 380, y: 170 }, { x: 380, y: 140 }], 'neutral');
+  const w_earth = makePresetWire('w_earth', 'src1', 'neg', 'gnd1', 'gnd', [{ x: 100, y: 170 }, { x: 100, y: 200 }], 'ground');
+
+  return {
+    components: [ac, osc, gnd],
+    wires: [w_ch1, w_gnd, w_earth],
+    junctions: [],
+    viewport: { x: 40, y: 40, zoom: 1 },
+  };
+}
+
+// Preset (y): Mạch chỉnh lưu nửa chu kì (Diode + Trở tải 1 kΩ + Dao động kí CH1/CH2)
+export function createPresetElectronicsY(): CircuitState {
+  const ac: ComponentInstance = {
+    id: 'src1',
+    type: 'ac_source',
+    x: 80,
+    y: 140,
+    rot: 0,
+    flip: false,
+    label: 'U~',
+    props: { peakVoltage: 5, frequency: 50, dcOffset: 0, phase: 0 },
+  };
+  const d: ComponentInstance = {
+    id: 'd1',
+    type: 'diode',
+    x: 220,
+    y: 100,
+    rot: 0,
+    flip: false,
+    label: 'D1',
+    props: { model: '1N4007' },
+  };
+  const r: ComponentInstance = {
+    id: 'r1',
+    type: 'resistor',
+    x: 360,
+    y: 140,
+    rot: 0,
+    flip: false,
+    label: 'R_tải',
+    props: { resistance: 1000 },
+  };
+  const osc: ComponentInstance = {
+    id: 'osc1',
+    type: 'oscilloscope',
+    x: 520,
+    y: 140,
+    rot: 0,
+    flip: false,
+    label: 'OSC',
+    props: {},
+  };
+  const gnd: ComponentInstance = {
+    id: 'gnd1',
+    type: 'gnd',
+    x: 80,
+    y: 220,
+    rot: 0,
+    flip: false,
+    label: '',
+    props: {},
+  };
+
+  const w1 = makePresetWire('w1', 'src1', 'pos', 'd1', 'A', [{ x: 80, y: 100 }, { x: 180, y: 100 }], 'phase');
+  const w2 = makePresetWire('w2', 'd1', 'K', 'r1', '1', [{ x: 260, y: 100 }, { x: 320, y: 100 }, { x: 320, y: 140 }], 'phase');
+  const w3 = makePresetWire('w3', 'r1', '2', 'src1', 'neg', [{ x: 400, y: 140 }, { x: 400, y: 180 }, { x: 80, y: 180 }], 'neutral');
+  const w_earth = makePresetWire('w_earth', 'src1', 'neg', 'gnd1', 'gnd', [{ x: 80, y: 180 }, { x: 80, y: 200 }], 'ground');
+
+  const w_ch1 = makePresetWire('w_ch1', 'src1', 'pos', 'osc1', 'ch1', [{ x: 80, y: 100 }, { x: 80, y: 60 }, { x: 480, y: 60 }, { x: 480, y: 120 }], 'phase');
+  const w_ch2 = makePresetWire('w_ch2', 'r1', '1', 'osc1', 'ch2', [{ x: 320, y: 100 }, { x: 460, y: 100 }, { x: 460, y: 140 }, { x: 480, y: 140 }], 'phase');
+  const w_osc_gnd = makePresetWire('w_osc_gnd', 'src1', 'neg', 'osc1', 'gnd', [{ x: 400, y: 180 }, { x: 560, y: 180 }, { x: 560, y: 140 }], 'neutral');
+
+  return {
+    components: [ac, d, r, osc, gnd],
+    wires: [w1, w2, w3, w_earth, w_ch1, w_ch2, w_osc_gnd],
+    junctions: [],
+    viewport: { x: 40, y: 40, zoom: 1 },
+  };
+}
+
 export const ELECTRONICS_PRESETS: Preset[] = [
   {
     id: 'el_f',
@@ -355,6 +470,20 @@ export const ELECTRONICS_PRESETS: Preset[] = [
     title: 'v) Quá trình nạp tụ RC (Dao động kí ảo)',
     description: 'Nguồn 5 V + điện trở 1 kΩ + tụ 100 µF + công tắc. Kênh CH1 đo điện áp tức thời trên tụ. Kì vọng: V_tụ tăng theo đường cong, đạt ≈ 3,16 V (63%) sau 0,1 s.',
     state: createPresetElectronicsV(),
+  },
+  {
+    id: 'el_x',
+    title: 'x) Nguồn xoay chiều sin 5 V đỉnh, 50 Hz (Dao động kí)',
+    description: 'Nguồn xoay chiều 5 V đỉnh, 50 Hz nối vào kênh CH1 của dao động kí.',
+    expectation: 'Kì vọng: sóng sin chu kì 20 ms, đỉnh ±5 V.',
+    state: createPresetElectronicsX(),
+  },
+  {
+    id: 'el_y',
+    title: 'y) Chỉnh lưu nửa chu kì (Diode 1N4007 + Tải 1 kΩ)',
+    description: 'Nguồn 5 V đỉnh 50 Hz qua diode 1N4007 nạp tải 1 kΩ. CH1 đo nguồn, CH2 đo tải.',
+    expectation: 'Kì vọng: CH2 chỉ có nửa chu kì dương, đỉnh ≈ 4,3 V.',
+    state: createPresetElectronicsY(),
   },
 ];
 
