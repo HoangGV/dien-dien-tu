@@ -1,28 +1,30 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
-import path from 'path';
+import { fileURLToPath, URL } from 'node:url';
 import {defineConfig} from 'vite';
 import {VitePWA} from 'vite-plugin-pwa';
 
 export default defineConfig(() => {
+  const base = process.env.VITE_BASE || '/';
   return {
-    base: process.env.BASE_URL || './',
+    base,
     plugins: [
       react(),
       tailwindcss(),
       VitePWA({
-        registerType: 'autoUpdate',
+        registerType: 'prompt',
         includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'icon.svg'],
         manifest: {
-          id: '/',
-          name: 'Mạch điện – Điện tử (GDPT 2018)',
-          short_name: 'MạchĐiện',
+          id: base,
+          name: 'Mạch điện – Điện tử',
+          short_name: 'Mạch điện',
           description: 'Mô phỏng thí nghiệm mạch điện và điện tử THCS & THPT môn Công nghệ',
+          lang: 'vi',
           theme_color: '#4169E1',
-          background_color: '#EEF2FF',
+          background_color: '#4169E1',
           display: 'standalone',
-          start_url: './',
-          scope: './',
+          start_url: base,
+          scope: base,
           icons: [
             {
               src: 'pwa-192x192.png',
@@ -44,6 +46,11 @@ export default defineConfig(() => {
             },
           ],
         },
+        workbox: {
+          globPatterns: ['**/*.{js,css,html,ico,png,svg,wasm,json}'],
+          cleanupOutdatedCaches: true,
+          clientsClaim: true,
+        },
         devOptions: {
           enabled: false, // Avoid sw interference during dev editing
         },
@@ -51,7 +58,7 @@ export default defineConfig(() => {
     ],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, './src'),
+        '@': fileURLToPath(new URL('./src', import.meta.url)),
       },
     },
     server: {

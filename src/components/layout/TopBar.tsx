@@ -27,6 +27,7 @@ import {
   RotateCcw,
   Activity,
   Cpu,
+  Info,
 } from 'lucide-react';
 import { NeoButton } from '../common/NeoButton';
 import { NeoDropdown, DropdownItem } from '../common/NeoDropdown';
@@ -38,6 +39,7 @@ import { StorageModal } from '../modals/StorageModal';
 import { PresetsModal } from '../modals/PresetsModal';
 import { DiagnosticsModal } from '../modals/DiagnosticsModal';
 import { CurriculumModal } from '../modals/CurriculumModal';
+import { AboutModal } from '../modals/AboutModal';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
 
 export interface TopBarProps {
@@ -88,6 +90,7 @@ export const TopBar: React.FC<TopBarProps> = ({ svgRef }) => {
   const [presetsOpen, setPresetsOpen] = useState(false);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const [curriculumOpen, setCurriculumOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
 
   // Responsive container width tracking for dynamic dropdown overflow
   const barRef = useRef<HTMLDivElement>(null);
@@ -284,6 +287,12 @@ export const TopBar: React.FC<TopBarProps> = ({ svgRef }) => {
         }
       },
     },
+    {
+      id: 'about',
+      label: 'Giới thiệu & Thông tin ứng dụng',
+      icon: <Info size={14} />,
+      onClick: () => setAboutOpen(true),
+    },
   ];
 
   // 5. Settings Menu
@@ -455,6 +464,11 @@ export const TopBar: React.FC<TopBarProps> = ({ svgRef }) => {
       <StorageModal isOpen={storageOpen} onClose={() => setStorageOpen(false)} />
       <PresetsModal isOpen={presetsOpen} onClose={() => setPresetsOpen(false)} />
       <CurriculumModal isOpen={curriculumOpen} onClose={() => setCurriculumOpen(false)} />
+      <AboutModal
+        isOpen={aboutOpen}
+        onClose={() => setAboutOpen(false)}
+        onOpenStandards={() => setStandardsOpen(true)}
+      />
     </>
   );
 };

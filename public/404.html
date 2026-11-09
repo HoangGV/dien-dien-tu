@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <title>Đang chuyển hướng - Mạch điện – Điện tử</title>
+    <script>
+      // GitHub Pages SPA Hash Routing 404 Fallback
+      (function() {
+        const path = window.location.pathname;
+        const segments = path.split('/').filter(Boolean);
+        // If hosted at /<repo-name>/..., base is /<repo-name>/, else /
+        const isGithubPages = window.location.hostname.endsWith('github.io');
+        const repoBase = (isGithubPages && segments.length > 0) ? '/' + segments[0] + '/' : '/';
+        window.location.replace(repoBase + '#/');
+      })();
+    </script>
+  </head>
+  <body style="font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background-color: #EEF2FF; color: #000;">
+    <div style="border: 3px solid #000; box-shadow: 4px 4px 0 #000; background: #fff; padding: 24px; text-align: center; max-width: 420px;">
+      <h2 style="margin: 0 0 12px 0; font-size: 18px; font-weight: 900; text-transform: uppercase;">Mạch điện – Điện tử</h2>
+      <p style="margin: 0 0 16px 0; font-size: 14px; font-weight: 500;">Đang chuyển hướng về ứng dụng...</p>
+      <a href="./" style="display: inline-block; padding: 8px 16px; background: #4169E1; color: #fff; text-decoration: none; font-weight: 700; border: 2px solid #000; box-shadow: 2px 2px 0 #000;">Về Trang Chủ</a>
+    </div>
+  </body>
+</html>

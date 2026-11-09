@@ -9,6 +9,7 @@ import { ToolStrip } from '../components/ui/ToolStrip';
 import { Canvas } from '../components/ui/Canvas';
 import { LintModal } from '../components/modals/LintModal';
 import { OscilloscopePanel } from '../components/ui/OscilloscopePanel';
+import { useOnlineStatus } from '../components/pwa/useOnlineStatus';
 
 export interface WorkspaceViewProps {
   slug: string;
@@ -48,6 +49,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ slug }) => {
   } = useWorkspaceStore();
 
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const isOnline = useOnlineStatus();
   const [lintModalOpen, setLintModalOpen] = useState(false);
   const [energyMult, setEnergyMult] = useState(simulationService.getEnergyMultiplier() || 1);
 
@@ -391,6 +393,10 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ slug }) => {
           <span>Linh kiện: {circuit.components.length} | Dây: {circuit.wires.length}</span>
           <span className="border-l border-black pl-2">
             Thu phóng: {Math.round(circuit.viewport.zoom * 100)}%
+          </span>
+          <span className="border-l border-black pl-2 flex items-center gap-1 font-bold">
+            <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-[#2DB84D]' : 'bg-[#E5322D] animate-pulse'}`} />
+            <span>{isOnline ? 'Đang online' : 'Đang offline'}</span>
           </span>
         </div>
       </footer>

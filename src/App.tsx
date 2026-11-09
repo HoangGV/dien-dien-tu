@@ -3,6 +3,7 @@ import { HomePage } from './views/HomePage';
 import { WorkspaceView } from './views/WorkspaceView';
 import { SolverTestView } from './views/SolverTestView';
 import { OfflineIndicator } from './components/pwa/OfflineIndicator';
+import { ReloadPrompt } from './components/pwa/ReloadPrompt';
 import { getWorkspaceBySlug, WORKSPACE_HOUSEHOLD } from './core/workspaces';
 
 export default function App() {
@@ -36,6 +37,7 @@ export default function App() {
         <HomePage />
       )}
       <OfflineIndicator />
+      <ReloadPrompt />
     </>
   );
 }
