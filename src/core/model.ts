@@ -5,6 +5,7 @@
 import React from 'react';
 
 export type WorkspaceMode = 'rms' | 'dc';
+export type CircuitViewMode = 'schematic' | 'installation';
 export type WireType = 'phase' | 'neutral' | 'ground' | 'other';
 
 export interface Point {
@@ -81,6 +82,11 @@ export interface ComponentInstance {
   props: Record<string, any>;
   damaged?: boolean;
   damageReason?: string;
+  install?: {
+    x: number;
+    y: number;
+    rot?: number;
+  };
 }
 
 export type Endpoint =
@@ -102,6 +108,10 @@ export interface Junction {
   id: string;
   x: number;
   y: number;
+  install?: {
+    x: number;
+    y: number;
+  };
 }
 
 export interface ViewportState {
@@ -172,6 +182,7 @@ export interface WorkspaceConfig {
   presets: Preset[];
   helpText: string;
   defaultSpecs?: Record<string, any>;
+  installView?: boolean;
 }
 
 export interface ExportPackage {

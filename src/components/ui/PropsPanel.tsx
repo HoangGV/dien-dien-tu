@@ -21,6 +21,7 @@ import { NeoButton } from '../common/NeoButton';
 import { WireType } from '../../core/model';
 import { formatMeasure } from '../../core/measureFormat';
 import { solveOhmmeterResistance } from '../../core/solver';
+import { getWireInstallPoints, calculatePolylineLengthMeters } from '../../core/installWiring';
 
 export interface PropsPanelProps {
   isBottomSheet?: boolean;
@@ -51,6 +52,7 @@ export const PropsPanel: React.FC<PropsPanelProps> = ({ isBottomSheet = false })
     setPEForSelected,
     resetKwh,
     setOscilloscopePanelOpen,
+    viewMode,
   } = useWorkspaceStore();
 
   const selectedComp =
@@ -75,9 +77,10 @@ export const PropsPanel: React.FC<PropsPanelProps> = ({ isBottomSheet = false })
   useEffect(() => {
     if (selectedComp) {
       setLocalLabel(selectedComp.label || '');
-      setLocalRot(String(Math.round(selectedComp.rot * 10) / 10));
+      const rot = viewMode === 'installation' ? (selectedComp.install?.rot ?? selectedComp.rot) : selectedComp.rot;
+      setLocalRot(String(Math.round(rot * 10) / 10));
     }
-  }, [selectedComp?.id, selectedComp?.rot, selectedComp?.label]);
+  }, [selectedComp?.id, selectedComp?.rot, selectedComp?.install?.rot, selectedComp?.label, viewMode]);
 
   if (!rightPanelOpen) {
     return null;
@@ -943,6 +946,16 @@ export const PropsPanel: React.FC<PropsPanelProps> = ({ isBottomSheet = false })
               <div className="text-[10px] text-gray-600 pt-1">
                 Số đoạn gấp khúc: {selectedWire.points.length - 1}
               </div>
+
+              {viewMode === 'installation' && (
+                <div className="text-[11px] font-black text-[#4169E1] bg-white border border-black p-1.5 shadow-[1px_1px_0_#000]">
+                  Chiều dài trên mặt bằng:{' '}
+                  {calculatePolylineLengthMeters(
+                    getWireInstallPoints(selectedWire, circuit)
+                  ).toFixed(2).replace('.', ',')}{' '}
+                  m
+                </div>
+              )}
             </div>
 
             {/* Wire Actions */}

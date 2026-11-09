@@ -40,6 +40,7 @@ import { PresetsModal } from '../modals/PresetsModal';
 import { DiagnosticsModal } from '../modals/DiagnosticsModal';
 import { CurriculumModal } from '../modals/CurriculumModal';
 import { AboutModal } from '../modals/AboutModal';
+import { WireSummaryModal } from '../modals/WireSummaryModal';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
 
 export interface TopBarProps {
@@ -79,6 +80,12 @@ export const TopBar: React.FC<TopBarProps> = ({ svgRef }) => {
     toggleOscilloscopePanel,
     setCircuit,
     setStatusMessage,
+    viewMode,
+    setViewMode,
+    showFloorPlan,
+    toggleShowFloorPlan,
+    wireSummaryOpen,
+    setWireSummaryOpen,
   } = useWorkspaceStore();
 
   const { isInstallable, install } = usePWAInstall();
@@ -240,6 +247,23 @@ export const TopBar: React.FC<TopBarProps> = ({ svgRef }) => {
       active: oscilloscopePanelOpen,
       onClick: () => toggleOscilloscopePanel(),
     },
+    ...(config.installView
+      ? [
+          {
+            id: 'toggle_floor_plan',
+            label: showFloorPlan ? 'Ẩn mặt bằng (Phòng 4×5m)' : 'Hiện mặt bằng (Phòng 4×5m)',
+            icon: <Grid size={14} />,
+            active: showFloorPlan,
+            onClick: toggleShowFloorPlan,
+          },
+          {
+            id: 'wire_summary',
+            label: 'Tổng hợp dây...',
+            icon: <FileText size={14} />,
+            onClick: () => setWireSummaryOpen(true),
+          },
+        ]
+      : []),
   ];
 
   // 5. Help Menu
@@ -324,6 +348,16 @@ export const TopBar: React.FC<TopBarProps> = ({ svgRef }) => {
 
   // Overflow dropdown items for lower priority menus on narrower screens
   const overflowItems: DropdownItem[] = [
+    ...(isCompact && config.installView
+      ? [
+          {
+            id: 'overflow_view_mode',
+            label: viewMode === 'schematic' ? 'Chế độ xem: [LẮP ĐẶT]' : 'Chế độ xem: [NGUYÊN LÍ]',
+            icon: <Eye size={14} />,
+            onClick: () => setViewMode(viewMode === 'schematic' ? 'installation' : 'schematic'),
+          },
+        ]
+      : []),
     ...(isCompact ? presetItems : []),
     ...(isNarrow ? helpItems : []),
     ...settingsItems,
@@ -399,6 +433,39 @@ export const TopBar: React.FC<TopBarProps> = ({ svgRef }) => {
           >
             {!isUltraNarrow ? 'LÀM LẠI' : ''}
           </NeoButton>
+
+          {/* Mode Switcher [NGUYÊN LÍ] [LẮP ĐẶT] (Neo-brutalism, --blue background when active) */}
+          {config.installView && !isCompact && (
+            <>
+              <span className="h-4 w-[2px] bg-black mx-0.5" />
+              <div className="flex items-center border-2 border-black rounded-none overflow-hidden shrink-0 shadow-[1px_1px_0_#000]">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('schematic')}
+                  className={`h-[24px] px-2 text-[11px] font-black tracking-tight uppercase transition-colors border-r border-black ${
+                    viewMode === 'schematic'
+                      ? 'bg-[#4169E1] text-white'
+                      : 'bg-white text-black hover:bg-slate-100'
+                  }`}
+                  title="Sơ đồ nguyên lí mạch điện"
+                >
+                  NGUYÊN LÍ
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('installation')}
+                  className={`h-[24px] px-2 text-[11px] font-black tracking-tight uppercase transition-colors ${
+                    viewMode === 'installation'
+                      ? 'bg-[#4169E1] text-white'
+                      : 'bg-white text-black hover:bg-slate-100'
+                  }`}
+                  title="Sơ đồ lắp đặt trên mặt bằng"
+                >
+                  LẮP ĐẶT
+                </button>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Center: Workspace Badge (visible if >= 850px) */}
@@ -468,6 +535,10 @@ export const TopBar: React.FC<TopBarProps> = ({ svgRef }) => {
         isOpen={aboutOpen}
         onClose={() => setAboutOpen(false)}
         onOpenStandards={() => setStandardsOpen(true)}
+      />
+      <WireSummaryModal
+        isOpen={wireSummaryOpen}
+        onClose={() => setWireSummaryOpen(false)}
       />
     </>
   );

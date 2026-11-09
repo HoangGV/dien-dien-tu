@@ -10,6 +10,7 @@ import {
   Endpoint,
   LintWarning,
   WireType,
+  CircuitViewMode,
 } from '../core/model';
 import { HistoryManager, DEFAULT_HISTORY_LIMIT } from '../core/history';
 import { StorageService, createDebouncedSaver, StorageStats } from '../core/storage';
@@ -79,6 +80,9 @@ interface WorkspaceStore {
   showWireLabels: boolean;
   fullFrameMode: boolean;
   timeSpeed: number;
+  viewMode: CircuitViewMode;
+  showFloorPlan: boolean;
+  wireSummaryOpen: boolean;
 
   activeTool: ActiveTool;
   editorMode: EditorMode;
@@ -131,6 +135,11 @@ interface WorkspaceStore {
   toggleRightPanel: () => void;
   closeRightPanel: () => void;
   setStatusMessage: (msg: string | null) => void;
+  setViewMode: (mode: CircuitViewMode) => void;
+  toggleViewMode: () => void;
+  toggleShowFloorPlan: () => void;
+  setWireSummaryOpen: (open: boolean) => void;
+  moveJunction: (junctionId: string, x: number, y: number) => void;
 
   // Component Actions
   setPlacingType: (type: string | null) => void;
@@ -207,6 +216,9 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   showWireLabels: true,
   fullFrameMode: false,
   timeSpeed: 1,
+  viewMode: 'schematic',
+  showFloorPlan: true,
+  wireSummaryOpen: false,
 
   activeTool: 'select',
   editorMode: 'idle',
@@ -264,10 +276,19 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     // Apply auto-migration to unify LEDs, poles, and TCVN standards
     const migrated = migrateCircuitState(baseState, slug);
 
+    let initialViewMode: CircuitViewMode = 'schematic';
+    if (config.installView) {
+      try {
+        const savedVm = localStorage.getItem('cn-dien:v1:view_mode_' + slug);
+        if (savedVm === 'installation') initialViewMode = 'installation';
+      } catch {}
+    }
+
     set({
       activeSlug: slug,
       config,
       circuit: migrated,
+      viewMode: initialViewMode,
       isSimulating: false,
       selectedComponentIds: [],
       selectedWireIds: [],
@@ -483,8 +504,79 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     set({ statusMessage: msg });
   },
 
+  setViewMode: (mode: CircuitViewMode) => {
+    const { config, activeSlug, circuit } = get();
+    if (!config.installView && mode === 'installation') {
+      return;
+    }
+
+    // When switching to installation mode, ensure all components have install positions initialized
+    if (mode === 'installation') {
+      let changed = false;
+      const nextComponents = circuit.components.map(c => {
+        if (!c.install) {
+          changed = true;
+          return {
+            ...c,
+            install: { x: c.x, y: c.y, rot: c.rot },
+          };
+        }
+        return c;
+      });
+      if (changed) {
+        set({ circuit: { ...circuit, components: nextComponents } });
+      }
+    }
+
+    try {
+      localStorage.setItem(`cn-dien:v1:view_mode_${activeSlug}`, mode);
+    } catch {}
+    set({ viewMode: mode });
+  },
+
+  toggleViewMode: () => {
+    const { viewMode } = get();
+    get().setViewMode(viewMode === 'installation' ? 'schematic' : 'installation');
+  },
+
+  toggleShowFloorPlan: () => {
+    set(s => ({ showFloorPlan: !s.showFloorPlan }));
+  },
+
+  setWireSummaryOpen: (open: boolean) => {
+    set({ wireSummaryOpen: open });
+  },
+
+  moveJunction: (junctionId: string, x: number, y: number) => {
+    const { circuit, viewMode } = get();
+    const nextJunctions = circuit.junctions.map(j => {
+      if (j.id !== junctionId) return j;
+      if (viewMode === 'installation') {
+        return {
+          ...j,
+          install: {
+            x: Math.round(x / 10) * 10,
+            y: Math.round(y / 10) * 10,
+          },
+        };
+      }
+      return {
+        ...j,
+        x: snapToGrid(x),
+        y: snapToGrid(y),
+      };
+    });
+    const nextState = { ...circuit, junctions: nextJunctions };
+    set({ circuit: nextState });
+    autoSaver.schedule(get().activeSlug, nextState);
+  },
+
   // ---------------- COMPONENT OPERATIONS ----------------
   setPlacingType: (type: string | null) => {
+    if (get().viewMode === 'installation' && type !== null) {
+      get().setStatusMessage('Thêm linh kiện và đi dây ở chế độ NGUYÊN LÍ');
+      return;
+    }
     set({
       placingType: type,
       editorMode: type ? 'placing' : 'idle',
@@ -492,6 +584,10 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   },
 
   placeComponent: (type: string, pos: Point) => {
+    if (get().viewMode === 'installation') {
+      get().setStatusMessage('Thêm linh kiện và đi dây ở chế độ NGUYÊN LÍ');
+      return;
+    }
     const { circuit } = get();
     const def = getComponentDef(type);
     if (!def) return;
@@ -522,6 +618,11 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       flipY: false,
       label,
       props: initialProps,
+      install: {
+        x: snapToGrid(pos.x),
+        y: snapToGrid(pos.y),
+        rot: 0,
+      },
     };
 
     const nextState: CircuitState = {
@@ -621,6 +722,10 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   },
 
   deleteSelected: () => {
+    if (get().viewMode === 'installation') {
+      get().setStatusMessage('Thêm linh kiện và đi dây ở chế độ NGUYÊN LÍ');
+      return;
+    }
     const { circuit, selectedComponentIds, selectedWireIds } = get();
     if (selectedComponentIds.length === 0 && selectedWireIds.length === 0) return;
 
@@ -666,12 +771,39 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   },
 
   rotateSelected: (deltaDeg = 90) => {
-    const { circuit, selectedComponentIds } = get();
+    const { circuit, selectedComponentIds, viewMode } = get();
     if (selectedComponentIds.length === 0) return;
 
     history.push(circuit);
 
     const selSet = new Set(selectedComponentIds);
+
+    if (viewMode === 'installation') {
+      const nextComponents = circuit.components.map(c => {
+        if (!selSet.has(c.id)) return c;
+        const curRot = c.install?.rot ?? c.rot;
+        const rawRot = (curRot + deltaDeg) % 360;
+        const nextRot = Math.round(((rawRot + 360) % 360) * 10) / 10;
+        return {
+          ...c,
+          install: {
+            x: c.install?.x ?? c.x,
+            y: c.install?.y ?? c.y,
+            rot: nextRot,
+          },
+        };
+      });
+      const nextState = { ...circuit, components: nextComponents };
+      set({
+        circuit: nextState,
+        canUndo: history.canUndo(),
+        canRedo: history.canRedo(),
+      });
+      autoSaver.schedule(get().activeSlug, nextState);
+      get().runLint();
+      return;
+    }
+
     const selComps = circuit.components.filter(c => selSet.has(c.id));
 
     const centerX = snapToGrid(selComps.reduce((acc, c) => acc + c.x, 0) / selComps.length);
@@ -728,10 +860,33 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   },
 
   setComponentRotation: (compId: string, rotDeg: number) => {
-    const { circuit } = get();
+    const { circuit, viewMode } = get();
     history.push(circuit);
 
     const normRot = Math.round(((rotDeg % 360 + 360) % 360) * 10) / 10;
+
+    if (viewMode === 'installation') {
+      const nextComponents = circuit.components.map(c => {
+        if (c.id !== compId) return c;
+        return {
+          ...c,
+          install: {
+            x: c.install?.x ?? c.x,
+            y: c.install?.y ?? c.y,
+            rot: normRot,
+          },
+        };
+      });
+      const nextState = { ...circuit, components: nextComponents };
+      set({
+        circuit: nextState,
+        canUndo: history.canUndo(),
+        canRedo: history.canRedo(),
+      });
+      autoSaver.schedule(get().activeSlug, nextState);
+      get().runLint();
+      return;
+    }
 
     const nextComponents = circuit.components.map(c => {
       if (c.id !== compId) return c;
@@ -820,19 +975,23 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     const comp = get().circuit.components.find(c => c.id === compId);
     if (!comp) return;
 
+    const initialRot = get().viewMode === 'installation'
+      ? (comp.install?.rot ?? comp.rot)
+      : comp.rot;
+
     set({
       editorMode: 'rotatingComponent',
       rotatingComponent: {
         compId,
-        initialRot: comp.rot,
+        initialRot,
         startAngle: pointerAngle,
-        currentAngle: comp.rot,
+        currentAngle: initialRot,
       },
     });
   },
 
   updateRotating: (pointerAngle: number, altKey = false) => {
-    const { rotatingComponent, circuit } = get();
+    const { rotatingComponent } = get();
     if (!rotatingComponent) return;
 
     const angleDelta = pointerAngle - rotatingComponent.startAngle;
@@ -865,7 +1024,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   },
 
   moveComponents: (compIds: string[], dx: number, dy: number, commitHistory = false) => {
-    const { circuit } = get();
+    const { circuit, viewMode } = get();
     if (compIds.length === 0) return;
 
     if (commitHistory) {
@@ -873,6 +1032,44 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     }
 
     const setIds = new Set(compIds);
+
+    if (viewMode === 'installation') {
+      const snapDx = Math.round(dx / 10) * 10;
+      const snapDy = Math.round(dy / 10) * 10;
+
+      const nextComponents = circuit.components.map(c => {
+        if (!setIds.has(c.id)) return c;
+        const curX = c.install?.x ?? c.x;
+        const curY = c.install?.y ?? c.y;
+        const curRot = c.install?.rot ?? c.rot;
+        return {
+          ...c,
+          install: {
+            x: curX + snapDx,
+            y: curY + snapDy,
+            rot: curRot,
+          },
+        };
+      });
+
+      const nextState: CircuitState = {
+        ...circuit,
+        components: nextComponents,
+      };
+
+      set({
+        circuit: nextState,
+        canUndo: history.canUndo(),
+        canRedo: history.canRedo(),
+      });
+
+      if (commitHistory) {
+        autoSaver.schedule(get().activeSlug, nextState);
+        get().runLint();
+      }
+      return;
+    }
+
     const snapDx = snapToGrid(dx);
     const snapDy = snapToGrid(dy);
 
@@ -1314,6 +1511,10 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 
   // ---------------- WIRING OPERATIONS ----------------
   startWiring: (from: Endpoint, startPos: Point) => {
+    if (get().viewMode === 'installation') {
+      get().setStatusMessage('Thêm linh kiện và đi dây ở chế độ NGUYÊN LÍ');
+      return;
+    }
     set({
       editorMode: 'wiring',
       wiringDraft: {
@@ -1520,6 +1721,10 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   },
 
   startDraggingSegment: (wireId: string, segIndex: number) => {
+    if (get().viewMode === 'installation') {
+      get().setStatusMessage('Thêm linh kiện và đi dây ở chế độ NGUYÊN LÍ');
+      return;
+    }
     const wire = get().circuit.wires.find(w => w.id === wireId);
     if (!wire) return;
 

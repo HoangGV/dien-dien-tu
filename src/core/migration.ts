@@ -61,6 +61,19 @@ export function migrateCircuitState(state: CircuitState, workspaceSlug?: string)
       nextProps.hasPE = Boolean(nextProps.hasPE);
     }
 
+    // 7. Ensure install property exists and defaults to schematic position/rotation
+    const nextInstall = c.install && typeof c.install.x === 'number' && typeof c.install.y === 'number'
+      ? {
+          x: c.install.x,
+          y: c.install.y,
+          rot: typeof c.install.rot === 'number' ? Math.round(((c.install.rot % 360 + 360) % 360) * 10) / 10 : nextRot,
+        }
+      : {
+          x: c.x,
+          y: c.y,
+          rot: nextRot,
+        };
+
     return {
       ...c,
       type: nextType,
@@ -68,6 +81,7 @@ export function migrateCircuitState(state: CircuitState, workspaceSlug?: string)
       flip: !!c.flip,
       flipY: !!c.flipY,
       props: nextProps,
+      install: nextInstall,
     };
   });
 
@@ -163,9 +177,17 @@ export function migrateCircuitState(state: CircuitState, workspaceSlug?: string)
     }
   }
 
+  const migratedJunctions = (state.junctions || []).map((j) => ({
+    ...j,
+    install: j.install && typeof j.install.x === 'number' && typeof j.install.y === 'number'
+      ? { x: j.install.x, y: j.install.y }
+      : { x: j.x, y: j.y },
+  }));
+
   return {
     ...state,
     components: migratedComponents,
     wires: migratedWires,
+    junctions: migratedJunctions,
   };
 }

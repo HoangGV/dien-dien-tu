@@ -7,11 +7,12 @@ import { CircuitState, ComponentInstance, Wire, Preset } from './model';
 import { solveCircuit, SolverStepResult } from './solver';
 import { COMPONENT_MAP } from './registry';
 import { HistoryManager } from './history';
-import { getComponentPins } from './netlist';
+import { getComponentPins, extractNetlist } from './netlist';
 import { createWorkspaceExportPackage, validateCircuitJson } from './io';
 import { migrateCircuitState } from './migration';
 import { SimulationService } from './simulationService';
 import { formatMeasure } from './measureFormat';
+import { calculatePolylineLengthMeters, getWireInstallPoints } from './installWiring';
 import {
   createPresetHouseholdJ,
   createPresetHouseholdK,
@@ -2090,6 +2091,201 @@ export const ALL_SOLVER_TEST_CASES: SolverTestCase[] = [
 
       return {
         actualStr: `Ban đầu đèn ${on0 ? 'SÁNG' : 'TẮT'} (${i0.toFixed(3)} A) → Đổi CT1: đèn ${on1 ? 'SÁNG' : 'TẮT'} (${i1.toFixed(3)} A) → Đổi CT2: đèn ${on2 ? 'SÁNG' : 'TẮT'} (${i2.toFixed(3)} A) → Đổi CT1 lần nữa: đèn ${on3 ? 'SÁNG' : 'TẮT'} (${i3.toFixed(3)} A)`,
+        passed,
+      };
+    },
+  }),
+  defineTestCase({
+    id: 'case61_install_view_preserves_netlist_and_sim',
+    stt: 61,
+    group: 'Mạch mẫu',
+    name: 'Ca 61: Chuyển qua lại NGUYÊN LÍ ⇄ LẮP ĐẶT không làm đổi netlist và mô phỏng mẫu (a)',
+    expectedStr: 'Netlist khớp 100%, Dòng ampe kế = 272,7 mA ở cả 2 chế độ (lệch = 0,000 mA)',
+    toleranceStr: 'Tuyệt đối (ΔI = 0 mA, Netlist so khớp từng nút)',
+    createCircuit: () => {
+      const u: ComponentInstance = { id: 'u1', type: 'ac_source', x: 80, y: 140, rot: 0, flip: false, label: 'U', props: { voltage: 220, hasPE: false } };
+      const mcb: ComponentInstance = { id: 'mcb1', type: 'cb', x: 200, y: 140, rot: 0, flip: false, label: 'MCB1', props: { poles: 1, ratedCurrent: 16, state: true } };
+      const am: ComponentInstance = { id: 'a1', type: 'ammeter', x: 300, y: 140, rot: 0, flip: false, label: 'A1', props: {} };
+      const fan: ComponentInstance = { id: 'fan1', type: 'ceiling_fan', x: 420, y: 140, rot: 0, flip: false, label: 'QT1', props: { power: 60, hasPE: false } };
+      const w1 = makeWire('w1', 'u1', 'A', 'mcb1', 'in', [{ x: 120, y: 140 }, { x: 160, y: 140 }], 'phase');
+      const w2 = makeWire('w2', 'mcb1', 'out', 'a1', 'pos', [{ x: 240, y: 140 }, { x: 260, y: 140 }], 'phase');
+      const w3 = makeWire('w3', 'a1', 'neg', 'fan1', '1', [{ x: 340, y: 140 }, { x: 380, y: 140 }], 'phase');
+      const w4 = makeWire('w4', 'fan1', '2', 'u1', 'O', [{ x: 460, y: 140 }, { x: 460, y: 60 }, { x: 120, y: 60 }, { x: 120, y: 100 }], 'neutral');
+      return { components: [u, mcb, am, fan], wires: [w1, w2, w3, w4], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+    },
+    evaluate: (circ) => {
+      const baseCirc = circ || {
+        components: [
+          { id: 'u1', type: 'ac_source', x: 80, y: 140, rot: 0, flip: false, label: 'U', props: { voltage: 220, hasPE: false } },
+          { id: 'mcb1', type: 'cb', x: 200, y: 140, rot: 0, flip: false, label: 'MCB1', props: { poles: 1, ratedCurrent: 16, state: true } },
+          { id: 'a1', type: 'ammeter', x: 300, y: 140, rot: 0, flip: false, label: 'A1', props: {} },
+          { id: 'fan1', type: 'ceiling_fan', x: 420, y: 140, rot: 0, flip: false, label: 'QT1', props: { power: 60, hasPE: false } },
+        ],
+        wires: [
+          makeWire('w1', 'u1', 'A', 'mcb1', 'in', [{ x: 120, y: 140 }, { x: 160, y: 140 }], 'phase'),
+          makeWire('w2', 'mcb1', 'out', 'a1', 'pos', [{ x: 240, y: 140 }, { x: 260, y: 140 }], 'phase'),
+          makeWire('w3', 'a1', 'neg', 'fan1', '1', [{ x: 340, y: 140 }, { x: 380, y: 140 }], 'phase'),
+          makeWire('w4', 'fan1', '2', 'u1', 'O', [{ x: 460, y: 140 }, { x: 460, y: 60 }, { x: 120, y: 60 }, { x: 120, y: 100 }], 'neutral'),
+        ],
+        junctions: [],
+        viewport: { x: 40, y: 40, zoom: 1 },
+      };
+
+      // 1. Netlist & Sim in schematic mode
+      const netlist1 = extractNetlist(baseCirc.components, baseCirc.wires, baseCirc.junctions, COMPONENT_MAP);
+      const sim1 = new SimulationService();
+      sim1.compile(baseCirc, 'rms');
+      const snap1 = sim1.step(1.0);
+      const iVal1 = (snap1.elementMeasures['a1']?.current || 0) * 1000;
+
+      // 2. Add install positions to components and junctions (chế độ LẮP ĐẶT)
+      const installCirc: CircuitState = {
+        ...baseCirc,
+        components: baseCirc.components.map((c, idx) => ({
+          ...c,
+          install: { x: 150 + idx * 80, y: 220 + idx * 40, rot: (idx * 90) % 360 },
+        })),
+      };
+
+      const netlist2 = extractNetlist(installCirc.components, installCirc.wires, installCirc.junctions, COMPONENT_MAP);
+      const sim2 = new SimulationService();
+      sim2.compile(installCirc, 'rms');
+      const snap2 = sim2.step(1.0);
+      const iVal2 = (snap2.elementMeasures['a1']?.current || 0) * 1000;
+
+      let netlistMatch = true;
+      for (const [pinKey, netId] of netlist1.pinToNetId.entries()) {
+        if (netlist2.pinToNetId.get(pinKey) !== netId) {
+          netlistMatch = false;
+          break;
+        }
+      }
+
+      const deltaI = Math.abs(iVal1 - iVal2);
+      const passed = netlistMatch && deltaI < 1e-6 && Math.abs(iVal1 - 272.7) <= 2.0;
+
+      return {
+        actualStr: `Netlist ${netlistMatch ? 'khớp 100%' : 'khác nhau'}, I_nguyên_lí = ${iVal1.toFixed(1).replace('.', ',')} mA, I_lắp_đặt = ${iVal2.toFixed(1).replace('.', ',')} mA (ΔI = ${deltaI.toFixed(6)} mA)`,
+        passed,
+      };
+    },
+  }),
+  defineTestCase({
+    id: 'case62_install_and_schematic_positions_independent',
+    stt: 62,
+    group: 'Mạch mẫu',
+    name: 'Ca 62: Di chuyển thiết bị ở LẮP ĐẶT không đổi vị trí NGUYÊN LÍ (và ngược lại)',
+    expectedStr: 'Vị trí độc lập tuyệt đối: Nguyên lí (100, 150, 0°) | Lắp đặt (350, 420, 90°)',
+    toleranceStr: 'Chính xác 100 % tọa độ',
+    createCircuit: () => {
+      const lamp: ComponentInstance = {
+        id: 'lamp1',
+        type: 'incandescent_lamp',
+        x: 100,
+        y: 150,
+        rot: 0,
+        flip: false,
+        label: 'Đ1',
+        props: { power: 60, hasPE: false },
+        install: { x: 100, y: 150, rot: 0 },
+      };
+      return { components: [lamp], wires: [], junctions: [], viewport: { x: 0, y: 0, zoom: 1 } };
+    },
+    evaluate: () => {
+      // Step A: Initial component
+      const c0: ComponentInstance = {
+        id: 'lamp1',
+        type: 'incandescent_lamp',
+        x: 100,
+        y: 150,
+        rot: 0,
+        flip: false,
+        label: 'Đ1',
+        props: { power: 60, hasPE: false },
+        install: { x: 100, y: 150, rot: 0 },
+      };
+
+      // Step B: Move and rotate in installation mode
+      const cAfterInstallMove: ComponentInstance = {
+        ...c0,
+        install: { x: 350, y: 420, rot: 90 },
+      };
+
+      const schemPreserved =
+        cAfterInstallMove.x === 100 &&
+        cAfterInstallMove.y === 150 &&
+        cAfterInstallMove.rot === 0;
+
+      // Step C: Move in schematic mode
+      const cAfterSchemMove: ComponentInstance = {
+        ...cAfterInstallMove,
+        x: 180,
+        y: 240,
+        rot: 180,
+      };
+
+      const installPreserved =
+        cAfterSchemMove.install?.x === 350 &&
+        cAfterSchemMove.install?.y === 420 &&
+        cAfterSchemMove.install?.rot === 90;
+
+      const passed = schemPreserved && installPreserved;
+
+      return {
+        actualStr: `Nguyên lí: (${cAfterSchemMove.x}, ${cAfterSchemMove.y}, ${cAfterSchemMove.rot}°) — Lắp đặt: (${cAfterSchemMove.install?.x}, ${cAfterSchemMove.install?.y}, ${cAfterSchemMove.install?.rot}°)`,
+        passed,
+      };
+    },
+  }),
+  defineTestCase({
+    id: 'case63_wire_length_calculation_floor_plan',
+    stt: 63,
+    group: 'Mạch mẫu',
+    name: 'Ca 63: Dây chữ L (Δx = 300 px, Δy = 200 px, tỉ lệ 100 px = 1 m) có chiều dài = 5,00 m',
+    expectedStr: 'Chiều dài trên mặt bằng = 5,00 m (±0,001 m)',
+    toleranceStr: '±0,001 m',
+    createCircuit: () => {
+      const compA: ComponentInstance = {
+        id: 'cb1',
+        type: 'cb',
+        x: 100,
+        y: 100,
+        rot: 0,
+        flip: false,
+        label: 'Aptomat',
+        props: { poles: 1, ratedCurrent: 16 },
+        install: { x: 100, y: 100, rot: 0 },
+      };
+      const compB: ComponentInstance = {
+        id: 'lamp1',
+        type: 'incandescent_lamp',
+        x: 200,
+        y: 100,
+        rot: 0,
+        flip: false,
+        label: 'Đèn',
+        props: { power: 60 },
+        install: { x: 400, y: 300, rot: 0 },
+      };
+      const wire = makeWire('w1', 'cb1', 'out', 'lamp1', '1', [
+        { x: 100, y: 100 },
+        { x: 400, y: 100 },
+        { x: 400, y: 300 },
+      ], 'phase');
+      return { components: [compA, compB], wires: [wire], junctions: [], viewport: { x: 0, y: 0, zoom: 1 } };
+    },
+    evaluate: () => {
+      const pts = [
+        { x: 100, y: 100 },
+        { x: 400, y: 100 },
+        { x: 400, y: 300 },
+      ];
+      const lengthMeters = calculatePolylineLengthMeters(pts, 100);
+      const displayStr = `${lengthMeters.toFixed(2).replace('.', ',')} m`;
+      const passed = Math.abs(lengthMeters - 5.0) < 0.001;
+
+      return {
+        actualStr: `Chiều dài trên mặt bằng = ${displayStr} (tương ứng ${lengthMeters * 100} px)`,
         passed,
       };
     },

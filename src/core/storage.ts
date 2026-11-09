@@ -61,6 +61,7 @@ export class StorageService {
         props: { ...c.props },
         damaged: !!c.damaged,
         damageReason: c.damageReason,
+        install: c.install ? { x: c.install.x, y: c.install.y, rot: c.install.rot } : undefined,
       })),
       wires: state.wires.map(w => ({
         id: w.id,
@@ -71,7 +72,12 @@ export class StorageService {
         crossSection: w.crossSection,
         isBurnt: !!w.isBurnt,
       })),
-      junctions: state.junctions.map(j => ({ id: j.id, x: j.x, y: j.y })),
+      junctions: state.junctions.map(j => ({
+        id: j.id,
+        x: j.x,
+        y: j.y,
+        install: j.install ? { x: j.install.x, y: j.install.y } : undefined,
+      })),
       viewport: { ...state.viewport },
     };
 

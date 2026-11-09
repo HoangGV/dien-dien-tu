@@ -4,6 +4,7 @@ import { useWorkspaceStore } from '../../store/workspaceStore';
 import { COMPONENT_MAP, getComponentDef } from '../../core/registry';
 import { snapToGrid, snapPointToGrid, pinWorldPos, isPointInBox, getComponentBoundingBox } from '../../core/geometry';
 import { routeOrthogonal, normalizePolyline } from '../../core/wiring';
+import { getWireInstallPoints, getEndpointInstallPos } from '../../core/installWiring';
 import { Point, Wire, ComponentInstance, Junction, BoundingBox } from '../../core/model';
 import { formatMeasure } from '../../core/measureFormat';
 
@@ -30,6 +31,8 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
     showGrid,
     showWireLabels,
     allowDiagonalWires,
+    viewMode,
+    showFloorPlan,
     updateViewport,
     selectComponent,
     selectWire,
@@ -57,7 +60,11 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
     setHoveredPin,
     setHoveredWire,
     replaceDamagedComponent,
+    setStatusMessage,
+    moveJunction,
   } = useWorkspaceStore();
+
+  const isInstallView = viewMode === 'installation';
 
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -237,7 +244,9 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
 
   const handlePointerMove = (e: React.PointerEvent) => {
     const worldPt = screenToWorld(e.clientX, e.clientY);
-    const snapPt = snapPointToGrid(worldPt);
+    const snapPt = isInstallView
+      ? { x: Math.round(worldPt.x / 10) * 10, y: Math.round(worldPt.y / 10) * 10 }
+      : snapPointToGrid(worldPt);
     setWorldCursor(snapPt);
 
     if (isPanning) {
@@ -252,7 +261,9 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
     if (editorMode === 'rotatingComponent' && rotatingComponent) {
       const comp = circuit.components.find(c => c.id === rotatingComponent.compId);
       if (comp) {
-        const pointerAngle = (Math.atan2(worldPt.y - comp.y, worldPt.x - comp.x) * 180) / Math.PI;
+        const cX = isInstallView ? (comp.install?.x ?? comp.x) : comp.x;
+        const cY = isInstallView ? (comp.install?.y ?? comp.y) : comp.y;
+        const pointerAngle = (Math.atan2(worldPt.y - cY, worldPt.x - cX) * 180) / Math.PI;
         updateRotating(pointerAngle, e.altKey);
       }
       return;
@@ -334,7 +345,10 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
       const selectedComps: string[] = [];
       for (const c of circuit.components) {
         const def = COMPONENT_MAP.get(c.type);
-        const compBox = getComponentBoundingBox(c, def);
+        const effComp = isInstallView
+          ? { ...c, x: c.install?.x ?? c.x, y: c.install?.y ?? c.y, rot: c.install?.rot ?? c.rot }
+          : c;
+        const compBox = getComponentBoundingBox(effComp, def);
         if (
           compBox.maxX >= box.minX &&
           compBox.minX <= box.maxX &&
@@ -348,7 +362,8 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
       // Select enclosed wires
       const selectedWires: string[] = [];
       for (const w of circuit.wires) {
-        const allInside = w.points.some(p => isPointInBox(p, box));
+        const pts = isInstallView ? getWireInstallPoints(w, circuit) : w.points;
+        const allInside = pts.some(p => isPointInBox(p, box));
         if (allInside) {
           selectedWires.push(w.id);
         }
@@ -371,6 +386,10 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
   // Handle Drag-and-Drop from left Palette
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
+    if (isInstallView) {
+      setStatusMessage('Thêm linh kiện và đi dây ở chế độ NGUYÊN LÍ');
+      return;
+    }
     const compType = e.dataTransfer.getData('text/plain');
     if (compType) {
       const worldPt = screenToWorld(e.clientX, e.clientY);
@@ -382,6 +401,10 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
   // Click on a Pin
   const handlePinPointerDown = (compId: string, pinId: string, e: React.PointerEvent) => {
     e.stopPropagation();
+    if (isInstallView) {
+      setStatusMessage('Thêm linh kiện và đi dây ở chế độ NGUYÊN LÍ');
+      return;
+    }
     const worldPt = screenToWorld(e.clientX, e.clientY);
     const snap = snapPointToGrid(worldPt);
 
@@ -482,7 +505,11 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
 
     // Initiate dragging
     const worldPt = screenToWorld(e.clientX, e.clientY);
-    setDragStartMouse(snapPointToGrid(worldPt));
+    setDragStartMouse(
+      isInstallView
+        ? { x: Math.round(worldPt.x / 10) * 10, y: Math.round(worldPt.y / 10) * 10 }
+        : snapPointToGrid(worldPt)
+    );
     (e.target as HTMLElement)?.setPointerCapture?.(e.pointerId);
   };
 
@@ -499,10 +526,15 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
       (c.type !== 'cb' && c.type !== 'knife_switch')
     );
 
+    const effX = isInstallView ? (c.install?.x ?? c.x) : c.x;
+    const effY = isInstallView ? (c.install?.y ?? c.y) : c.y;
+    const effRot = isInstallView ? (c.install?.rot ?? c.rot) : c.rot;
+    const effComp = isInstallView ? { ...c, x: effX, y: effY, rot: effRot } : c;
+
     return (
       <g
         key={c.id}
-        transform={`translate(${c.x}, ${c.y}) rotate(${c.rot}) scale(${c.flip ? -1 : 1}, ${c.flipY ? -1 : 1})`}
+        transform={`translate(${effX}, ${effY}) rotate(${effRot}) scale(${c.flip ? -1 : 1}, ${c.flipY ? -1 : 1})`}
         onPointerDown={(e) => handleComponentPointerDown(c.id, e)}
         onDoubleClick={(e) => {
           e.stopPropagation();
@@ -559,7 +591,7 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
               onPointerDown={(e) => {
                 e.stopPropagation();
                 const worldPt = screenToWorld(e.clientX, e.clientY);
-                const pointerAngle = (Math.atan2(worldPt.y - c.y, worldPt.x - c.x) * 180) / Math.PI;
+                const pointerAngle = (Math.atan2(worldPt.y - effY, worldPt.x - effX) * 180) / Math.PI;
                 startRotating(c.id, pointerAngle);
                 (e.target as HTMLElement)?.setPointerCapture?.(e.pointerId);
               }}
@@ -586,7 +618,7 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
                   fill="#000000"
                   fontFamily="system-ui"
                 >
-                  {Math.round(c.rot)}°
+                  {Math.round(effRot)}°
                 </text>
               </g>
             )}
@@ -596,7 +628,7 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
         {/* Component Symbol */}
         <g className={isDamaged ? 'damaged-symbol' : undefined}>
           <def.symbol
-            comp={c}
+            comp={effComp}
             isSelected={isSelected}
             hoveredPinId={hoveredPin?.compId === c.id ? hoveredPin.pinId : null}
             onPinPointerDown={(pinId, e) => handlePinPointerDown(c.id, pinId, e)}
@@ -651,6 +683,91 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
         <g
           transform={`translate(${circuit.viewport.x}, ${circuit.viewport.y}) scale(${circuit.viewport.zoom})`}
         >
+          {/* -1. FLOOR PLAN BACKGROUND LAYER (chế độ LẮP ĐẶT) */}
+          {isInstallView && showFloorPlan && (
+            <g id="floor-plan-layer" pointerEvents="none">
+              {/* Floor surface */}
+              <rect
+                x={80}
+                y={80}
+                width={500}
+                height={400}
+                fill="#F8FAFC"
+                stroke="none"
+              />
+              {/* 1m Grid lines inside room */}
+              {[180, 280, 380, 480].map((gx) => (
+                <line
+                  key={`floor_vx_${gx}`}
+                  x1={gx}
+                  y1={80}
+                  x2={gx}
+                  y2={480}
+                  stroke="#E2E8F0"
+                  strokeWidth={1}
+                  strokeDasharray="4 4"
+                />
+              ))}
+              {[180, 280, 380].map((gy) => (
+                <line
+                  key={`floor_hy_${gy}`}
+                  x1={80}
+                  y1={gy}
+                  x2={580}
+                  y2={gy}
+                  stroke="#E2E8F0"
+                  strokeWidth={1}
+                  strokeDasharray="4 4"
+                />
+              ))}
+              {/* Outer walls (5px black lines) */}
+              <line x1={80} y1={80} x2={580} y2={80} stroke="#0F172A" strokeWidth={5} />
+              <line x1={80} y1={80} x2={80} y2={480} stroke="#0F172A" strokeWidth={5} />
+              <line x1={580} y1={80} x2={580} y2={480} stroke="#0F172A" strokeWidth={5} />
+              {/* Bottom wall with 90cm doorway gap between x:180 and x:270 */}
+              <line x1={80} y1={480} x2={180} y2={480} stroke="#0F172A" strokeWidth={5} />
+              <line x1={270} y1={480} x2={580} y2={480} stroke="#0F172A" strokeWidth={5} />
+              {/* Door swing arc & leaf */}
+              <path
+                d="M 180 480 A 90 90 0 0 1 270 390"
+                fill="none"
+                stroke="#64748B"
+                strokeWidth={1.5}
+                strokeDasharray="4 3"
+              />
+              <line x1={180} y1={480} x2={270} y2={390} stroke="#0F172A" strokeWidth={3} />
+              {/* Floor Plan Title */}
+              <text
+                x={100}
+                y={110}
+                fill="#475569"
+                fontSize={13}
+                fontWeight={900}
+                letterSpacing="0.05em"
+                fontFamily="system-ui"
+              >
+                MẶT BẰNG PHÒNG (4m × 5m)
+              </text>
+              {/* 1m Scale Bar */}
+              <g transform="translate(100, 440)">
+                <line x1={0} y1={0} x2={100} y2={0} stroke="#0F172A" strokeWidth={3} />
+                <line x1={0} y1={-5} x2={0} y2={5} stroke="#0F172A" strokeWidth={2} />
+                <line x1={100} y1={-5} x2={100} y2={5} stroke="#0F172A" strokeWidth={2} />
+                <text
+                  x={50}
+                  y={-6}
+                  textAnchor="middle"
+                  fill="#0F172A"
+                  fontSize={11}
+                  fontWeight={800}
+                  fontFamily="system-ui"
+                >
+                  1 m (100 px)
+                </text>
+              </g>
+            </g>
+          )}
+
           {/* 0. ANNOTATIONS LAYER (Khung phân vùng & Ghi chú chữ - luôn ở dưới cùng) */}
           {circuit.components
             .filter((c) => c.type === 'boundary' || c.type === 'textbox')
@@ -660,7 +777,8 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
           {circuit.wires.map((w) => {
             const isSelected = selectedWireIds.includes(w.id);
             const isNetHighlighted = hoveredNetId !== null && false; // Wire net matching handled cleanly
-            const pointsStr = w.points.map(p => `${p.x},${p.y}`).join(' ');
+            const displayPoints = isInstallView ? getWireInstallPoints(w, circuit) : w.points;
+            const pointsStr = displayPoints.map((p) => `${p.x},${p.y}`).join(' ');
 
             const flow = simulationSnapshot?.wireFlows?.[w.id];
             const isMelted = flow?.isMelted || w.isBurnt;
@@ -746,8 +864,8 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
                   />
                 )}
 
-                {/* Midpoint segment dragging handles for selected wire */}
-                {isSelected &&
+                {/* Midpoint segment dragging handles for selected wire (chỉ ở NGUYÊN LÍ) */}
+                {isSelected && !isInstallView &&
                   w.points.slice(0, w.points.length - 1).map((pA, idx) => {
                     const pB = w.points[idx + 1];
                     const midX = (pA.x + pB.x) / 2;
@@ -776,18 +894,44 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
             );
           })}
 
-          {/* 2. JUNCTIONS LAYER (8px filled black dots) */}
-          {circuit.junctions.map((j) => (
-            <circle
-              key={j.id}
-              cx={j.x}
-              cy={j.y}
-              r={4.5}
-              fill="#000000"
-              stroke="#FFFFFF"
-              strokeWidth={1.5}
-            />
-          ))}
+          {/* 2. JUNCTIONS LAYER (8px filled black dots, kéo chỉnh ở LẮP ĐẶT) */}
+          {circuit.junctions.map((j) => {
+            const jPos = isInstallView ? (j.install ?? getEndpointInstallPos({ junctionId: j.id }, circuit) ?? j) : j;
+            return (
+              <circle
+                key={j.id}
+                cx={jPos.x}
+                cy={jPos.y}
+                r={4.5}
+                fill="#000000"
+                stroke="#FFFFFF"
+                strokeWidth={1.5}
+                className={isInstallView ? 'cursor-move' : undefined}
+                onPointerDown={(e) => {
+                  if (isInstallView) {
+                    e.stopPropagation();
+                    const startX = e.clientX;
+                    const startY = e.clientY;
+                    const origX = jPos.x;
+                    const origY = jPos.y;
+                    const onMove = (moveEv: PointerEvent) => {
+                      const dx = (moveEv.clientX - startX) / circuit.viewport.zoom;
+                      const dy = (moveEv.clientY - startY) / circuit.viewport.zoom;
+                      const nx = Math.round((origX + dx) / 10) * 10;
+                      const ny = Math.round((origY + dy) / 10) * 10;
+                      moveJunction(j.id, nx, ny);
+                    };
+                    const onUp = () => {
+                      window.removeEventListener('pointermove', onMove);
+                      window.removeEventListener('pointerup', onUp);
+                    };
+                    window.addEventListener('pointermove', onMove);
+                    window.addEventListener('pointerup', onUp);
+                  }
+                }}
+              />
+            );
+          })}
 
           {/* 3. WIRING PREVIEW DRAFT LAYER */}
           {editorMode === 'wiring' && wiringDraft && (
@@ -930,7 +1074,8 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
         const wire = circuit.wires.find((w) => w.id === hoveredWireId);
         if (!wire) return null;
         const flow = simulationSnapshot?.wireFlows?.[hoveredWireId];
-        const mid = getPolylineMidpoint(wire.points);
+        const pts = isInstallView ? getWireInstallPoints(wire, circuit) : wire.points;
+        const mid = getPolylineMidpoint(pts);
         const screenX = mid.x * circuit.viewport.zoom + circuit.viewport.x;
         const screenY = mid.y * circuit.viewport.zoom + circuit.viewport.y;
 
@@ -961,7 +1106,10 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
         const def = COMPONENT_MAP.get(comp.type);
         const pins = typeof def?.pins === 'function' ? def.pins(comp.props) : def?.pins || [];
         const pDef = pins.find((p) => p.id === hoveredPin.pinId);
-        const pinPos = pinWorldPos(comp, hoveredPin.pinId, def);
+        const effComp = isInstallView
+          ? { ...comp, x: comp.install?.x ?? comp.x, y: comp.install?.y ?? comp.y, rot: comp.install?.rot ?? comp.rot }
+          : comp;
+        const pinPos = pinWorldPos(effComp, hoveredPin.pinId, def);
         const screenX = pinPos.x * circuit.viewport.zoom + circuit.viewport.x;
         const screenY = pinPos.y * circuit.viewport.zoom + circuit.viewport.y;
 

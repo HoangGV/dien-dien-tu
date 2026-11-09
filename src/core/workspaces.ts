@@ -47,6 +47,7 @@ export const WORKSPACE_HOUSEHOLD: WorkspaceConfig = {
     voltage: 220,
     frequency: 50,
   },
+  installView: true,
 };
 
 export const WORKSPACE_ELECTRONICS: WorkspaceConfig = {
