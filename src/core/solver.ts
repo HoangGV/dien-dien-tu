@@ -683,15 +683,20 @@ export function solveCircuit(
           const capVal = Number(c.props.capacitance) || 100;
           // Farads: ceramic is nF, electrolytic is µF
           const cFarad = c.type === 'capacitor_ceramic' ? capVal * 1e-9 : capVal * 1e-6;
+          const vPrev = Number(c.props._vCap ?? 0);
           if (dtSeconds > 0 && cFarad > 0) {
             const Req = Math.max(0.001, dtSeconds / cFarad);
-            const vPrev = Number(c.props._vCap ?? 0);
             addResistor(u1, u2, Req);
             const Ieq = vPrev / Req;
             if (u1 >= 0) I[u1] += Ieq;
             if (u2 >= 0) I[u2] -= Ieq;
           } else {
-            addResistor(u1, u2, 1e7);
+            // At dt <= 0 (initial DC static bias / reset): capacitor holds its stored voltage vPrev (0V by default)
+            const Req = 0.001;
+            addResistor(u1, u2, Req);
+            const Ieq = vPrev / Req;
+            if (u1 >= 0) I[u1] += Ieq;
+            if (u2 >= 0) I[u2] -= Ieq;
           }
         }
       } else if (c.type === 'oscilloscope') {
@@ -1332,7 +1337,7 @@ export function solveCircuit(
         const net2 = pinToNetId.get(`${c.id}:2`) || pinToNetId.get(`${c.id}:neg`);
         const v1 = net1 ? (nodeVoltages[net1] ?? 0) : 0;
         const v2 = net2 ? (nodeVoltages[net2] ?? 0) : 0;
-        const vCap = v1 - v2;
+        const vCap = dtSeconds > 0 ? (v1 - v2) : Number(c.props._vCap ?? 0);
         signedCapVoltages[c.id] = vCap;
         c.props._vCap = vCap;
         c.props._voltage = Math.abs(vCap);
@@ -1340,7 +1345,7 @@ export function solveCircuit(
         const capVal = Number(c.props.capacitance) || 100;
         const cFarad = c.type === 'capacitor_ceramic' ? capVal * 1e-9 : capVal * 1e-6;
         const vPrev = Number(c.props._vCapPrev ?? 0);
-        c.props._vCapPrev = vCap;
+        if (dtSeconds > 0) c.props._vCapPrev = vCap;
         const iCap = dtSeconds > 0 && cFarad > 0 ? (cFarad * Math.abs(vCap - vPrev)) / dtSeconds : 0;
         componentCurrents[c.id] = Math.round(iCap * 1000) / 1000;
 

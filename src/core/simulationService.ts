@@ -472,7 +472,7 @@ export class SimulationService {
   /**
    * Executes a single time step (dt seconds) through MNA solver with thermal accumulation.
    */
-  public step(dt: number = 0.016): SimulationSnapshot {
+  public step(dt?: number): SimulationSnapshot {
     const startTime = performance.now();
 
     if (!this.compiledCircuit && this.currentCircuitState) {
@@ -481,7 +481,10 @@ export class SimulationService {
 
     const compiled = this.compiledCircuit!;
     const { components, wires, pinToNetId } = compiled;
-    const dtSim = dt * this.timeSpeed;
+    const dtSim = dt !== undefined ? dt : 0.016 * this.timeSpeed;
+
+    // Step forward in time: the MNA solution solves the state at tSolve = simTime + dtSim
+    const tSolve = this.simTime + dtSim;
 
     // Run electrical solver with thermal accumulation
     const solverRes = solveCircuit(
@@ -489,7 +492,7 @@ export class SimulationService {
       wires,
       compiled.junctions,
       COMPONENT_MAP,
-      this.simTime,
+      tSolve,
       this.thermalStates,
       this.wireThermalStates,
       dtSim
@@ -741,7 +744,7 @@ export class SimulationService {
     };
 
     this.stepCount++;
-    this.simTime += dtSim;
+    this.simTime = tSolve;
 
     // Record oscilloscope samples if an oscilloscope is present in the circuit
     const osc = components.find(c => c.type === 'oscilloscope');
@@ -926,6 +929,7 @@ export class SimulationService {
   };
 
   public start(state?: CircuitState, mode: 'rms' | 'dc' = 'rms') {
+    oscilloscopeService.setHeld(false);
     if (state) {
       this.currentCircuitState = state;
       this.currentMode = mode;
@@ -957,6 +961,7 @@ export class SimulationService {
     this.thermalStates = {};
     this.wireThermalStates = {};
     oscilloscopeService.clear();
+    oscilloscopeService.setHeld(false);
     this.addLog('Đặt lại mô phỏng về trạng thái ban đầu.');
     if (this.currentCircuitState) {
       for (const c of this.currentCircuitState.components) {
@@ -967,9 +972,19 @@ export class SimulationService {
           c.props._vCapPrev = 0;
         }
       }
-      const snap = this.step(0);
-      this.listeners.forEach(fn => fn(snap));
     }
+    if (this.compiledCircuit) {
+      for (const c of this.compiledCircuit.components) {
+        if (c.type === 'kwh_meter') {
+          c.props.kwh = 0;
+        } else if (c.type === 'capacitor_ceramic' || c.type === 'capacitor_electrolytic') {
+          c.props._vCap = 0;
+          c.props._vCapPrev = 0;
+        }
+      }
+    }
+    const snap = this.step(0);
+    this.listeners.forEach(fn => fn(snap));
   }
 
   /**

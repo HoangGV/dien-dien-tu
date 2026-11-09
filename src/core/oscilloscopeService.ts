@@ -128,11 +128,17 @@ export class OscilloscopeService {
       const matched = TIME_DIV_STEPS.find((s) => s >= targetTimeDiv - 1e-6);
       this.timePerDiv = matched || TIME_DIV_STEPS[TIME_DIV_STEPS.length - 1];
     } else {
-      const firstT = this.coarseBuffer[0]?.t ?? this.fineBuffer[0]?.t ?? 0;
-      const totalTime = Math.max(0.01, this.lastSampleTime - firstT);
-      const targetTimeDiv = Math.max(0.001, totalTime / 10);
-      const matched = TIME_DIV_STEPS.find((s) => s >= targetTimeDiv - 1e-6);
-      this.timePerDiv = matched || TIME_DIV_STEPS[TIME_DIV_STEPS.length - 1];
+      const capacitors = components.filter((c) => c.type === 'capacitor_ceramic' || c.type === 'capacitor_electrolytic');
+      if (capacitors.length > 0 && this.fineBuffer.length === 0) {
+        // RC charging transient: 100 ms / div (10 divs = 1.0 s)
+        this.timePerDiv = 0.1;
+      } else {
+        const firstT = this.coarseBuffer[0]?.t ?? this.fineBuffer[0]?.t ?? 0;
+        const totalTime = Math.max(0.01, this.lastSampleTime - firstT);
+        const targetTimeDiv = Math.max(0.001, totalTime / 10);
+        const matched = TIME_DIV_STEPS.find((s) => s >= targetTimeDiv - 1e-6);
+        this.timePerDiv = matched || TIME_DIV_STEPS[TIME_DIV_STEPS.length - 1];
+      }
     }
 
     // 2. Volt / Div and Offset
