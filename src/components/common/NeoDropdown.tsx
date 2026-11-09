@@ -8,7 +8,9 @@ export interface DropdownItem {
   icon?: React.ReactNode;
   active?: boolean;
   disabled?: boolean;
-  onClick: () => void;
+  isHeader?: boolean;
+  grade?: string;
+  onClick?: () => void;
 }
 
 export interface NeoDropdownProps {
@@ -64,25 +66,44 @@ export const NeoDropdown: React.FC<NeoDropdownProps> = ({
       </NeoButton>
 
       {isOpen && (
-        <div className={`absolute top-[calc(100%+4px)] ${alignClass} min-w-[200px] max-w-[90vw] bg-white border-2 border-black shadow-[3px_3px_0_#000] z-50 py-1 flex flex-col`}>
-          {items.map((item) => (
-            <button
-              key={item.id}
-              disabled={item.disabled}
-              onClick={() => {
-                setIsOpen(false);
-                item.onClick();
-              }}
-              className={`w-full h-7 px-3 text-left font-extrabold text-xs flex items-center gap-2 border-b last:border-b-0 border-gray-200 transition-colors ${
-                item.active
-                  ? 'bg-[#4169E1] text-white hover:bg-[#2F4FC0]'
-                  : 'text-black hover:bg-[#EEF2FF]'
-              } ${item.disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
-            >
-              {item.icon && <span className="shrink-0">{item.icon}</span>}
-              <span className="truncate">{item.label}</span>
-            </button>
-          ))}
+        <div className={`absolute top-[calc(100%+4px)] ${alignClass} min-w-[260px] max-w-[90vw] max-h-[85vh] overflow-y-auto bg-white border-2 border-black shadow-[3px_3px_0_#000] z-50 py-1 flex flex-col`}>
+          {items.map((item) => {
+            if (item.isHeader) {
+              return (
+                <div
+                  key={item.id}
+                  className="px-3 py-1 text-[11px] font-black uppercase text-[#4169E1] bg-[#EEF2FF] border-b border-t border-black first:border-t-0 select-none tracking-wide"
+                >
+                  {item.label}
+                </div>
+              );
+            }
+            return (
+              <button
+                key={item.id}
+                disabled={item.disabled}
+                onClick={() => {
+                  setIsOpen(false);
+                  item.onClick?.();
+                }}
+                className={`w-full min-h-[30px] px-3 py-1 text-left font-bold text-xs flex items-center justify-between gap-2 border-b last:border-b-0 border-gray-100 transition-colors ${
+                  item.active
+                    ? 'bg-[#4169E1] text-white hover:bg-[#2F4FC0]'
+                    : 'text-black hover:bg-[#F3F4F6]'
+                } ${item.disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
+              >
+                <div className="flex items-center gap-2 truncate">
+                  {item.icon && <span className="shrink-0">{item.icon}</span>}
+                  <span className="truncate">{item.label}</span>
+                </div>
+                {item.grade && (
+                  <span className="ml-2 text-[10px] font-black bg-[#FFD84D] text-black px-1.5 py-0.2 border border-black shrink-0 rounded-none">
+                    {item.grade}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
       )}
     </div>

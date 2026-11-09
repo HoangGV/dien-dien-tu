@@ -85,77 +85,226 @@ export function createPresetHouseholdE(): CircuitState {
   return { components: [u, elcb, fan, gnd], wires: [w1, w2, w3, w4, wpe], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
 }
 
+// Preset (A1): Đèn + công tắc 1 cực + aptomat
+export function createPresetHouseholdA1(): CircuitState {
+  const u: ComponentInstance = { id: 'src1', type: 'ac_source', x: 80, y: 140, rot: 0, flip: false, label: 'U', props: { voltage: 220, hasPE: false } };
+  const mcb: ComponentInstance = { id: 'mcb1', type: 'cb', x: 200, y: 140, rot: 0, flip: false, label: 'MCB1', props: { poles: 1, ratedCurrent: 16, state: true } };
+  const sw: ComponentInstance = { id: 'sw1', type: 'switch_2p', x: 320, y: 140, rot: 0, flip: false, label: 'CT1', props: { state: true } };
+  const lamp: ComponentInstance = { id: 'lamp1', type: 'lamp', x: 440, y: 140, rot: 0, flip: false, label: 'Đ1', props: { power: 60, hasPE: false } };
+  const w1 = makePresetWire('w1', 'src1', 'A', 'mcb1', 'in', [{ x: 120, y: 140 }, { x: 160, y: 140 }], 'phase');
+  const w2 = makePresetWire('w2', 'mcb1', 'out', 'sw1', '1', [{ x: 240, y: 140 }, { x: 280, y: 140 }], 'phase');
+  const w3 = makePresetWire('w3', 'sw1', '2', 'lamp1', '1', [{ x: 360, y: 140 }, { x: 400, y: 140 }], 'phase');
+  const w4 = makePresetWire('w4', 'lamp1', '2', 'src1', 'O', [{ x: 480, y: 140 }, { x: 480, y: 60 }, { x: 120, y: 60 }, { x: 120, y: 100 }], 'neutral');
+  return { components: [u, mcb, sw, lamp], wires: [w1, w2, w3, w4], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+}
+
+// Preset (A2): Đèn cầu thang (2 công tắc 3 cực)
+export function createPresetHouseholdA2(): CircuitState {
+  const u: ComponentInstance = { id: 'src1', type: 'ac_source', x: 80, y: 140, rot: 0, flip: false, label: 'U', props: { voltage: 220, hasPE: false } };
+  const sw1: ComponentInstance = { id: 'sw1', type: 'switch_3p', x: 200, y: 140, rot: 0, flip: false, label: 'CT1', props: { state: true } };
+  const sw2: ComponentInstance = { id: 'sw2', type: 'switch_3p', x: 340, y: 140, rot: 0, flip: false, label: 'CT2', props: { state: true } };
+  const lamp: ComponentInstance = { id: 'lamp1', type: 'lamp', x: 480, y: 140, rot: 0, flip: false, label: 'Đ1', props: { power: 60, hasPE: false } };
+  const w1 = makePresetWire('w1', 'src1', 'A', 'sw1', 'com', [{ x: 120, y: 140 }, { x: 160, y: 140 }], 'phase');
+  const w2 = makePresetWire('w2', 'sw1', 'a', 'sw2', 'a', [{ x: 240, y: 120 }, { x: 300, y: 120 }], 'phase');
+  const w3 = makePresetWire('w3', 'sw1', 'b', 'sw2', 'b', [{ x: 240, y: 160 }, { x: 300, y: 160 }], 'phase');
+  const w4 = makePresetWire('w4', 'sw2', 'com', 'lamp1', '1', [{ x: 380, y: 140 }, { x: 440, y: 140 }], 'phase');
+  const w5 = makePresetWire('w5', 'lamp1', '2', 'src1', 'O', [{ x: 520, y: 140 }, { x: 520, y: 60 }, { x: 120, y: 60 }, { x: 120, y: 100 }], 'neutral');
+  return { components: [u, sw1, sw2, lamp], wires: [w1, w2, w3, w4, w5], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+}
+
+// Preset (A3): Ổ cắm + quạt trần + đèn mắc song song có aptomat tổng
+export function createPresetHouseholdA3(): CircuitState {
+  const u: ComponentInstance = { id: 'src1', type: 'ac_source', x: 80, y: 140, rot: 0, flip: false, label: 'U', props: { voltage: 220, hasPE: false } };
+  const mcb: ComponentInstance = { id: 'mcb1', type: 'cb', x: 200, y: 140, rot: 0, flip: false, label: 'MCB1', props: { poles: 1, ratedCurrent: 16, state: true } };
+  const sock: ComponentInstance = { id: 'sk1', type: 'socket', x: 340, y: 80, rot: 0, flip: false, label: 'OC1', props: { state: true, loadPower: 100 } };
+  const fan: ComponentInstance = { id: 'fan1', type: 'ceiling_fan', x: 340, y: 180, rot: 0, flip: false, label: 'QT1', props: { power: 60, hasPE: false } };
+  const lamp: ComponentInstance = { id: 'lamp1', type: 'lamp', x: 340, y: 280, rot: 0, flip: false, label: 'Đ1', props: { power: 60, hasPE: false } };
+
+  const w1 = makePresetWire('w1', 'src1', 'A', 'mcb1', 'in', [{ x: 120, y: 140 }, { x: 160, y: 140 }], 'phase');
+  const w2 = makePresetWire('w2', 'mcb1', 'out', 'sk1', '1', [{ x: 240, y: 140 }, { x: 280, y: 140 }, { x: 280, y: 80 }, { x: 300, y: 80 }], 'phase');
+  const w3 = makePresetWire('w3', 'sk1', '1', 'fan1', '1', [{ x: 280, y: 80 }, { x: 280, y: 180 }, { x: 300, y: 180 }], 'phase');
+  const w4 = makePresetWire('w4', 'fan1', '1', 'lamp1', '1', [{ x: 280, y: 180 }, { x: 280, y: 280 }, { x: 300, y: 280 }], 'phase');
+
+  const w5 = makePresetWire('w5', 'sk1', '2', 'src1', 'O', [{ x: 380, y: 80 }, { x: 420, y: 80 }, { x: 420, y: 40 }, { x: 120, y: 40 }, { x: 120, y: 100 }], 'neutral');
+  const w6 = makePresetWire('w6', 'fan1', '2', 'sk1', '2', [{ x: 380, y: 180 }, { x: 420, y: 180 }, { x: 420, y: 80 }], 'neutral');
+  const w7 = makePresetWire('w7', 'lamp1', '2', 'fan1', '2', [{ x: 380, y: 280 }, { x: 420, y: 280 }, { x: 420, y: 180 }], 'neutral');
+
+  return { components: [u, mcb, sock, fan, lamp], wires: [w1, w2, w3, w4, w5, w6, w7], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+}
+
+// Preset (A4): Mạng điện một phòng (ELCB tổng -> 2 nhánh MCB)
+export function createPresetHouseholdA4(): CircuitState {
+  const u: ComponentInstance = { id: 'src1', type: 'ac_source', x: 80, y: 140, rot: 0, flip: false, label: 'U', props: { voltage: 220, hasPE: false } };
+  const elcb: ComponentInstance = { id: 'elcb1', type: 'cb', x: 200, y: 140, rot: 0, flip: false, label: 'ELCB1', props: { poles: 2, isELCB: true, state: true, ratedCurrent: 25 } };
+  const mcb1: ComponentInstance = { id: 'mcb_light', type: 'cb', x: 340, y: 80, rot: 0, flip: false, label: 'MCB_CS', props: { poles: 1, ratedCurrent: 6, state: true } };
+  const lamp: ComponentInstance = { id: 'lamp1', type: 'lamp', x: 480, y: 80, rot: 0, flip: false, label: 'Đ1', props: { power: 60, hasPE: false } };
+  const mcb2: ComponentInstance = { id: 'mcb_sock', type: 'cb', x: 340, y: 200, rot: 0, flip: false, label: 'MCB_OC', props: { poles: 1, ratedCurrent: 16, state: true } };
+  const sock: ComponentInstance = { id: 'sk1', type: 'socket', x: 480, y: 200, rot: 0, flip: false, label: 'OC1', props: { state: true, loadPower: 500 } };
+
+  const w1 = makePresetWire('w1', 'src1', 'A', 'elcb1', 'in1', [{ x: 120, y: 140 }, { x: 160, y: 120 }], 'phase');
+  const w2 = makePresetWire('w2', 'src1', 'O', 'elcb1', 'in2', [{ x: 120, y: 100 }, { x: 160, y: 160 }], 'neutral');
+
+  const w3 = makePresetWire('w3', 'elcb1', 'out1', 'mcb_light', 'in', [{ x: 240, y: 120 }, { x: 280, y: 120 }, { x: 280, y: 80 }, { x: 300, y: 80 }], 'phase');
+  const w4 = makePresetWire('w4', 'mcb_light', 'out', 'lamp1', '1', [{ x: 380, y: 80 }, { x: 440, y: 80 }], 'phase');
+  const w5 = makePresetWire('w5', 'lamp1', '2', 'elcb1', 'out2', [{ x: 520, y: 80 }, { x: 540, y: 80 }, { x: 540, y: 160 }, { x: 240, y: 160 }], 'neutral');
+
+  const w6 = makePresetWire('w6', 'elcb1', 'out1', 'mcb_sock', 'in', [{ x: 240, y: 120 }, { x: 280, y: 120 }, { x: 280, y: 200 }, { x: 300, y: 200 }], 'phase');
+  const w7 = makePresetWire('w7', 'mcb_sock', 'out', 'sk1', '1', [{ x: 380, y: 200 }, { x: 440, y: 200 }], 'phase');
+  const w8 = makePresetWire('w8', 'sk1', '2', 'elcb1', 'out2', [{ x: 520, y: 200 }, { x: 540, y: 200 }, { x: 540, y: 160 }], 'neutral');
+
+  return { components: [u, elcb, mcb1, lamp, mcb2, sock], wires: [w1, w2, w3, w4, w5, w6, w7, w8], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+}
+
 export const HOUSEHOLD_PRESETS: Preset[] = [
+  // --- Nhóm: Lắp đặt mạng điện trong nhà (L9, L12) ---
+  {
+    id: 'hh_a1',
+    group: 'Lắp đặt mạng điện trong nhà (L9, L12)',
+    grade: 'L9',
+    title: 'A1) Đèn + công tắc 1 cực + aptomat',
+    description: 'Mạch điện điều khiển 1 đèn sợi đốt 60 W qua công tắc 2 cực và aptomat MCB 1P 16A bảo vệ.',
+    expectation: 'Kì vọng: bật công tắc thì đèn sáng; ngắt aptomat thì đèn tắt.',
+    state: createPresetHouseholdA1(),
+  },
+  {
+    id: 'hh_a2',
+    group: 'Lắp đặt mạng điện trong nhà (L9, L12)',
+    grade: 'L9',
+    title: 'A2) Đèn cầu thang: 1 đèn điều khiển bằng 2 công tắc 3 cực',
+    description: 'Mạch đèn cầu thang kinh điển: đảo trạng thái bất kì công tắc nào cũng đổi trạng thái đèn.',
+    expectation: 'Kì vọng: bấm bất kì công tắc nào cũng đổi trạng thái đèn.',
+    state: createPresetHouseholdA2(),
+  },
+  {
+    id: 'hh_a3',
+    group: 'Lắp đặt mạng điện trong nhà (L9, L12)',
+    grade: 'L9, L12',
+    title: 'A3) Ổ cắm + quạt trần + đèn mắc song song có aptomat',
+    description: 'Mạch phân phối song song 3 thiết bị độc lập: ổ cắm, quạt trần 60 W và đèn 60 W có aptomat bảo vệ.',
+    expectation: 'Kì vọng: ba thiết bị hoạt động độc lập; aptomat ngắt thì cả ba mất điện.',
+    state: createPresetHouseholdA3(),
+  },
   {
     id: 'hh_a',
-    title: 'a) Nguồn lưới → Aptomat 1P 16A → Ampe kế → Quạt trần 60W',
+    group: 'Lắp đặt mạng điện trong nhà (L9, L12)',
+    grade: 'L9',
+    title: 'a) Mạch cấp nguồn quạt trần qua MCB 1P 16A',
     description: 'Mạch khép kín đầy đủ dây về O, đo dòng tiêu thụ qua quạt trần 60 W (I ≈ 0.273 A).',
+    expectation: 'Kì vọng: đóng aptomat thì quạt chạy bình thường, dòng xấp xỉ 0,27 A.',
     state: createPresetHouseholdA(),
   },
+
+  // --- Nhóm: Bảo vệ mạch điện (L8, L9) ---
   {
-    id: 'hh_b',
-    title: 'b) Mạch (a) có thêm Vôn kế song song quạt',
-    description: 'Đo đồng thời điện áp 220 V trên tải bằng Vôn kế và dòng điện qua mạch bằng Ampe kế.',
-    state: createPresetHouseholdB(),
-  },
-  {
-    id: 'hh_c',
-    title: 'c) Sự cố rò vỏ: Chân PE TẮT, có người chạm vào vỏ',
-    description: 'Minh họa sự cố nguy hiểm: điện áp vỏ 217.8 V, dòng qua người 217.8 mA gây nguy hiểm đến tính mạng.',
-    state: createPresetHouseholdC(),
-  },
-  {
-    id: 'hh_d',
-    title: 'd) Sự cố rò vỏ: Chân PE nối Cọc tiếp địa 4 Ω, có người chạm',
-    description: 'Bảo vệ tiếp địa: dòng sự cố đi vào cọc đất, điện áp tiếp xúc giảm từ 218 V xuống 62.7 V.',
-    state: createPresetHouseholdD(),
-  },
-  {
-    id: 'hh_e',
-    title: 'e) Mạch (d) có thêm Aptomat chống rò (ELCB 30 mA)',
-    description: 'Aptomat chống rò phát hiện chênh lệch dòng pha và trung tính (> 30 mA) và nhảy ngắt mạch tức thì.',
-    state: createPresetHouseholdE(),
+    id: 'hh_a4',
+    group: 'Bảo vệ mạch điện (L8, L9)',
+    grade: 'L9, L12',
+    title: 'A4) Mạng điện một phòng: ELCB tổng → 2 nhánh MCB',
+    description: 'Hệ thống điện hiện đại: ELCB tổng 30 mA cấp cho 2 nhánh (chiếu sáng MCB 6A và ổ cắm MCB 16A).',
+    expectation: 'Kì vọng: chập ở nhánh ổ cắm chỉ làm nhảy aptomat của nhánh đó, nhánh chiếu sáng vẫn sáng.',
+    state: createPresetHouseholdA4(),
   },
   {
     id: 'hh_j',
+    group: 'Bảo vệ mạch điện (L8, L9)',
+    grade: 'L8, L9',
     title: 'j) Quá tải: Nguồn lưới 220V → MCB 10A → Tải 3000W',
     description: 'Dòng tải I ≈ 13.6 A vượt quá định mức 10 A. Aptomat tích lũy nhiệt và nhảy sau khoảng 8 s.',
+    expectation: 'Kì vọng: dòng quá tải 13,6 A làm aptomat tích nhiệt và nhảy sau vài giây.',
     state: createPresetHouseholdJ(),
   },
   {
     id: 'hh_k',
+    group: 'Bảo vệ mạch điện (L8, L9)',
+    grade: 'L8, L9',
     title: 'k) Chập mạch: Nối tắt A với O qua MCB 16A',
     description: 'Dòng ngắn mạch cực lớn (vượt quá 5·In), cuộn điện từ của aptomat tác động nhảy tức thì (≤ 20 ms).',
+    expectation: 'Kì vọng: dòng ngắn mạch làm cuộn điện từ aptomat tác động nhảy tức thì.',
     state: createPresetHouseholdK(),
   },
   {
     id: 'hh_l',
+    group: 'Bảo vệ mạch điện (L8, L9)',
+    grade: 'L8, L9',
     title: 'l) Chập mạch không có Aptomat: Dây 1.5 mm²',
     description: 'Chập trực tiếp dây pha A và trung tính O không qua thiết bị bảo vệ; dây dẫn bốc khói và cháy đứt.',
+    expectation: 'Kì vọng: dây dẫn 1,5 mm² nóng đỏ và cháy đứt do không có aptomat bảo vệ.',
     state: createPresetHouseholdL(),
   },
   {
     id: 'hh_m',
+    group: 'Bảo vệ mạch điện (L8, L9)',
+    grade: 'L8, L9',
     title: 'm) Chọn sai dây dẫn: MCB 20A + Dây 1.0 mm² + Tải 3300W',
     description: 'Tải 15 A vượt quá khả năng chịu tải 10 A của dây 1.0 mm² nhưng nhỏ hơn MCB 20A; dây dẫn cháy trước khi aptomat nhảy!',
+    expectation: 'Kì vọng: dây dẫn bốc khói cháy trước khi aptomat kịp nhảy.',
     state: createPresetHouseholdM(),
   },
   {
     id: 'hh_n',
+    group: 'Bảo vệ mạch điện (L8, L9)',
+    grade: 'L8, L9',
     title: 'n) Cầu chì 5A + Tải 2000W (Quá tải)',
     description: 'Dòng tải I ≈ 9.1 A vượt quá định mức cầu chì 5 A; dây chì nóng chảy và đứt sau ~2 s kèm tiếng tạch.',
+    expectation: 'Kì vọng: dòng quá tải làm đứt dây chì sau khoảng 2 s.',
     state: createPresetHouseholdN(),
+  },
+
+  // --- Nhóm: An toàn điện (L8, L12) ---
+  {
+    id: 'hh_c',
+    group: 'An toàn điện (L8, L12)',
+    grade: 'L8, L12',
+    title: 'c) Sự cố rò vỏ: Không có dây PE, người chạm vào vỏ',
+    description: 'Minh họa sự cố nguy hiểm: điện áp vỏ 217.8 V, dòng qua người 217.8 mA gây nguy hiểm đến tính mạng.',
+    expectation: 'Kì vọng: điện áp vỏ lên 218 V, dòng qua người vượt ngưỡng nguy hiểm.',
+    state: createPresetHouseholdC(),
+  },
+  {
+    id: 'hh_d',
+    group: 'An toàn điện (L8, L12)',
+    grade: 'L8, L12',
+    title: 'd) Sự cố rò vỏ: Có dây PE nối Cọc tiếp địa 4 Ω',
+    description: 'Bảo vệ tiếp địa: dòng sự cố đi vào cọc đất, điện áp tiếp xúc giảm từ 218 V xuống 62.7 V.',
+    expectation: 'Kì vọng: dòng sự cố tiêu thoát xuống đất, điện áp tiếp xúc trên người giảm an toàn.',
+    state: createPresetHouseholdD(),
+  },
+  {
+    id: 'hh_e',
+    group: 'An toàn điện (L8, L12)',
+    grade: 'L8, L12',
+    title: 'e) Bảo vệ toàn diện: Nối đất PE kết hợp ELCB 30 mA',
+    description: 'Aptomat chống rò phát hiện chênh lệch dòng pha và trung tính (> 30 mA) và nhảy ngắt mạch tức thì.',
+    expectation: 'Kì vọng: ELCB phát hiện dòng rò đất và nhảy ngắt nguồn bảo vệ tức thì.',
+    state: createPresetHouseholdE(),
   },
   {
     id: 'hh_o',
+    group: 'An toàn điện (L8, L12)',
+    grade: 'L8, L12',
     title: 'o) Rò vỏ nguy hiểm có ELCB 30mA bảo vệ',
     description: 'Tải bị rò pha ra vỏ khi không có dây PE, người chạm vào vỏ tạo dòng rò đất ~218 mA làm ELCB nhảy ngay.',
+    expectation: 'Kì vọng: người chạm vỏ rò kích hoạt ELCB nhảy ngay trong 20 ms.',
     state: createPresetHouseholdO(),
+  },
+
+  // --- Nhóm: Đo lường (L9) ---
+  {
+    id: 'hh_b',
+    group: 'Đo lường (L9)',
+    grade: 'L9',
+    title: 'b) Mạch đo điện áp và dòng điện tải',
+    description: 'Đo đồng thời điện áp 220 V trên tải bằng Vôn kế và dòng điện qua mạch bằng Ampe kế.',
+    expectation: 'Kì vọng: Ampe kế chỉ ≈ 0,27 A, Vôn kế chỉ ≈ 220 V.',
+    state: createPresetHouseholdB(),
   },
   {
     id: 'hh_p',
+    group: 'Đo lường (L9)',
+    grade: 'L9',
     title: 'p) Đo công suất: Oát kế 4 chân + Đèn 60W',
     description: 'Cuộn dòng (I+, I-) nối tiếp với đèn, cuộn áp (U+, U-) nối song song giữa pha và trung tính; oát kế đo đúng 60 W.',
+    expectation: 'Kì vọng: Oát kế hiển thị công suất tiêu thụ chính xác 60 W.',
     state: createPresetHouseholdP(),
   },
 ];
@@ -434,45 +583,124 @@ export function createPresetElectronicsY(): CircuitState {
   };
 }
 
+// Preset (B1): Transistor NPN đóng cắt LED bằng nút nhấn qua điện trở cực nền
+export function createPresetElectronicsB1(): CircuitState {
+  const v: ComponentInstance = { id: 'v1', type: 'dc_source', x: 80, y: 140, rot: 0, flip: false, label: 'V1', props: { voltage: 9 } };
+  const pb: ComponentInstance = { id: 'pb1', type: 'push_button', x: 200, y: 80, rot: 0, flip: false, label: 'PB1', props: { state: true } };
+  const rb: ComponentInstance = { id: 'rb1', type: 'resistor', x: 300, y: 80, rot: 0, flip: false, label: 'Rb', props: { resistance: 10000 } };
+  const rc: ComponentInstance = { id: 'rc1', type: 'resistor', x: 300, y: 180, rot: 0, flip: false, label: 'Rc', props: { resistance: 470 } };
+  const led: ComponentInstance = { id: 'led1', type: 'led', x: 400, y: 180, rot: 0, flip: false, label: 'D1', props: { color: 'red' } };
+  const q: ComponentInstance = { id: 'q1', type: 'transistor_npn', x: 480, y: 120, rot: 0, flip: false, label: 'Q1', props: { beta: 100 } };
+  const gnd: ComponentInstance = { id: 'gnd1', type: 'gnd', x: 80, y: 240, rot: 0, flip: false, label: '', props: {} };
+
+  const w1 = makePresetWire('w1', 'v1', 'pos', 'pb1', '1', [{ x: 80, y: 100 }, { x: 80, y: 80 }, { x: 160, y: 80 }], 'phase');
+  const w2 = makePresetWire('w2', 'pb1', '2', 'rb1', '1', [{ x: 240, y: 80 }, { x: 260, y: 80 }], 'phase');
+  const w3 = makePresetWire('w3', 'rb1', '2', 'q1', 'B', [{ x: 340, y: 80 }, { x: 440, y: 80 }, { x: 440, y: 120 }], 'phase');
+
+  const w4 = makePresetWire('w4', 'v1', 'pos', 'rc1', '1', [{ x: 80, y: 100 }, { x: 80, y: 180 }, { x: 260, y: 180 }], 'phase');
+  const w5 = makePresetWire('w5', 'rc1', '2', 'led1', 'A', [{ x: 340, y: 180 }, { x: 360, y: 180 }], 'phase');
+  const w6 = makePresetWire('w6', 'led1', 'K', 'q1', 'C', [{ x: 440, y: 180 }, { x: 500, y: 180 }, { x: 500, y: 80 }], 'phase');
+  const w7 = makePresetWire('w7', 'q1', 'E', 'v1', 'neg', [{ x: 500, y: 160 }, { x: 500, y: 220 }, { x: 80, y: 220 }, { x: 80, y: 180 }], 'neutral');
+  const wg = makePresetWire('wg', 'v1', 'neg', 'gnd1', 'gnd', [{ x: 80, y: 180 }, { x: 80, y: 220 }], 'ground');
+
+  return { components: [v, pb, rb, rc, led, q, gnd], wires: [w1, w2, w3, w4, w5, w6, w7, wg], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+}
+
+// Preset (B2): Biến trở điều chỉnh độ sáng LED (biến trở nối tiếp điện trở hạn dòng)
+export function createPresetElectronicsB2(): CircuitState {
+  const v: ComponentInstance = { id: 'v1', type: 'dc_source', x: 80, y: 120, rot: 0, flip: false, label: 'V1', props: { voltage: 9 } };
+  const vr: ComponentInstance = { id: 'vr1', type: 'potentiometer', x: 200, y: 80, rot: 0, flip: false, label: 'VR1', props: { resistance: 1000, ratio: 50 } };
+  const r: ComponentInstance = { id: 'r1', type: 'resistor', x: 320, y: 80, rot: 0, flip: false, label: 'R1', props: { resistance: 220 } };
+  const led: ComponentInstance = { id: 'led1', type: 'led', x: 440, y: 80, rot: 0, flip: false, label: 'D1', props: { color: 'red' } };
+  const gnd: ComponentInstance = { id: 'gnd1', type: 'gnd', x: 80, y: 220, rot: 0, flip: false, label: '', props: {} };
+
+  const w1 = makePresetWire('w1', 'v1', 'pos', 'vr1', '1', [{ x: 80, y: 80 }, { x: 160, y: 80 }], 'phase');
+  const w2 = makePresetWire('w2', 'vr1', '2', 'r1', '1', [{ x: 200, y: 120 }, { x: 280, y: 80 }], 'phase');
+  const w3 = makePresetWire('w3', 'r1', '2', 'led1', 'A', [{ x: 360, y: 80 }, { x: 400, y: 80 }], 'phase');
+  const w4 = makePresetWire('w4', 'led1', 'K', 'v1', 'neg', [{ x: 480, y: 80 }, { x: 480, y: 160 }, { x: 80, y: 160 }], 'neutral');
+  const wg = makePresetWire('wg', 'v1', 'neg', 'gnd1', 'gnd', [{ x: 80, y: 160 }, { x: 80, y: 200 }], 'ground');
+
+  return { components: [v, vr, r, led, gnd], wires: [w1, w2, w3, w4, wg], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+}
+
+// Preset (B3): Cầu chia áp hai điện trở có Vôn kế
+export function createPresetElectronicsB3(): CircuitState {
+  const v: ComponentInstance = { id: 'v1', type: 'dc_source', x: 80, y: 120, rot: 0, flip: false, label: 'V1', props: { voltage: 9 } };
+  const r1: ComponentInstance = { id: 'r1', type: 'resistor', x: 220, y: 80, rot: 0, flip: false, label: 'R1', props: { resistance: 1000 } };
+  const r2: ComponentInstance = { id: 'r2', type: 'resistor', x: 360, y: 80, rot: 0, flip: false, label: 'R2', props: { resistance: 1000 } };
+  const vm: ComponentInstance = { id: 'vm1', type: 'voltmeter', x: 360, y: 180, rot: 0, flip: false, label: 'V_out', props: {} };
+  const gnd: ComponentInstance = { id: 'gnd1', type: 'gnd', x: 80, y: 220, rot: 0, flip: false, label: '', props: {} };
+
+  const w1 = makePresetWire('w1', 'v1', 'pos', 'r1', '1', [{ x: 80, y: 80 }, { x: 180, y: 80 }], 'phase');
+  const w2 = makePresetWire('w2', 'r1', '2', 'r2', '1', [{ x: 260, y: 80 }, { x: 320, y: 80 }], 'phase');
+  const w3 = makePresetWire('w3', 'r2', '2', 'v1', 'neg', [{ x: 400, y: 80 }, { x: 400, y: 160 }, { x: 80, y: 160 }], 'neutral');
+  const wv1 = makePresetWire('wv1', 'r2', '1', 'vm1', 'pos', [{ x: 320, y: 80 }, { x: 320, y: 180 }], 'phase');
+  const wv2 = makePresetWire('wv2', 'r2', '2', 'vm1', 'neg', [{ x: 400, y: 80 }, { x: 400, y: 180 }], 'neutral');
+  const wg = makePresetWire('wg', 'v1', 'neg', 'gnd1', 'gnd', [{ x: 80, y: 160 }, { x: 80, y: 200 }], 'ground');
+
+  return { components: [v, r1, r2, vm, gnd], wires: [w1, w2, w3, wv1, wv2, wg], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+}
+
 export const ELECTRONICS_PRESETS: Preset[] = [
+  // --- Nhóm: Linh kiện cơ bản (L9, L12) ---
   {
     id: 'el_f',
+    group: 'Linh kiện cơ bản (L9, L12)',
+    grade: 'L9',
     title: 'f) Pin 9 V + Điện trở 470 Ω + LED đỏ',
     description: 'Mạch chiếu sáng LED cơ bản có trở hạn dòng (I ≈ 14.6 mA, điện áp LED ≈ 2.0 V).',
+    expectation: 'Kì vọng: LED sáng đỏ bình thường, dòng hạn mức ≈ 14,6 mA.',
     state: createPresetElectronicsF(),
   },
   {
-    id: 'el_g',
-    title: 'g) LED nối thẳng pin 9 V (không trở hạn dòng)',
-    description: 'Mạch báo động quá dòng: dòng điện chạy thẳng qua LED mà không có điện trở cản trở.',
-    state: createPresetElectronicsG(),
+    id: 'el_b2',
+    group: 'Linh kiện cơ bản (L9, L12)',
+    grade: 'L9, L12',
+    title: 'B2) Biến trở điều chỉnh độ sáng LED',
+    description: 'Biến trở 1 kΩ nối tiếp điện trở hạn dòng 220 Ω; kéo con chạy biến trở để chỉnh độ sáng LED.',
+    expectation: 'Kì vọng: kéo núm biến trở thì dòng và độ sáng LED đổi.',
+    state: createPresetElectronicsB2(),
+  },
+  {
+    id: 'el_b3',
+    group: 'Linh kiện cơ bản (L9, L12)',
+    grade: 'L9, L12',
+    title: 'B3) Cầu chia áp hai điện trở có Vôn kế',
+    description: 'Hai điện trở R1 = R2 = 1 kΩ chia đôi điện áp nguồn 9 V, Vôn kế đo điện áp ra U_ra = 4.5 V.',
+    expectation: 'Kì vọng: số đo vôn kế khớp công thức chia áp U_ra = U_vào · R2 / (R1 + R2).',
+    state: createPresetElectronicsB3(),
   },
   {
     id: 'el_h',
+    group: 'Linh kiện cơ bản (L9, L12)',
+    grade: 'L12',
     title: 'h) Mạch RC: 1 kΩ + 100 µF + Công tắc',
     description: 'Khảo sát nạp xả tụ điện: công tắc đóng cấp nguồn nạp điện áp 9 V lên tụ.',
+    expectation: 'Kì vọng: đóng công tắc thì điện áp trên tụ tăng dần đạt 9 V.',
     state: createPresetElectronicsH(),
   },
   {
-    id: 'el_i',
-    title: 'i) Tụ hóa 16 V đấu ngược cực',
-    description: 'Cực dương nguồn 9 V đấu vào cực âm (−) của tụ hóa, phát tín hiệu cảnh báo đấu ngược cực.',
-    state: createPresetElectronicsI(),
-  },
-  {
     id: 'el_q',
+    group: 'Linh kiện cơ bản (L9, L12)',
+    grade: 'L9',
     title: 'q) Đo điện trở: Ôm kế 2 chân + Cụm 1 kΩ nối tiếp 2 kΩ',
     description: 'Ôm kế bơm dòng thử đo chính xác tổng trở tương đương 3,00 kΩ khi mạch không có nguồn điện.',
+    expectation: 'Kì vọng: Ôm kế đo chính xác tổng trở nối tiếp 3,00 kΩ.',
     state: createPresetElectronicsQ(),
   },
   {
     id: 'el_v',
+    group: 'Linh kiện cơ bản (L9, L12)',
+    grade: 'L12',
     title: 'v) Quá trình nạp tụ RC (Dao động kí ảo)',
     description: 'Nguồn 5 V + điện trở 1 kΩ + tụ 100 µF + công tắc. Kênh CH1 đo điện áp tức thời trên tụ. Kì vọng: V_tụ tăng theo đường cong, đạt ≈ 3,16 V (63%) sau 0,1 s.',
+    expectation: 'Kì vọng: V_tụ tăng theo đường cong, đạt ≈ 3,16 V (63%) sau 0,1 s.',
     state: createPresetElectronicsV(),
   },
   {
     id: 'el_x',
+    group: 'Linh kiện cơ bản (L9, L12)',
+    grade: 'L12',
     title: 'x) Nguồn xoay chiều sin 5 V đỉnh, 50 Hz (Dao động kí)',
     description: 'Nguồn xoay chiều 5 V đỉnh, 50 Hz nối vào kênh CH1 của dao động kí.',
     expectation: 'Kì vọng: sóng sin chu kì 20 ms, đỉnh ±5 V.',
@@ -480,10 +708,43 @@ export const ELECTRONICS_PRESETS: Preset[] = [
   },
   {
     id: 'el_y',
+    group: 'Linh kiện cơ bản (L9, L12)',
+    grade: 'L12',
     title: 'y) Chỉnh lưu nửa chu kì (Diode 1N4007 + Tải 1 kΩ)',
     description: 'Nguồn 5 V đỉnh 50 Hz qua diode 1N4007 nạp tải 1 kΩ. CH1 đo nguồn, CH2 đo tải.',
     expectation: 'Kì vọng: CH2 chỉ có nửa chu kì dương, đỉnh ≈ 4,3 V.',
     state: createPresetElectronicsY(),
+  },
+
+  // --- Nhóm: Mạch trang trí, báo hiệu (L9) ---
+  {
+    id: 'el_b1',
+    group: 'Mạch trang trí, báo hiệu (L9)',
+    grade: 'L9, L12',
+    title: 'B1) Transistor NPN đóng cắt LED bằng nút nhấn',
+    description: 'Transistor BJT NPN đóng vai trò khóa điện tử: dòng điều khiển cực nền kích mở mạch tải LED sáng.',
+    expectation: 'Kì vọng: nhấn nút thì LED sáng; nhả nút thì LED tắt.',
+    state: createPresetElectronicsB1(),
+  },
+
+  // --- Nhóm: Sự cố linh kiện (L9) ---
+  {
+    id: 'el_g',
+    group: 'Sự cố linh kiện (L9)',
+    grade: 'L9',
+    title: 'g) LED nối thẳng pin 9 V (không trở hạn dòng)',
+    description: 'Mạch báo động quá dòng: dòng điện chạy thẳng qua LED mà không có điện trở cản trở làm hỏng LED.',
+    expectation: 'Kì vọng: dòng quá lớn làm LED cháy hỏng ngay khi cấp điện.',
+    state: createPresetElectronicsG(),
+  },
+  {
+    id: 'el_i',
+    group: 'Sự cố linh kiện (L9)',
+    grade: 'L9',
+    title: 'i) Tụ hóa 16 V đấu ngược cực',
+    description: 'Cực dương nguồn 9 V đấu vào cực âm (−) của tụ hóa, phát tín hiệu cảnh báo đấu ngược cực.',
+    expectation: 'Kì vọng: tụ hóa đấu ngược cực phát nổ hỏng linh kiện.',
+    state: createPresetElectronicsI(),
   },
 ];
 
@@ -672,31 +933,46 @@ export function createPresetSensorU(): CircuitState {
 }
 
 export const SENSOR_PRESETS: Preset[] = [
+  // --- Nhóm: Cảm biến + rơ le (L8) ---
   {
     id: 'sn_r',
+    group: 'Cảm biến + rơ le (L8)',
+    grade: 'L8',
     title: 'r) Đèn tự bật khi trời tối (Cảm biến ánh sáng + Rơ le + Đèn nhỏ 5 V)',
     description: 'Trời tối (ánh sáng < ngưỡng 50%): ngõ ra DO lên mức cao (5 V), kích rơ le hút đóng tiếp điểm COM–NO cấp điện cho đèn nhỏ 5 V sáng.',
+    expectation: 'Kì vọng: khi tối (ánh sáng < 50%), rơ le hút bật đèn sáng.',
     state: createPresetSensorR(),
   },
   {
     id: 'sn_s',
+    group: 'Cảm biến + rơ le (L8)',
+    grade: 'L8',
     title: 's) Bật tải khi nóng (Cảm biến nhiệt độ + Rơ le + Tải)',
     description: 'Nhiệt độ môi trường vượt ngưỡng 35 °C: ngõ ra DO lên mức cao, kích rơ le đóng mạch cấp nguồn cho tải hoạt động.',
+    expectation: 'Kì vọng: khi nhiệt độ > 35 °C, rơ le đóng mạch cấp điện cho tải hoạt động.',
     state: createPresetSensorS(),
   },
+
+  // --- Nhóm: Nhà thông minh – chiếu sáng (L9) ---
+  {
+    id: 'sn_u',
+    group: 'Nhà thông minh – chiếu sáng (L9)',
+    grade: 'L9',
+    title: 'u) Đèn hành lang tự tắt sau 10 s (Cảm biến hồng ngoại + Rơ le thời gian)',
+    description: 'Phát hiện chuyển động: DO lên cao, rơ le thời gian hút bật đèn ngay. Khi hết chuyển động: rơ le vẫn giữ hút và đếm lùi 10 s rồi mới nhả tắt đèn.',
+    expectation: "Kì vọng: bật 'Có chuyển động' thì đèn sáng; tắt chuyển động thì đèn vẫn sáng thêm 10 s rồi tắt.",
+    state: createPresetSensorU(),
+  },
+
+  // --- Nhóm: Nhà thông minh – an ninh (L9) ---
   {
     id: 'sn_t',
+    group: 'Nhà thông minh – an ninh (L9)',
+    grade: 'L9',
     title: 't) Báo cháy / rò gas (Cảm biến gas + Rơ le + Chuông điện)',
     description: 'Nồng độ gas vượt ngưỡng 300 ppm: DO lên mức cao (5 V), kích rơ le hút đóng tiếp điểm COM–NO cấp điện cho chuông reo.',
     expectation: 'Kì vọng: kéo nồng độ vượt ngưỡng thì chuông chạy (xanh); giảm xuống thì tắt.',
     state: createPresetSensorT(),
-  },
-  {
-    id: 'sn_u',
-    title: 'u) Đèn hành lang tự tắt sau thời gian T (Cảm biến hồng ngoại + Rơ le thời gian + Đèn nhỏ)',
-    description: 'Phát hiện chuyển động: DO lên cao, rơ le thời gian hút bật đèn ngay. Khi hết chuyển động: rơ le vẫn giữ hút và đếm lùi 10 s rồi mới nhả tắt đèn.',
-    expectation: "Kì vọng: bật 'Có chuyển động' thì đèn sáng; tắt chuyển động thì đèn vẫn sáng thêm 10 s rồi tắt.",
-    state: createPresetSensorU(),
   },
 ];
 

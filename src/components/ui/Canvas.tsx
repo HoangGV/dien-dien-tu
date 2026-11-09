@@ -520,21 +520,6 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
         }}
         className="cursor-move"
       >
-        {/* Damaged red highlight box for damaged components */}
-        {isDamaged && (
-          <rect
-            x={-def.width / 2 - 2}
-            y={-def.height / 2 - 2}
-            width={def.width + 4}
-            height={def.height + 4}
-            fill="rgba(220, 38, 38, 0.3)"
-            stroke="#B71C1C"
-            strokeWidth={2}
-            rx={2}
-            pointerEvents="none"
-          />
-        )}
-
         {/* Yellow outline box when selected */}
         {isSelected && (
           <rect
@@ -609,15 +594,17 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
         )}
 
         {/* Component Symbol */}
-        <def.symbol
-          comp={c}
-          isSelected={isSelected}
-          hoveredPinId={hoveredPin?.compId === c.id ? hoveredPin.pinId : null}
-          onPinPointerDown={(pinId, e) => handlePinPointerDown(c.id, pinId, e)}
-          onPinHover={(pinId) =>
-            setHoveredPin(pinId ? { compId: c.id, pinId } : null)
-          }
-        />
+        <g className={isDamaged ? 'damaged-symbol' : undefined}>
+          <def.symbol
+            comp={c}
+            isSelected={isSelected}
+            hoveredPinId={hoveredPin?.compId === c.id ? hoveredPin.pinId : null}
+            onPinPointerDown={(pinId, e) => handlePinPointerDown(c.id, pinId, e)}
+            onPinHover={(pinId) =>
+              setHoveredPin(pinId ? { compId: c.id, pinId } : null)
+            }
+          />
+        </g>
       </g>
     );
   };

@@ -518,7 +518,7 @@ export const FuseSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPi
     <g>
       {poleYOffsets.map((py, i) => (
         <g key={i} transform={`translate(0, ${py})`}>
-          <rect x={-20} y={-7} width={40} height={14} fill={isBlown || comp.damaged ? 'rgba(220, 38, 38, 0.3)' : '#FFFFFF'} stroke={isBlown || comp.damaged ? '#B71C1C' : '#000000'} strokeWidth={2} />
+          <rect x={-20} y={-7} width={40} height={14} fill="#FFFFFF" stroke={isBlown || comp.damaged ? '#E5322D' : '#000000'} strokeWidth={2} />
           {isBlown ? (
             <path d="M -40 0 L -8 0 M 8 0 L 40 0" stroke="#000" strokeWidth={2} />
           ) : (
@@ -820,8 +820,8 @@ export const CeilingFanSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown
   let bladeOpacity = 1.0;
 
   if (thermalStatus === 'damaged' || comp.damaged) {
-    bladeFill = 'rgba(220, 38, 38, 0.3)';
-    bladeStroke = '#B71C1C';
+    bladeFill = '#FFFFFF';
+    bladeStroke = '#E5322D';
   } else if (thermalStatus === 'hot') {
     bladeFill = '#FED7AA';
     bladeStroke = '#EA580C';
@@ -1406,8 +1406,8 @@ export const LEDSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, onPin
   const baseColor = colorHexMap[comp.props.color || 'red'] || '#E5322D';
   const brightness = isSimulating && kinetics ? (kinetics.brightness ?? 0) : (comp.props.isOn ? 1.0 : 0);
   const isLit = brightness > 0;
-  const fillColor = comp.damaged ? 'rgba(220, 38, 38, 0.3)' : isLit ? baseColor : '#F3F4F6';
-  const strokeColor = comp.damaged ? '#B71C1C' : '#000000';
+  const fillColor = isLit && !comp.damaged ? baseColor : '#F3F4F6';
+  const strokeColor = comp.damaged ? '#E5322D' : '#000000';
   const glowBlur = Math.round(brightness * 12);
 
   return (
@@ -1462,7 +1462,7 @@ export const ResistorSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, 
 
   return (
     <g>
-      <rect x={-20} y={-8} width={40} height={16} fill={comp.damaged ? 'rgba(220, 38, 38, 0.3)' : '#FFFFFF'} stroke={comp.damaged ? '#B71C1C' : '#000000'} strokeWidth={2} />
+      <rect x={-20} y={-8} width={40} height={16} fill="#FFFFFF" stroke={comp.damaged ? '#E5322D' : '#000000'} strokeWidth={2} />
       <line x1={-40} y1={0} x2={-20} y2={0} stroke="#000" strokeWidth={2} />
       <line x1={20} y1={0} x2={40} y2={0} stroke="#000" strokeWidth={2} />
 

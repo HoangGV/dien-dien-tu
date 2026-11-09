@@ -175,3 +175,13 @@ body {
   background: var(--blue);
   border: 1px solid var(--ink);
 }
+
+/* Damaged component: only lines, circles, paths, and shape outlines turn red */
+.damaged-symbol line,
+.damaged-symbol circle:not([fill="transparent"]):not([data-pin]),
+.damaged-symbol path:not([stroke="none"]),
+.damaged-symbol polyline,
+.damaged-symbol polygon,
+.damaged-symbol rect:not([fill="transparent"]):not([data-bg]) {
+  stroke: #E5322D !important;
+}

@@ -37,6 +37,7 @@ import { ImportExportModal } from '../modals/ImportExportModal';
 import { StorageModal } from '../modals/StorageModal';
 import { PresetsModal } from '../modals/PresetsModal';
 import { DiagnosticsModal } from '../modals/DiagnosticsModal';
+import { CurriculumModal } from '../modals/CurriculumModal';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
 
 export interface TopBarProps {
@@ -74,6 +75,8 @@ export const TopBar: React.FC<TopBarProps> = ({ svgRef }) => {
     restoreAllDamaged,
     oscilloscopePanelOpen,
     toggleOscilloscopePanel,
+    setCircuit,
+    setStatusMessage,
   } = useWorkspaceStore();
 
   const { isInstallable, install } = usePWAInstall();
@@ -84,6 +87,7 @@ export const TopBar: React.FC<TopBarProps> = ({ svgRef }) => {
   const [storageOpen, setStorageOpen] = useState(false);
   const [presetsOpen, setPresetsOpen] = useState(false);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const [curriculumOpen, setCurriculumOpen] = useState(false);
 
   // Responsive container width tracking for dynamic dropdown overflow
   const barRef = useRef<HTMLDivElement>(null);
@@ -157,15 +161,46 @@ export const TopBar: React.FC<TopBarProps> = ({ svgRef }) => {
     },
   ];
 
-  // 3. Presets Menu
-  const presetItems: DropdownItem[] = [
-    {
-      id: 'open_presets',
-      label: 'Danh sách mạch mẫu SGK',
-      icon: <BookOpen size={14} />,
-      onClick: () => setPresetsOpen(true),
-    },
-  ];
+  // 3. Presets Menu (MẪU) - Grouped by Grade/Lesson
+  const currentPresets = config.presets || [];
+  const groupedPresets: Record<string, typeof currentPresets> = {};
+  for (const p of currentPresets) {
+    const grp = p.group || 'Mạch mẫu';
+    if (!groupedPresets[grp]) groupedPresets[grp] = [];
+    groupedPresets[grp].push(p);
+  }
+
+  const presetItems: DropdownItem[] = [];
+  for (const [groupName, pList] of Object.entries(groupedPresets)) {
+    presetItems.push({
+      id: `header_${groupName}`,
+      label: groupName,
+      isHeader: true,
+      onClick: () => {},
+    });
+    for (const preset of pList) {
+      presetItems.push({
+        id: preset.id,
+        label: preset.title,
+        grade: preset.grade,
+        onClick: () => {
+          setCircuit(preset.state, true);
+          if (preset.expectation) {
+            setStatusMessage(preset.expectation);
+          }
+        },
+      });
+    }
+  }
+
+  if (currentPresets.length === 0) {
+    presetItems.push({
+      id: 'empty_presets',
+      label: 'Chưa có mạch mẫu cho không gian này',
+      disabled: true,
+      onClick: () => {},
+    });
+  }
 
   // 4. View Menu
   const viewItems: DropdownItem[] = [
@@ -206,6 +241,12 @@ export const TopBar: React.FC<TopBarProps> = ({ svgRef }) => {
 
   // 5. Help Menu
   const helpItems: DropdownItem[] = [
+    {
+      id: 'curriculum',
+      label: 'Yêu cầu cần đạt (CT 2018)',
+      icon: <BookOpen size={14} />,
+      onClick: () => setCurriculumOpen(true),
+    },
     {
       id: 'standards',
       label: 'Bảng kí hiệu TCVN & SGK GDPT',
@@ -413,6 +454,7 @@ export const TopBar: React.FC<TopBarProps> = ({ svgRef }) => {
       <ImportExportModal isOpen={ioOpen} onClose={() => setIoOpen(false)} svgRef={svgRef} />
       <StorageModal isOpen={storageOpen} onClose={() => setStorageOpen(false)} />
       <PresetsModal isOpen={presetsOpen} onClose={() => setPresetsOpen(false)} />
+      <CurriculumModal isOpen={curriculumOpen} onClose={() => setCurriculumOpen(false)} />
     </>
   );
 };

@@ -16,10 +16,15 @@ import {
   createPresetHouseholdJ,
   createPresetHouseholdK,
   createPresetHouseholdM,
+  createPresetHouseholdA1,
+  createPresetHouseholdA2,
   createPresetSensorR,
   createPresetElectronicsV,
   createPresetElectronicsX,
   createPresetElectronicsY,
+  HOUSEHOLD_PRESETS,
+  ELECTRONICS_PRESETS,
+  SENSOR_PRESETS,
 } from './presets';
 import { oscilloscopeService } from './oscilloscopeService';
 
@@ -1974,6 +1979,121 @@ export const ALL_SOLVER_TEST_CASES: SolverTestCase[] = [
       };
     },
   }),
+  defineTestCase({
+    id: 'case59_all_presets_compile_step',
+    stt: 59,
+    group: 'Mạch mẫu',
+    name: 'Ca 59: Mọi mạch mẫu ở mọi workspace nạp được và mô phỏng bước đầu tiên thành công',
+    expectedStr: 'Tất cả các mạch mẫu ở 3 workspace đều biên dịch và mô phỏng bước đầu tiên thành công',
+    toleranceStr: '100% mạch mẫu thành công',
+    createCircuit: () => {
+      return createPresetHouseholdA1();
+    },
+    evaluate: () => {
+      let total = 0;
+      let passedCount = 0;
+      const failedNames: string[] = [];
+
+      for (const p of HOUSEHOLD_PRESETS) {
+        total++;
+        try {
+          const sim = new SimulationService();
+          sim.compile(p.state, 'rms');
+          const res = sim.step(0.02);
+          if (res) passedCount++;
+          else failedNames.push(p.id);
+        } catch {
+          failedNames.push(p.id);
+        }
+      }
+
+      for (const p of ELECTRONICS_PRESETS) {
+        total++;
+        try {
+          const sim = new SimulationService();
+          sim.compile(p.state, 'dc');
+          const res = sim.step(0.02);
+          if (res) passedCount++;
+          else failedNames.push(p.id);
+        } catch {
+          failedNames.push(p.id);
+        }
+      }
+
+      for (const p of SENSOR_PRESETS) {
+        total++;
+        try {
+          const sim = new SimulationService();
+          sim.compile(p.state, 'dc');
+          const res = sim.step(0.02);
+          if (res) passedCount++;
+          else failedNames.push(p.id);
+        } catch {
+          failedNames.push(p.id);
+        }
+      }
+
+      const passed = passedCount === total;
+      return {
+        actualStr: `${passedCount}/${total} mạch mẫu nạp và mô phỏng bước đầu thành công${failedNames.length > 0 ? ` (Lỗi: ${failedNames.join(', ')})` : ''}`,
+        passed,
+      };
+    },
+  }),
+  defineTestCase({
+    id: 'case60_stairway_lamp_toggle',
+    stt: 60,
+    group: 'Mạch mẫu',
+    name: 'Ca 60: Mạch đèn cầu thang (A2): Đổi trạng thái bất kì công tắc nào cũng đổi trạng thái đèn',
+    expectedStr: 'Bật/tắt tuần tự: sw1 đổi → đèn đổi; sw2 đổi → đèn đổi; sw1 đổi lần nữa → đèn đổi',
+    toleranceStr: 'Khớp bảng chân trị XOR của mạch đèn cầu thang 2 công tắc 3 cực',
+    createCircuit: () => {
+      return createPresetHouseholdA2();
+    },
+    evaluate: () => {
+      const circ = createPresetHouseholdA2();
+      const sw1 = circ.components.find(c => c.id === 'sw1');
+      const sw2 = circ.components.find(c => c.id === 'sw2');
+      if (!sw1 || !sw2) {
+        return { actualStr: 'Không tìm thấy công tắc sw1/sw2', passed: false };
+      }
+
+      // Trạng thái ban đầu: sw1 = true, sw2 = true
+      sw1.props = { ...sw1.props, state: true };
+      sw2.props = { ...sw2.props, state: true };
+      const r0 = solveCircuit(circ.components, circ.wires);
+      const i0 = r0.componentCurrents['lamp1'] || 0;
+      const on0 = i0 > 0.1;
+
+      // 1. Đổi công tắc 1
+      sw1.props = { ...sw1.props, state: false };
+      const r1 = solveCircuit(circ.components, circ.wires);
+      const i1 = r1.componentCurrents['lamp1'] || 0;
+      const on1 = i1 > 0.1;
+
+      // 2. Đổi công tắc 2
+      sw2.props = { ...sw2.props, state: false };
+      const r2 = solveCircuit(circ.components, circ.wires);
+      const i2 = r2.componentCurrents['lamp1'] || 0;
+      const on2 = i2 > 0.1;
+
+      // 3. Đổi công tắc 1 lần nữa
+      sw1.props = { ...sw1.props, state: true };
+      const r3 = solveCircuit(circ.components, circ.wires);
+      const i3 = r3.componentCurrents['lamp1'] || 0;
+      const on3 = i3 > 0.1;
+
+      const toggle1Ok = on1 !== on0;
+      const toggle2Ok = on2 !== on1;
+      const toggle3Ok = on3 !== on2;
+      const passed = toggle1Ok && toggle2Ok && toggle3Ok;
+
+      return {
+        actualStr: `Ban đầu đèn ${on0 ? 'SÁNG' : 'TẮT'} (${i0.toFixed(3)} A) → Đổi CT1: đèn ${on1 ? 'SÁNG' : 'TẮT'} (${i1.toFixed(3)} A) → Đổi CT2: đèn ${on2 ? 'SÁNG' : 'TẮT'} (${i2.toFixed(3)} A) → Đổi CT1 lần nữa: đèn ${on3 ? 'SÁNG' : 'TẮT'} (${i3.toFixed(3)} A)`,
+        passed,
+      };
+    },
+  }),
 ];
 
-export { HOUSEHOLD_PRESETS, ELECTRONICS_PRESETS } from './presets';
+export { HOUSEHOLD_PRESETS, ELECTRONICS_PRESETS, SENSOR_PRESETS } from './presets';

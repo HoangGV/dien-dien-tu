@@ -158,6 +158,8 @@ export interface Preset {
   description: string;
   state: CircuitState;
   expectation?: string;
+  group?: string;
+  grade?: string;
 }
 
 export interface WorkspaceConfig {
