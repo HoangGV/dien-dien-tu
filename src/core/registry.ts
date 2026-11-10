@@ -41,6 +41,14 @@ import {
   TimeRelaySymbol,
   LampDCSymbol,
 } from '../components/symbols/CircuitSymbols';
+import {
+  LogicSwitchSymbol,
+  LogicPushButtonSymbol,
+  LogicHighSymbol,
+  LogicLowSymbol,
+  LogicGateSymbol,
+  LogicLEDSymbol,
+} from '../components/symbols/LogicSymbols';
 
 export const COMPONENT_DEFINITIONS: ComponentDef[] = [
   // =================== WORKSPACE: MẠNG ĐIỆN TRONG NHÀ ===================
@@ -1038,6 +1046,168 @@ export const COMPONENT_DEFINITIONS: ComponentDef[] = [
     defaultProps: {
       voltage: 5,
       power: 1,
+    },
+  },
+  // =================== WORKSPACE: ĐIỆN TỬ SỐ ===================
+  {
+    type: 'logic_switch',
+    nameVi: 'Công tắc logic',
+    category: 'control',
+    refPrefix: 'SW',
+    width: 80,
+    height: 60,
+    pins: [{ id: 'Q', label: 'Q', dx: 2, dy: 0 }],
+    symbol: LogicSwitchSymbol,
+    propsSchema: [
+      { key: 'state', label: 'Mức logic (0/1)', kind: 'bool', default: false },
+      { key: 'label', label: 'Tên đầu vào', kind: 'text', default: 'A' },
+    ],
+    defaultProps: {
+      state: false,
+      label: 'A',
+    },
+  },
+  {
+    type: 'logic_push_button',
+    nameVi: 'Nút nhấn logic',
+    category: 'control',
+    refPrefix: 'BTN',
+    width: 80,
+    height: 60,
+    pins: [{ id: 'Q', label: 'Q', dx: 2, dy: 0 }],
+    symbol: LogicPushButtonSymbol,
+    propsSchema: [
+      { key: 'state', label: 'Trạng thái nhấn (1 khi giữ)', kind: 'bool', default: false },
+      { key: 'label', label: 'Tên nút nhấn', kind: 'text', default: 'BTN' },
+    ],
+    defaultProps: {
+      state: false,
+      label: 'BTN',
+    },
+  },
+  {
+    type: 'logic_high',
+    nameVi: 'Mức 1',
+    category: 'source',
+    refPrefix: 'H',
+    width: 80,
+    height: 60,
+    pins: [{ id: 'Q', label: '1', dx: 2, dy: 0 }],
+    symbol: LogicHighSymbol,
+    propsSchema: [],
+    defaultProps: {},
+  },
+  {
+    type: 'logic_low',
+    nameVi: 'Mức 0',
+    category: 'source',
+    refPrefix: 'L',
+    width: 80,
+    height: 60,
+    pins: [{ id: 'Q', label: '0', dx: 2, dy: 0 }],
+    symbol: LogicLowSymbol,
+    propsSchema: [],
+    defaultProps: {},
+  },
+  {
+    type: 'logic_gate',
+    nameVi: 'Cổng logic',
+    category: 'semiconductor',
+    refPrefix: 'G',
+    width: 80,
+    height: 80,
+    pins: (props) => {
+      const gateType = (props.gateType || 'AND').toUpperCase();
+      if (gateType === 'NOT') {
+        return [
+          { id: 'A', label: 'A', dx: -2, dy: 0 },
+          { id: 'Y', label: 'Y', dx: 2, dy: 0 },
+        ];
+      }
+      const rawCount = Number(props.inputsCount || 2);
+      const isXorOrXnor = gateType === 'XOR' || gateType === 'XNOR';
+      const count = isXorOrXnor ? 2 : Math.min(4, Math.max(2, rawCount));
+
+      if (count === 2) {
+        return [
+          { id: 'A', label: 'A', dx: -2, dy: -1 },
+          { id: 'B', label: 'B', dx: -2, dy: 1 },
+          { id: 'Y', label: 'Y', dx: 2, dy: 0 },
+        ];
+      }
+      if (count === 3) {
+        return [
+          { id: 'A', label: 'A', dx: -2, dy: -1 },
+          { id: 'B', label: 'B', dx: -2, dy: 0 },
+          { id: 'C', label: 'C', dx: -2, dy: 1 },
+          { id: 'Y', label: 'Y', dx: 2, dy: 0 },
+        ];
+      }
+      return [
+        { id: 'A', label: 'A', dx: -2, dy: -2 },
+        { id: 'B', label: 'B', dx: -2, dy: -1 },
+        { id: 'C', label: 'C', dx: -2, dy: 1 },
+        { id: 'D', label: 'D', dx: -2, dy: 2 },
+        { id: 'Y', label: 'Y', dx: 2, dy: 0 },
+      ];
+    },
+    symbol: LogicGateSymbol,
+    propsSchema: [
+      {
+        key: 'gateType',
+        label: 'Loại cổng',
+        kind: 'select',
+        options: [
+          { label: 'AND (Và)', value: 'AND' },
+          { label: 'OR (Hoặc)', value: 'OR' },
+          { label: 'NOT (Đảo)', value: 'NOT' },
+          { label: 'NAND (Và-Đảo)', value: 'NAND' },
+          { label: 'NOR (Hoặc-Đảo)', value: 'NOR' },
+          { label: 'XOR (Hoặc loại trừ)', value: 'XOR' },
+          { label: 'XNOR (Đồng mức)', value: 'XNOR' },
+        ],
+        default: 'AND',
+      },
+      {
+        key: 'inputsCount',
+        label: 'Số ngõ vào (2–4)',
+        kind: 'number',
+        min: 2,
+        max: 4,
+        step: 1,
+        default: 2,
+      },
+    ],
+    defaultProps: {
+      gateType: 'AND',
+      inputsCount: 2,
+    },
+  },
+  {
+    type: 'logic_led',
+    nameVi: 'LED logic',
+    category: 'load',
+    refPrefix: 'LED',
+    width: 80,
+    height: 60,
+    pins: [{ id: 'in', label: 'IN', dx: -2, dy: 0 }],
+    symbol: LogicLEDSymbol,
+    propsSchema: [
+      {
+        key: 'color',
+        label: 'Màu phát quang',
+        kind: 'select',
+        options: [
+          { label: 'Đỏ', value: '#EF4444' },
+          { label: 'Xanh lá', value: '#10B981' },
+          { label: 'Vàng', value: '#F59E0B' },
+          { label: 'Xanh dương', value: '#3B82F6' },
+        ],
+        default: '#EF4444',
+      },
+    ],
+    defaultProps: {
+      color: '#EF4444',
     },
   },
 ];

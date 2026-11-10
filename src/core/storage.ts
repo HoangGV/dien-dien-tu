@@ -79,6 +79,7 @@ export class StorageService {
         install: j.install ? { x: j.install.x, y: j.install.y } : undefined,
       })),
       viewport: { ...state.viewport },
+      floorPlan: state.floorPlan ? { ...state.floorPlan } : undefined,
     };
 
     const serialized = JSON.stringify(cleanState);

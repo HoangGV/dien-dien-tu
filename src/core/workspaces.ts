@@ -3,7 +3,7 @@
  */
 
 import { WorkspaceConfig } from './model';
-import { HOUSEHOLD_PRESETS, ELECTRONICS_PRESETS, SENSOR_PRESETS } from './presets';
+import { HOUSEHOLD_PRESETS, ELECTRONICS_PRESETS, SENSOR_PRESETS, DIGITAL_LOGIC_PRESETS } from './presets';
 
 export const WORKSPACE_HOUSEHOLD: WorkspaceConfig = {
   slug: 'mang-dien-trong-nha',
@@ -167,10 +167,39 @@ export const WORKSPACE_SENSOR_CONTROL: WorkspaceConfig = {
   },
 };
 
+export const WORKSPACE_DIGITAL_LOGIC: WorkspaceConfig = {
+  slug: 'dien-tu-so',
+  title: 'Điện tử số',
+  grades: 'Lớp 12',
+  description: 'Mô phỏng mạch điện tử số (logic): cổng logic cơ bản (AND, OR, NOT, NAND, NOR, XOR, XNOR), công tắc logic 0/1, nút nhấn, mức 1, mức 0, LED logic, tự sinh bảng chân trị 2^n trạng thái.',
+  mode: 'logic',
+  paletteIds: [
+    'logic_switch',
+    'logic_push_button',
+    'logic_high',
+    'logic_low',
+    'logic_gate',
+    'logic_led',
+    'boundary',
+    'textbox',
+  ],
+  presets: DIGITAL_LOGIC_PRESETS,
+  helpText: `HƯỚNG DẪN ĐIỆN TỬ SỐ & MẠCH TỔ HỢP (LỚP 12):
+• Cổng logic cơ bản:
+  - AND: Ngõ ra bằng 1 khi TẤT CẢ các ngõ vào bằng 1.
+  - OR: Ngõ ra bằng 1 khi CÓ ÍT NHẤT MỘT ngõ vào bằng 1.
+  - NOT: Đảo mức logic (0 thành 1, 1 thành 0).
+  - NAND / NOR: Phủ định ngõ ra của AND / OR (có vòng tròn đảo ở ngõ ra).
+  - XOR: Ngõ ra bằng 1 khi hai ngõ vào khác mức nhau.
+  - XNOR: Ngõ ra bằng 1 khi hai ngõ vào cùng mức nhau.
+• Bảng chân trị tự sinh: Bấm nút [BẢNG CHÂN TRỊ] trên thanh trên để khảo sát toàn bộ 2^n tổ hợp và biểu thức logic.`,
+};
+
 export const WORKSPACE_REGISTRY: WorkspaceConfig[] = [
   WORKSPACE_HOUSEHOLD,
   WORKSPACE_ELECTRONICS,
   WORKSPACE_SENSOR_CONTROL,
+  WORKSPACE_DIGITAL_LOGIC,
   WORKSPACE_TEST,
 ];
 

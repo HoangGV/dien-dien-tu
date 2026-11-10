@@ -4,7 +4,7 @@
 
 import React from 'react';
 
-export type WorkspaceMode = 'rms' | 'dc';
+export type WorkspaceMode = 'rms' | 'dc' | 'logic';
 export type CircuitViewMode = 'schematic' | 'installation';
 export type WireType = 'phase' | 'neutral' | 'ground' | 'other';
 
@@ -120,12 +120,38 @@ export interface ViewportState {
   zoom: number;
 }
 
+export interface FloorDoor {
+  id: string;
+  wall: 'top' | 'bottom' | 'left' | 'right';
+  offset: number; // in meters along wall
+  width: number;  // in meters, default 0.9
+}
+
+export interface FloorWall {
+  id: string;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
+
+export interface FloorPlanData {
+  name: string;      // Room name / label, e.g. "MẶT BẰNG PHÒNG"
+  widthM: number;    // Width in meters (X axis, 1..20, step 0.1)
+  lengthM: number;   // Length in meters (Y axis, 1..20, step 0.1)
+  x?: number;        // Canvas X origin, default 80
+  y?: number;        // Canvas Y origin, default 80
+  doors: FloorDoor[];
+  partitionWalls?: FloorWall[];
+}
+
 export interface CircuitState {
   version?: number;
   components: ComponentInstance[];
   wires: Wire[];
   junctions: Junction[];
   viewport: ViewportState;
+  floorPlan?: FloorPlanData;
 }
 
 export interface Net {

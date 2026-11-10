@@ -28,3 +28,8 @@ Theo Chương trình Giáo dục Phổ thông 2018 (Bộ GD&ĐT) & Tiêu chuẩn
 
 ## 2. GHI CHÚ ĐỐI VỚI GIÁO VIÊN VÀ HỌC SINH
 - Các thông số về điện trở người ($1000\,\Omega$) và ngưỡng dòng điện an toàn ($< 10\,\text{mA}$ an toàn/tê nhẹ; $10-30\,\text{mA}$ co giật; $> 30\,\text{mA}$ nguy hiểm) mang tính chất minh họa giáo dục theo SGK Công nghệ lớp 8, 9, 12.
+
+## 3. ĐIỆN TỬ SỐ (MỨC LOGIC 0 / 1 / X)
+- **Cổng logic cơ bản**: Kí hiệu nét 2px theo hình dạng riêng (AND nửa tròn bên phải; OR cung lõm; NOT tam giác + vòng tròn; NAND/NOR/XNOR thêm vòng tròn ở ngõ ra; XOR/XNOR thêm cung kép ở ngõ vào), chân trên lưới (*cần GV đối chiếu*).
+- **Mức logic**: Mức 1 (xanh lá), Mức 0 (xám đậm), Mức X (vàng nét đứt - chưa xác định / hở mạch), Xung đột (đỏ - khi hai nguồn 0 và 1 cùng đẩy vào một net).
+- **Bảng chân trị**: Tự động sinh đầy đủ $2^n$ tổ hợp cho mạch tổ hợp không nhớ, hỗ trợ trích xuất biểu thức logic $Y = f(A, B, \dots)$.

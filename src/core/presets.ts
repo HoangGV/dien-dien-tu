@@ -976,3 +976,129 @@ export const SENSOR_PRESETS: Preset[] = [
   },
 ];
 
+// ==========================================
+// PRESETS CHO WORKSPACE: ĐIỆN TỬ SỐ (L12)
+// ==========================================
+
+// Preset (D1): 2 công tắc -> 1 cổng logic -> LED
+export function createPresetLogicD1(): CircuitState {
+  const swA: ComponentInstance = { id: 'swA', type: 'logic_switch', x: 100, y: 120, rot: 0, flip: false, label: 'A', props: { state: false, label: 'A' } };
+  const swB: ComponentInstance = { id: 'swB', type: 'logic_switch', x: 100, y: 180, rot: 0, flip: false, label: 'B', props: { state: false, label: 'B' } };
+  const g1: ComponentInstance = { id: 'g1', type: 'logic_gate', x: 260, y: 150, rot: 0, flip: false, label: 'G1', props: { gateType: 'AND', inputsCount: 2 } };
+  const led1: ComponentInstance = { id: 'led1', type: 'logic_led', x: 400, y: 150, rot: 0, flip: false, label: 'Y', props: { color: '#EF4444' } };
+
+  const w1 = makePresetWire('w1', 'swA', 'Q', 'g1', 'A', [{ x: 140, y: 120 }, { x: 180, y: 120 }, { x: 180, y: 130 }, { x: 220, y: 130 }], 'other');
+  const w2 = makePresetWire('w2', 'swB', 'Q', 'g1', 'B', [{ x: 140, y: 180 }, { x: 180, y: 180 }, { x: 180, y: 170 }, { x: 220, y: 170 }], 'other');
+  const w3 = makePresetWire('w3', 'g1', 'Y', 'led1', 'in', [{ x: 300, y: 150 }, { x: 360, y: 150 }], 'other');
+
+  return { components: [swA, swB, g1, led1], wires: [w1, w2, w3], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+}
+
+// Preset (D2): Nửa cộng (Half Adder): XOR + AND
+export function createPresetLogicD2(): CircuitState {
+  const swA: ComponentInstance = { id: 'swA', type: 'logic_switch', x: 80, y: 120, rot: 0, flip: false, label: 'A', props: { state: false, label: 'A' } };
+  const swB: ComponentInstance = { id: 'swB', type: 'logic_switch', x: 80, y: 240, rot: 0, flip: false, label: 'B', props: { state: false, label: 'B' } };
+  const gXor: ComponentInstance = { id: 'g_xor', type: 'logic_gate', x: 260, y: 120, rot: 0, flip: false, label: 'XOR', props: { gateType: 'XOR', inputsCount: 2 } };
+  const gAnd: ComponentInstance = { id: 'g_and', type: 'logic_gate', x: 260, y: 240, rot: 0, flip: false, label: 'AND', props: { gateType: 'AND', inputsCount: 2 } };
+  const ledSum: ComponentInstance = { id: 'led_sum', type: 'logic_led', x: 440, y: 120, rot: 0, flip: false, label: 'Tổng (S)', props: { color: '#10B981' } };
+  const ledCarry: ComponentInstance = { id: 'led_carry', type: 'logic_led', x: 440, y: 240, rot: 0, flip: false, label: 'Nhớ (C)', props: { color: '#EF4444' } };
+
+  const w1 = makePresetWire('w1', 'swA', 'Q', 'g_xor', 'A', [{ x: 120, y: 120 }, { x: 180, y: 120 }, { x: 180, y: 100 }, { x: 220, y: 100 }], 'other');
+  const w2 = makePresetWire('w2', 'swA', 'Q', 'g_and', 'A', [{ x: 120, y: 120 }, { x: 180, y: 120 }, { x: 180, y: 220 }, { x: 220, y: 220 }], 'other');
+  const w3 = makePresetWire('w3', 'swB', 'Q', 'g_xor', 'B', [{ x: 120, y: 240 }, { x: 180, y: 240 }, { x: 180, y: 140 }, { x: 220, y: 140 }], 'other');
+  const w4 = makePresetWire('w4', 'swB', 'Q', 'g_and', 'B', [{ x: 120, y: 240 }, { x: 180, y: 240 }, { x: 180, y: 260 }, { x: 220, y: 260 }], 'other');
+  const w5 = makePresetWire('w5', 'g_xor', 'Y', 'led_sum', 'in', [{ x: 300, y: 120 }, { x: 400, y: 120 }], 'other');
+  const w6 = makePresetWire('w6', 'g_and', 'Y', 'led_carry', 'in', [{ x: 300, y: 240 }, { x: 400, y: 240 }], 'other');
+
+  return { components: [swA, swB, gXor, gAnd, ledSum, ledCarry], wires: [w1, w2, w3, w4, w5, w6], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+}
+
+// Preset (D3): Bỏ phiếu đa số 3 người (Majority Voting): Y = A·B + B·C + C·A
+export function createPresetLogicD3(): CircuitState {
+  const swA: ComponentInstance = { id: 'swA', type: 'logic_switch', x: 80, y: 80, rot: 0, flip: false, label: 'A', props: { state: false, label: 'A' } };
+  const swB: ComponentInstance = { id: 'swB', type: 'logic_switch', x: 80, y: 180, rot: 0, flip: false, label: 'B', props: { state: false, label: 'B' } };
+  const swC: ComponentInstance = { id: 'swC', type: 'logic_switch', x: 80, y: 280, rot: 0, flip: false, label: 'C', props: { state: false, label: 'C' } };
+
+  const gAb: ComponentInstance = { id: 'g_ab', type: 'logic_gate', x: 260, y: 80, rot: 0, flip: false, label: 'A·B', props: { gateType: 'AND', inputsCount: 2 } };
+  const gBc: ComponentInstance = { id: 'g_bc', type: 'logic_gate', x: 260, y: 180, rot: 0, flip: false, label: 'B·C', props: { gateType: 'AND', inputsCount: 2 } };
+  const gCa: ComponentInstance = { id: 'g_ca', type: 'logic_gate', x: 260, y: 280, rot: 0, flip: false, label: 'C·A', props: { gateType: 'AND', inputsCount: 2 } };
+
+  const gOr: ComponentInstance = { id: 'g_or', type: 'logic_gate', x: 440, y: 180, rot: 0, flip: false, label: 'OR', props: { gateType: 'OR', inputsCount: 3 } };
+  const ledOut: ComponentInstance = { id: 'led_out', type: 'logic_led', x: 580, y: 180, rot: 0, flip: false, label: 'Đa số (Y)', props: { color: '#10B981' } };
+
+  const w1 = makePresetWire('w1', 'swA', 'Q', 'g_ab', 'A', [{ x: 120, y: 80 }, { x: 220, y: 60 }], 'other');
+  const w2 = makePresetWire('w2', 'swB', 'Q', 'g_ab', 'B', [{ x: 120, y: 180 }, { x: 180, y: 180 }, { x: 180, y: 100 }, { x: 220, y: 100 }], 'other');
+
+  const w3 = makePresetWire('w3', 'swB', 'Q', 'g_bc', 'A', [{ x: 120, y: 180 }, { x: 220, y: 160 }], 'other');
+  const w4 = makePresetWire('w4', 'swC', 'Q', 'g_bc', 'B', [{ x: 120, y: 280 }, { x: 180, y: 280 }, { x: 180, y: 200 }, { x: 220, y: 200 }], 'other');
+
+  const w5 = makePresetWire('w5', 'swC', 'Q', 'g_ca', 'A', [{ x: 120, y: 280 }, { x: 220, y: 260 }], 'other');
+  const w6 = makePresetWire('w6', 'swA', 'Q', 'g_ca', 'B', [{ x: 120, y: 80 }, { x: 160, y: 80 }, { x: 160, y: 300 }, { x: 220, y: 300 }], 'other');
+
+  const w7 = makePresetWire('w7', 'g_ab', 'Y', 'g_or', 'A', [{ x: 300, y: 80 }, { x: 360, y: 80 }, { x: 360, y: 160 }, { x: 400, y: 160 }], 'other');
+  const w8 = makePresetWire('w8', 'g_bc', 'Y', 'g_or', 'B', [{ x: 300, y: 180 }, { x: 400, y: 180 }], 'other');
+  const w9 = makePresetWire('w9', 'g_ca', 'Y', 'g_or', 'C', [{ x: 300, y: 280 }, { x: 360, y: 280 }, { x: 360, y: 200 }, { x: 400, y: 200 }], 'other');
+
+  const w10 = makePresetWire('w10', 'g_or', 'Y', 'led_out', 'in', [{ x: 480, y: 180 }, { x: 540, y: 180 }], 'other');
+
+  return { components: [swA, swB, swC, gAb, gBc, gCa, gOr, ledOut], wires: [w1, w2, w3, w4, w5, w6, w7, w8, w9, w10], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+}
+
+// Preset (D4): Điều khiển bơm an toàn (Nước thấp VÀ KHÔNG quá nhiệt)
+export function createPresetLogicD4(): CircuitState {
+  const swA: ComponentInstance = { id: 'swA', type: 'logic_switch', x: 80, y: 120, rot: 0, flip: false, label: 'Mực nước thấp (A)', props: { state: false, label: 'A' } };
+  const swB: ComponentInstance = { id: 'swB', type: 'logic_switch', x: 80, y: 220, rot: 0, flip: false, label: 'Quá nhiệt (B)', props: { state: false, label: 'B' } };
+  const gNot: ComponentInstance = { id: 'g_not', type: 'logic_gate', x: 240, y: 220, rot: 0, flip: false, label: 'NOT', props: { gateType: 'NOT', inputsCount: 1 } };
+  const gAnd: ComponentInstance = { id: 'g_and', type: 'logic_gate', x: 380, y: 150, rot: 0, flip: false, label: 'AND', props: { gateType: 'AND', inputsCount: 2 } };
+  const ledPump: ComponentInstance = { id: 'led_pump', type: 'logic_led', x: 520, y: 150, rot: 0, flip: false, label: 'Máy bơm', props: { color: '#3B82F6' } };
+
+  const w1 = makePresetWire('w1', 'swB', 'Q', 'g_not', 'A', [{ x: 120, y: 220 }, { x: 200, y: 220 }], 'other');
+  const w2 = makePresetWire('w2', 'swA', 'Q', 'g_and', 'A', [{ x: 120, y: 120 }, { x: 300, y: 120 }, { x: 300, y: 130 }, { x: 340, y: 130 }], 'other');
+  const w3 = makePresetWire('w3', 'g_not', 'Y', 'g_and', 'B', [{ x: 280, y: 220 }, { x: 320, y: 220 }, { x: 320, y: 170 }, { x: 340, y: 170 }], 'other');
+  const w4 = makePresetWire('w4', 'g_and', 'Y', 'led_pump', 'in', [{ x: 420, y: 150 }, { x: 480, y: 150 }], 'other');
+
+  return { components: [swA, swB, gNot, gAnd, ledPump], wires: [w1, w2, w3, w4], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+}
+
+export const DIGITAL_LOGIC_PRESETS: Preset[] = [
+  // --- Nhóm: Cổng logic cơ bản (L12) ---
+  {
+    id: 'logic_d1',
+    group: 'Cổng logic cơ bản (L12)',
+    grade: 'L12',
+    title: 'D1) 2 công tắc → 1 cổng (đổi loại trong Thuộc tính) → LED',
+    description: 'Khảo sát hoạt động của cổng logic cơ bản với 2 đầu vào điều khiển 1 LED ngõ ra.',
+    expectation: 'Kì vọng: LED chỉ sáng khi ngõ ra cổng ở mức 1; thử đổi loại cổng (AND, OR, NAND, NOR, XOR, XNOR) trong bảng Thuộc tính.',
+    state: createPresetLogicD1(),
+  },
+
+  // --- Nhóm: Mạch tổ hợp (L12) ---
+  {
+    id: 'logic_d2',
+    group: 'Mạch tổ hợp (L12)',
+    grade: 'L12',
+    title: 'D2) Nửa cộng: XOR + AND, hai LED "Tổng" và "Nhớ"',
+    description: 'Mạch cộng 1 bit cơ bản (Half Adder): tính tổng S (qua cổng XOR) và số nhớ C (qua cổng AND).',
+    expectation: 'Kì vọng: 0+0=00, 0+1=10, 1+0=10, 1+1=01 (Tổng=0, Nhớ=1).',
+    state: createPresetLogicD2(),
+  },
+  {
+    id: 'logic_d3',
+    group: 'Mạch tổ hợp (L12)',
+    grade: 'L12',
+    title: 'D3) Bỏ phiếu đa số 3 người: Y = A·B + B·C + C·A',
+    description: 'Mạch ra quyết định theo đa số cho 3 người A, B, C; ngõ ra bằng 1 khi có ít nhất 2 người chọn mức 1.',
+    expectation: 'Kì vọng: Bất kì khi nào có ≥ 2 công tắc bật (mức 1), LED Đa số lập tức sáng.',
+    state: createPresetLogicD3(),
+  },
+  {
+    id: 'logic_d4',
+    group: 'Mạch tổ hợp (L12)',
+    grade: 'L12',
+    title: 'D4) Điều khiển bơm: bơm (LED) chạy khi mực nước thấp VÀ KHÔNG quá nhiệt',
+    description: 'Mạch an toàn bảo vệ động cơ bơm nước: Bơm chỉ chạy khi thiếu nước (A=1) và nhiệt độ an toàn (B=0).',
+    expectation: 'Kì vọng: Bơm chạy khi Nước thấp = 1 và Quá nhiệt = 0; nếu Quá nhiệt = 1 thì bơm ngắt ngay lập tức.',
+    state: createPresetLogicD4(),
+  },
+];
+

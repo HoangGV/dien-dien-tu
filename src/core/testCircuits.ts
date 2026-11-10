@@ -13,20 +13,27 @@ import { migrateCircuitState } from './migration';
 import { SimulationService } from './simulationService';
 import { formatMeasure } from './measureFormat';
 import { calculatePolylineLengthMeters, getWireInstallPoints } from './installWiring';
+import { generateAuditReport } from './ampacity';
 import {
   createPresetHouseholdJ,
   createPresetHouseholdK,
   createPresetHouseholdM,
   createPresetHouseholdA1,
   createPresetHouseholdA2,
+  createPresetHouseholdA3,
   createPresetSensorR,
   createPresetElectronicsV,
   createPresetElectronicsX,
   createPresetElectronicsY,
+  createPresetLogicD1,
+  createPresetLogicD2,
+  createPresetLogicD3,
   HOUSEHOLD_PRESETS,
   ELECTRONICS_PRESETS,
   SENSOR_PRESETS,
+  DIGITAL_LOGIC_PRESETS,
 } from './presets';
+import { runLogicSimulation, evaluateGate } from './logicSimulator';
 import { oscilloscopeService } from './oscilloscopeService';
 
 // Helper to make a wire
@@ -2290,6 +2297,306 @@ export const ALL_SOLVER_TEST_CASES: SolverTestCase[] = [
       };
     },
   }),
+  defineTestCase({
+    id: 'case64_wire_ampacity_overload_and_breaker_coordination',
+    stt: 64,
+    group: 'Mạch mẫu',
+    name: 'Ca 64: Mẫu (m) (aptomat 20 A + dây 1,0 mm² + tải 15 A): bảng báo dây quá dòng 150%, gợi ý ≥ 1,5 mm², aptomat In > dòng cho phép',
+    expectedStr: 'Dây quá dòng (150%), gợi ý ≥ 1,5 mm²; Aptomat: In lớn hơn dòng cho phép của dây 1,0 mm²',
+    toleranceStr: 'Chính xác',
+    createCircuit: () => createPresetHouseholdM(),
+    evaluate: () => {
+      const circuit = createPresetHouseholdM();
+      const report = generateAuditReport(circuit, 'current');
+      const overloadedWire = report.wireRows.find(
+        (w) => w.statusLevel === 'danger' && Math.round(w.loadPct) === 150
+      );
+      const hasSuggestion = Boolean(
+        overloadedWire?.suggestion?.includes('1,5 mm²') ||
+        overloadedWire?.suggestion?.includes('1.5')
+      );
+      const breakerRow = report.protectionRows.find((b) => b.compId === 'mcb1');
+      const breakerWarning = Boolean(
+        breakerRow &&
+        breakerRow.conclusion.includes('In lớn hơn dòng cho phép của dây')
+      );
+      const passed = Boolean(overloadedWire && hasSuggestion && breakerWarning);
+
+      return {
+        actualStr: `Dây: ${overloadedWire?.conclusion} (tải ${overloadedWire?.loadPct.toFixed(0)}%, ${overloadedWire?.suggestion}); Aptomat: ${breakerRow?.conclusion}`,
+        passed,
+      };
+    },
+  }),
+  defineTestCase({
+    id: 'case65_wire_ampacity_normal_coordination',
+    stt: 65,
+    group: 'Mạch mẫu',
+    name: 'Ca 65: Mẫu (A3) với dây 2,5 mm²: mọi dây mức xanh, aptomat Phù hợp',
+    expectedStr: 'Mọi dây mức xanh (< 80%), aptomat Phù hợp',
+    toleranceStr: 'Chính xác',
+    createCircuit: () => {
+      const c = createPresetHouseholdA3();
+      c.wires = c.wires.map((w) => ({ ...w, crossSection: 2.5 }));
+      return c;
+    },
+    evaluate: () => {
+      const circuit = createPresetHouseholdA3();
+      circuit.wires = circuit.wires.map((w) => ({ ...w, crossSection: 2.5 }));
+      const report = generateAuditReport(circuit, 'current');
+      const allWiresGreen =
+        report.wireRows.length > 0 &&
+        report.wireRows.every((w) => w.statusLevel === 'normal' && w.loadPct < 80);
+      const breakerRow = report.protectionRows.find((b) => b.compId === 'mcb1');
+      const breakerOk = breakerRow?.conclusion === 'Phù hợp';
+      const passed = Boolean(allWiresGreen && breakerOk);
+
+      return {
+        actualStr: `Dây: ${report.wireRows.length} dây mức xanh (< 80%); Aptomat: ${breakerRow?.conclusion}`,
+        passed,
+      };
+    },
+  }),
+  defineTestCase({
+    id: 'case66_room_resize_preserves_install_positions_and_wire_lengths',
+    stt: 66,
+    group: 'Mạch mẫu',
+    name: 'Ca 66: Đổi kích thước phòng từ 4×5 m sang 6×3 m: vị trí thiết bị ở LẮP ĐẶT không đổi, chiều dài dây hiển thị không đổi',
+    expectedStr: 'Vị trí thiết bị lắp đặt không đổi, chiều dài dây hiển thị không đổi',
+    toleranceStr: 'Chính xác',
+    createCircuit: () => {
+      const c = createPresetHouseholdM();
+      c.floorPlan = {
+        name: 'PHÒNG NGỦ',
+        widthM: 5,
+        lengthM: 4,
+        x: 80,
+        y: 80,
+        doors: [{ id: 'd1', wall: 'bottom', offset: 1.0, width: 0.9 }],
+        partitionWalls: [],
+      };
+      c.components = c.components.map((comp, i) => ({
+        ...comp,
+        install: { x: 150 + i * 100, y: 200 + i * 50, rot: 0 },
+      }));
+      return c;
+    },
+    evaluate: () => {
+      const circuit = createPresetHouseholdM();
+      circuit.floorPlan = {
+        name: 'PHÒNG NGỦ',
+        widthM: 5,
+        lengthM: 4,
+        x: 80,
+        y: 80,
+        doors: [{ id: 'd1', wall: 'bottom', offset: 1.0, width: 0.9 }],
+        partitionWalls: [],
+      };
+      circuit.components = circuit.components.map((comp, i) => ({
+        ...comp,
+        install: { x: 150 + i * 100, y: 200 + i * 50, rot: 0 },
+      }));
+
+      const lengthsBefore = circuit.wires.map((w) => {
+        const pts = getWireInstallPoints(w, circuit);
+        return calculatePolylineLengthMeters(pts, 100);
+      });
+
+      // Resize room from 4x5m (width 5m, length 4m) to 6x3m (width 6m, length 3m)
+      const circuitAfter = {
+        ...circuit,
+        floorPlan: {
+          ...circuit.floorPlan,
+          widthM: 6,
+          lengthM: 3,
+        },
+      };
+
+      const positionsUnchanged = circuitAfter.components.every((c, i) => {
+        const orig = circuit.components[i];
+        return (
+          c.install?.x === orig.install?.x &&
+          c.install?.y === orig.install?.y &&
+          c.install?.rot === orig.install?.rot
+        );
+      });
+
+      const lengthsAfter = circuitAfter.wires.map((w) => {
+        const pts = getWireInstallPoints(w, circuitAfter);
+        return calculatePolylineLengthMeters(pts, 100);
+      });
+
+      const lengthsUnchanged = lengthsBefore.every(
+        (len, i) => Math.abs(len - lengthsAfter[i]) < 0.0001
+      );
+
+      const passed = positionsUnchanged && lengthsUnchanged;
+
+      return {
+        actualStr: `Vị trí thiết bị: ${positionsUnchanged ? 'giữ nguyên 100%' : 'thay đổi'} — Chiều dài dây: ${lengthsUnchanged ? 'giữ nguyên 100%' : 'thay đổi'}`,
+        passed,
+      };
+    },
+  }),
+  defineTestCase({
+    id: 'case67_logic_gates_truth_tables',
+    stt: 67,
+    group: 'Mạch mẫu',
+    name: 'Ca 67: Bảng chân trị đúng với bảng chuẩn cho AND, OR, NAND, NOR, XOR (2 ngõ vào) và NOT (1 ngõ vào)',
+    expectedStr: 'Đúng bảng chân trị chuẩn cho AND, OR, NAND, NOR, XOR (2 ngõ vào) và NOT (1 ngõ vào)',
+    toleranceStr: 'Chính xác 100%',
+    createCircuit: () => createPresetLogicD1(),
+    evaluate: () => {
+      const andOk =
+        evaluateGate('AND', [0, 0]) === 0 &&
+        evaluateGate('AND', [0, 1]) === 0 &&
+        evaluateGate('AND', [1, 0]) === 0 &&
+        evaluateGate('AND', [1, 1]) === 1;
+
+      const orOk =
+        evaluateGate('OR', [0, 0]) === 0 &&
+        evaluateGate('OR', [0, 1]) === 1 &&
+        evaluateGate('OR', [1, 0]) === 1 &&
+        evaluateGate('OR', [1, 1]) === 1;
+
+      const nandOk =
+        evaluateGate('NAND', [0, 0]) === 1 &&
+        evaluateGate('NAND', [0, 1]) === 1 &&
+        evaluateGate('NAND', [1, 0]) === 1 &&
+        evaluateGate('NAND', [1, 1]) === 0;
+
+      const norOk =
+        evaluateGate('NOR', [0, 0]) === 1 &&
+        evaluateGate('NOR', [0, 1]) === 0 &&
+        evaluateGate('NOR', [1, 0]) === 0 &&
+        evaluateGate('NOR', [1, 1]) === 0;
+
+      const xorOk =
+        evaluateGate('XOR', [0, 0]) === 0 &&
+        evaluateGate('XOR', [0, 1]) === 1 &&
+        evaluateGate('XOR', [1, 0]) === 1 &&
+        evaluateGate('XOR', [1, 1]) === 0;
+
+      const notOk =
+        evaluateGate('NOT', [0]) === 1 &&
+        evaluateGate('NOT', [1]) === 0;
+
+      const passed = andOk && orOk && nandOk && norOk && xorOk && notOk;
+
+      return {
+        actualStr: `AND: ${andOk ? 'ĐÚNG' : 'SAI'}, OR: ${orOk ? 'ĐÚNG' : 'SAI'}, NAND: ${nandOk ? 'ĐÚNG' : 'SAI'}, NOR: ${norOk ? 'ĐÚNG' : 'SAI'}, XOR: ${xorOk ? 'ĐÚNG' : 'SAI'}, NOT: ${notOk ? 'ĐÚNG' : 'SAI'}`,
+        passed,
+      };
+    },
+  }),
+  defineTestCase({
+    id: 'case68_half_adder_and_majority_voter',
+    stt: 68,
+    group: 'Mạch mẫu',
+    name: 'Ca 68: Nửa cộng (A,B) -> (Tổng, Nhớ): 00->00, 01->10, 10->10, 11->01; bỏ phiếu đa số Y=1 chỉ khi có >= 2 đầu vào bằng 1',
+    expectedStr: 'Nửa cộng: 00->00, 01->10, 10->10, 11->01; Bỏ phiếu 3 người: Y=1 chỉ khi >= 2 đầu vào bằng 1',
+    toleranceStr: 'Chính xác 100%',
+    createCircuit: () => createPresetLogicD2(),
+    evaluate: () => {
+      const haCombos = [
+        { a: false, b: false, sum: 0, carry: 0 },
+        { a: false, b: true, sum: 1, carry: 0 },
+        { a: true, b: false, sum: 1, carry: 0 },
+        { a: true, b: true, sum: 0, carry: 1 },
+      ];
+
+      let haPassed = true;
+      for (const comb of haCombos) {
+        const c = createPresetLogicD2();
+        c.components = c.components.map(comp => {
+          if (comp.id === 'swA') return { ...comp, props: { ...comp.props, state: comb.a } };
+          if (comp.id === 'swB') return { ...comp, props: { ...comp.props, state: comb.b } };
+          return comp;
+        });
+        const res = runLogicSimulation(c);
+        const sumVal = res.componentStates['led_sum']?.level;
+        const carryVal = res.componentStates['led_carry']?.level;
+        if (sumVal !== comb.sum || carryVal !== comb.carry) {
+          haPassed = false;
+        }
+      }
+
+      let voterPassed = true;
+      for (let a = 0; a <= 1; a++) {
+        for (let b = 0; b <= 1; b++) {
+          for (let c = 0; c <= 1; c++) {
+            const expectedY = (a + b + c) >= 2 ? 1 : 0;
+            const circ = createPresetLogicD3();
+            circ.components = circ.components.map(comp => {
+              if (comp.id === 'swA') return { ...comp, props: { ...comp.props, state: a === 1 } };
+              if (comp.id === 'swB') return { ...comp, props: { ...comp.props, state: b === 1 } };
+              if (comp.id === 'swC') return { ...comp, props: { ...comp.props, state: c === 1 } };
+              return comp;
+            });
+            const res = runLogicSimulation(circ);
+            const actualY = res.componentStates['led_out']?.level;
+            if (actualY !== expectedY) {
+              voterPassed = false;
+            }
+          }
+        }
+      }
+
+      const passed = haPassed && voterPassed;
+      return {
+        actualStr: `Nửa cộng (4/4 tổ hợp): ${haPassed ? 'ĐẠT' : 'KHÔNG ĐẠT'} — Bỏ phiếu đa số (8/8 tổ hợp): ${voterPassed ? 'ĐẠT' : 'KHÔNG ĐẠT'}`,
+        passed,
+      };
+    },
+  }),
+  defineTestCase({
+    id: 'case69_not_oscillation_floating_and_conflict',
+    stt: 69,
+    group: 'Mạch mẫu',
+    name: 'Ca 69: NOT nối vòng (Y vào chính A): cảnh báo dao động, không treo; ngõ vào hở -> X; hai nguồn 0 và 1 vào cùng một net -> XUNG ĐỘT',
+    expectedStr: 'NOT nối vòng có cảnh báo dao động và không treo; ngõ vào hở cho X; hai nguồn 0 và 1 cùng net cho XUNG ĐỘT',
+    toleranceStr: 'Chính xác 100%',
+    createCircuit: () => {
+      const gNot: ComponentInstance = { id: 'g_not', type: 'logic_gate', x: 200, y: 140, rot: 0, flip: false, label: 'NOT', props: { gateType: 'NOT', inputsCount: 1 } };
+      const wLoop = makeWire('w_loop', 'g_not', 'Y', 'g_not', 'A', [{ x: 240, y: 140 }, { x: 240, y: 100 }, { x: 160, y: 100 }, { x: 160, y: 140 }], 'other');
+      return { components: [gNot], wires: [wLoop], junctions: [], viewport: { x: 0, y: 0, zoom: 1 } };
+    },
+    evaluate: () => {
+      const gNot: ComponentInstance = { id: 'g_not', type: 'logic_gate', x: 200, y: 140, rot: 0, flip: false, label: 'NOT', props: { gateType: 'NOT', inputsCount: 1 } };
+      const wLoop = makeWire('w_loop', 'g_not', 'Y', 'g_not', 'A', [{ x: 240, y: 140 }, { x: 240, y: 100 }, { x: 160, y: 100 }, { x: 160, y: 140 }], 'other');
+      const loopCircuit: CircuitState = { components: [gNot], wires: [wLoop], junctions: [], viewport: { x: 0, y: 0, zoom: 1 } };
+
+      const t0 = performance.now();
+      const resLoop = runLogicSimulation(loopCircuit);
+      const elapsed = performance.now() - t0;
+
+      const loopHandled =
+        elapsed < 100 &&
+        resLoop.isOscillating === true &&
+        Boolean(resLoop.warning && resLoop.warning.toLowerCase().includes('dao động'));
+
+      const gAndFloating: ComponentInstance = { id: 'g_and', type: 'logic_gate', x: 200, y: 140, rot: 0, flip: false, label: 'AND', props: { gateType: 'AND', inputsCount: 2 } };
+      const floatCircuit: CircuitState = { components: [gAndFloating], wires: [], junctions: [], viewport: { x: 0, y: 0, zoom: 1 } };
+      const resFloat = runLogicSimulation(floatCircuit);
+      const floatVal = resFloat.componentStates['g_and']?.output;
+      const floatPassed = floatVal === 'X';
+
+      const highSrc: ComponentInstance = { id: 'src_hi', type: 'logic_high', x: 100, y: 100, rot: 0, flip: false, label: '1', props: {} };
+      const lowSrc: ComponentInstance = { id: 'src_lo', type: 'logic_low', x: 100, y: 200, rot: 0, flip: false, label: '0', props: {} };
+      const wConflict = makeWire('w_conf', 'src_hi', 'Q', 'src_lo', 'Q', [{ x: 140, y: 100 }, { x: 140, y: 200 }], 'other');
+      const conflictCircuit: CircuitState = { components: [highSrc, lowSrc], wires: [wConflict], junctions: [], viewport: { x: 0, y: 0, zoom: 1 } };
+      const resConf = runLogicSimulation(conflictCircuit);
+      const confWireVal = resConf.wireValues['w_conf'];
+      const conflictPassed = confWireVal === 'CONFLICT';
+
+      const passed = loopHandled && floatPassed && conflictPassed;
+
+      return {
+        actualStr: `Dao động nối vòng: ${loopHandled ? 'Cảnh báo đạt (' + Math.round(elapsed) + ' ms)' : 'Không đạt'} — Ngõ vào hở: ${floatPassed ? 'Mức X' : floatVal} — Nguồn 0 & 1 chung net: ${conflictPassed ? 'XUNG ĐỘT' : confWireVal}`,
+        passed,
+      };
+    },
+  }),
 ];
 
-export { HOUSEHOLD_PRESETS, ELECTRONICS_PRESETS, SENSOR_PRESETS } from './presets';
+export { HOUSEHOLD_PRESETS, ELECTRONICS_PRESETS, SENSOR_PRESETS, DIGITAL_LOGIC_PRESETS } from './presets';

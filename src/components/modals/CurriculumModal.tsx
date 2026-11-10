@@ -125,6 +125,24 @@ const CURRICULUM_DATA: Record<string, WorkspaceCurriculumInfo> = {
       'Mô phỏng trường vật lí môi trường 3D liên tục (luồng khí đối lưu, áp suất thủy lực động).',
     ],
   },
+  'dien-tu-so': {
+    title: 'Điện tử số',
+    grades: 'Lớp 12',
+    coveredPoints: [
+      {
+        gradeTag: 'Lớp 12',
+        topic: 'Điện tử số & Mạch xử lí tín hiệu',
+        items: [
+          'Trình bày nội dung cơ bản về tín hiệu, mạch xử lí tín hiệu (mạch tổ hợp, mạch dãy).',
+          'Vẽ kí hiệu, nêu công dụng, nhận biết cổng logic cơ bản (AND, OR, NOT, NAND, NOR, XOR, XNOR).',
+          'Lắp ráp, kiểm tra mạch điện tử số đơn giản dùng các cổng logic cơ bản.',
+        ],
+      },
+    ],
+    unsupportedPoints: [
+      'Chưa hỗ trợ: mạch dãy (flip-flop, bộ đếm).',
+    ],
+  },
 };
 
 export const CurriculumModal: React.FC<CurriculumModalProps> = ({ isOpen, onClose }) => {

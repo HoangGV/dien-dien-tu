@@ -11,6 +11,9 @@ import {
   LintWarning,
   WireType,
   CircuitViewMode,
+  FloorPlanData,
+  FloorDoor,
+  FloorWall,
 } from '../core/model';
 import { HistoryManager, DEFAULT_HISTORY_LIMIT } from '../core/history';
 import { StorageService, createDebouncedSaver, StorageStats } from '../core/storage';
@@ -29,6 +32,7 @@ import { migrateCircuitState } from '../core/migration';
 import { solveCircuit } from '../core/solver';
 import { simulationService, SimulationSnapshot } from '../core/simulationService';
 import { oscilloscopeService } from '../core/oscilloscopeService';
+import { runLogicSimulation, LogicSimulationResult } from '../core/logicSimulator';
 
 const storage = StorageService.getInstance();
 const history = new HistoryManager(DEFAULT_HISTORY_LIMIT);
@@ -39,11 +43,24 @@ const defaultViewport: ViewportState = {
   zoom: 1,
 };
 
+export const defaultFloorPlan: FloorPlanData = {
+  name: 'MẶT BẰNG PHÒNG',
+  widthM: 5,
+  lengthM: 4,
+  x: 80,
+  y: 80,
+  doors: [
+    { id: 'door1', wall: 'bottom', offset: 1.0, width: 0.9 },
+  ],
+  partitionWalls: [],
+};
+
 const initialCircuitState: CircuitState = {
   components: [],
   wires: [],
   junctions: [],
   viewport: { ...defaultViewport },
+  floorPlan: { ...defaultFloorPlan },
 };
 
 const autoSaver = createDebouncedSaver((slug, state) => {
@@ -83,6 +100,11 @@ interface WorkspaceStore {
   viewMode: CircuitViewMode;
   showFloorPlan: boolean;
   wireSummaryOpen: boolean;
+  floorPlanModalOpen: boolean;
+  wireAuditModalOpen: boolean;
+  colorWiresByLoad: boolean;
+  drawingWall: boolean;
+  selectedWallId: string | null;
 
   activeTool: ActiveTool;
   editorMode: EditorMode;
@@ -139,7 +161,24 @@ interface WorkspaceStore {
   toggleViewMode: () => void;
   toggleShowFloorPlan: () => void;
   setWireSummaryOpen: (open: boolean) => void;
+  setFloorPlanModalOpen: (open: boolean) => void;
+  setWireAuditModalOpen: (open: boolean) => void;
+  setColorWiresByLoad: (enable: boolean) => void;
+  toggleColorWiresByLoad: () => void;
+  updateFloorPlan: (patch: Partial<FloorPlanData>) => void;
+  addFloorDoor: (door: Omit<FloorDoor, 'id'>) => void;
+  removeFloorDoor: (doorId: string) => void;
+  addFloorWall: (wall: Omit<FloorWall, 'id'>) => void;
+  removeFloorWall: (wallId: string) => void;
+  setDrawingWall: (drawing: boolean) => void;
+  setSelectedWallId: (id: string | null) => void;
   moveJunction: (junctionId: string, x: number, y: number) => void;
+
+  // Digital Logic state & actions
+  logicResult: LogicSimulationResult | null;
+  truthTableModalOpen: boolean;
+  setTruthTableModalOpen: (open: boolean) => void;
+  evaluateLogic: () => void;
 
   // Component Actions
   setPlacingType: (type: string | null) => void;
@@ -219,6 +258,13 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   viewMode: 'schematic',
   showFloorPlan: true,
   wireSummaryOpen: false,
+  floorPlanModalOpen: false,
+  wireAuditModalOpen: false,
+  colorWiresByLoad: false,
+  drawingWall: false,
+  selectedWallId: null,
+  logicResult: null,
+  truthTableModalOpen: false,
 
   activeTool: 'select',
   editorMode: 'idle',
@@ -303,6 +349,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 
     get().refreshStorageStats();
     get().runLint();
+    get().evaluateLogic();
   },
 
   setCircuit: (state: CircuitState, recordHistory = true) => {
@@ -333,12 +380,13 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     if (hasOsc) {
       oscilloscopeService.autoScale(state.components);
     }
+    get().evaluateLogic();
 
     // Sửa mạch khi đang chạy: tự biên dịch lại sau 100 ms debounce, giữ trạng thái động học
     if (get().isSimulating) {
       if (recompileTimer) clearTimeout(recompileTimer);
       recompileTimer = setTimeout(() => {
-        simulationService.recompile(state, get().config.mode);
+        simulationService.recompile(state, get().config.mode === 'rms' ? 'rms' : 'dc');
       }, 100);
     }
   },
@@ -404,7 +452,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       }
 
       const { circuit, config } = get();
-      simulationService.start(circuit, config.mode);
+      simulationService.start(circuit, config.mode === 'rms' ? 'rms' : 'dc');
       const snapshot = simulationService.getSnapshot();
 
       if (snapshot?.solverResult?.openCircuit?.isOpen) {
@@ -547,6 +595,119 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     set({ wireSummaryOpen: open });
   },
 
+  setFloorPlanModalOpen: (open: boolean) => {
+    set({ floorPlanModalOpen: open });
+  },
+
+  setWireAuditModalOpen: (open: boolean) => {
+    set({ wireAuditModalOpen: open });
+  },
+
+  setColorWiresByLoad: (enable: boolean) => {
+    set({ colorWiresByLoad: enable });
+  },
+
+  toggleColorWiresByLoad: () => {
+    set((s) => ({ colorWiresByLoad: !s.colorWiresByLoad }));
+  },
+
+  updateFloorPlan: (patch: Partial<FloorPlanData>) => {
+    const { circuit, activeSlug } = get();
+    const currentFp = circuit.floorPlan || defaultFloorPlan;
+    const nextFp: FloorPlanData = {
+      ...currentFp,
+      ...patch,
+      doors: patch.doors ? patch.doors : currentFp.doors,
+      partitionWalls: patch.partitionWalls ? patch.partitionWalls : currentFp.partitionWalls,
+    };
+    const nextCircuit = {
+      ...circuit,
+      floorPlan: nextFp,
+    };
+    history.push(nextCircuit);
+    autoSaver.schedule(activeSlug, nextCircuit);
+    set({ circuit: nextCircuit, canUndo: history.canUndo(), canRedo: history.canRedo() });
+  },
+
+  addFloorDoor: (doorData: Omit<FloorDoor, 'id'>) => {
+    const { circuit, activeSlug } = get();
+    const currentFp = circuit.floorPlan || defaultFloorPlan;
+    const newDoor: FloorDoor = {
+      ...doorData,
+      id: `door_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+    };
+    const nextFp: FloorPlanData = {
+      ...currentFp,
+      doors: [...(currentFp.doors || []), newDoor],
+    };
+    const nextCircuit = { ...circuit, floorPlan: nextFp };
+    history.push(nextCircuit);
+    autoSaver.schedule(activeSlug, nextCircuit);
+    set({ circuit: nextCircuit, canUndo: history.canUndo(), canRedo: history.canRedo() });
+  },
+
+  removeFloorDoor: (doorId: string) => {
+    const { circuit, activeSlug } = get();
+    if (!circuit.floorPlan) return;
+    const nextFp: FloorPlanData = {
+      ...circuit.floorPlan,
+      doors: circuit.floorPlan.doors.filter((d) => d.id !== doorId),
+    };
+    const nextCircuit = { ...circuit, floorPlan: nextFp };
+    history.push(nextCircuit);
+    autoSaver.schedule(activeSlug, nextCircuit);
+    set({ circuit: nextCircuit, canUndo: history.canUndo(), canRedo: history.canRedo() });
+  },
+
+  addFloorWall: (wallData: Omit<FloorWall, 'id'>) => {
+    const { circuit, activeSlug } = get();
+    const currentFp = circuit.floorPlan || defaultFloorPlan;
+    const newWall: FloorWall = {
+      ...wallData,
+      id: `wall_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+    };
+    const nextFp: FloorPlanData = {
+      ...currentFp,
+      partitionWalls: [...(currentFp.partitionWalls || []), newWall],
+    };
+    const nextCircuit = { ...circuit, floorPlan: nextFp };
+    history.push(nextCircuit);
+    autoSaver.schedule(activeSlug, nextCircuit);
+    set({
+      circuit: nextCircuit,
+      selectedWallId: newWall.id,
+      drawingWall: false,
+      canUndo: history.canUndo(),
+      canRedo: history.canRedo(),
+    });
+  },
+
+  removeFloorWall: (wallId: string) => {
+    const { circuit, activeSlug } = get();
+    if (!circuit.floorPlan) return;
+    const nextFp: FloorPlanData = {
+      ...circuit.floorPlan,
+      partitionWalls: (circuit.floorPlan.partitionWalls || []).filter((w) => w.id !== wallId),
+    };
+    const nextCircuit = { ...circuit, floorPlan: nextFp };
+    history.push(nextCircuit);
+    autoSaver.schedule(activeSlug, nextCircuit);
+    set({
+      circuit: nextCircuit,
+      selectedWallId: null,
+      canUndo: history.canUndo(),
+      canRedo: history.canRedo(),
+    });
+  },
+
+  setDrawingWall: (drawing: boolean) => {
+    set({ drawingWall: drawing });
+  },
+
+  setSelectedWallId: (id: string | null) => {
+    set({ selectedWallId: id });
+  },
+
   moveJunction: (junctionId: string, x: number, y: number) => {
     const { circuit, viewMode } = get();
     const nextJunctions = circuit.junctions.map(j => {
@@ -569,6 +730,20 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     const nextState = { ...circuit, junctions: nextJunctions };
     set({ circuit: nextState });
     autoSaver.schedule(get().activeSlug, nextState);
+    get().evaluateLogic();
+  },
+
+  setTruthTableModalOpen: (open: boolean) => set({ truthTableModalOpen: open }),
+
+  evaluateLogic: () => {
+    const { circuit, config } = get();
+    if (config?.mode === 'logic' || circuit.components.some(c => c.type.startsWith('logic_'))) {
+      const res = runLogicSimulation(circuit);
+      set({ logicResult: res });
+      if (res.warning) {
+        get().setStatusMessage(res.warning);
+      }
+    }
   },
 
   // ---------------- COMPONENT OPERATIONS ----------------
@@ -595,7 +770,11 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     history.push(circuit);
 
     const count = circuit.components.filter(c => c.type === type).length + 1;
-    const label = `${def.refPrefix}${count}`;
+    let label = `${def.refPrefix}${count}`;
+    if (type === 'logic_switch') {
+      const switchCount = circuit.components.filter(c => c.type === 'logic_switch').length;
+      label = String.fromCharCode(65 + (switchCount % 26));
+    }
 
     const currentMode = get().config?.mode || 'rms';
     const initialProps = { ...(def.defaultProps || {}) };
@@ -647,6 +826,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 
     autoSaver.schedule(get().activeSlug, nextState);
     get().runLint();
+    get().evaluateLogic();
   },
 
   selectComponent: (id: string, isShift = false) => {
@@ -768,6 +948,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 
     autoSaver.schedule(get().activeSlug, nextState);
     get().runLint();
+    get().evaluateLogic();
   },
 
   rotateSelected: (deltaDeg = 90) => {
@@ -1117,6 +1298,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     if (commitHistory) {
       autoSaver.schedule(get().activeSlug, nextState);
       get().runLint();
+      get().evaluateLogic();
     }
   },
 
@@ -1179,11 +1361,12 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     // Propagate live changes to simulationService
     simulationService.updateComponentProp(compId, key, value);
     if (removedPinIds.length > 0 && (get().isSimulating || get().simulationSnapshot !== null)) {
-      simulationService.recompile(nextState, get().config.mode);
+      simulationService.recompile(nextState, get().config.mode === 'rms' ? 'rms' : 'dc');
     }
 
     autoSaver.schedule(get().activeSlug, nextState);
     get().runLint();
+    get().evaluateLogic();
   },
 
   updateComponentLabel: (compId: string, label: string) => {
@@ -1203,6 +1386,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     });
 
     autoSaver.schedule(get().activeSlug, nextState);
+    get().evaluateLogic();
   },
 
   setPEForSelected: (enabled: boolean) => {
@@ -1657,6 +1841,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 
     autoSaver.schedule(get().activeSlug, nextState);
     get().runLint();
+    get().evaluateLogic();
   },
 
   finishWiringOnExistingWire: (existingWireId: string, clickPt: Point) => {
@@ -1718,6 +1903,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 
     autoSaver.schedule(get().activeSlug, nextState);
     get().runLint();
+    get().evaluateLogic();
   },
 
   startDraggingSegment: (wireId: string, segIndex: number) => {
@@ -1908,6 +2094,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       });
       autoSaver.schedule(get().activeSlug, prev);
       get().runLint();
+      get().evaluateLogic();
     }
   },
 
@@ -1922,6 +2109,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       });
       autoSaver.schedule(get().activeSlug, next);
       get().runLint();
+      get().evaluateLogic();
     }
   },
 

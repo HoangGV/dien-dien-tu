@@ -5,8 +5,9 @@ import { COMPONENT_MAP, getComponentDef } from '../../core/registry';
 import { snapToGrid, snapPointToGrid, pinWorldPos, isPointInBox, getComponentBoundingBox } from '../../core/geometry';
 import { routeOrthogonal, normalizePolyline } from '../../core/wiring';
 import { getWireInstallPoints, getEndpointInstallPos } from '../../core/installWiring';
-import { Point, Wire, ComponentInstance, Junction, BoundingBox } from '../../core/model';
+import { Point, Wire, ComponentInstance, Junction, BoundingBox, FloorPlanData, FloorDoor, FloorWall } from '../../core/model';
 import { formatMeasure } from '../../core/measureFormat';
+import { getWireLoadColor } from '../../core/ampacity';
 
 export interface CanvasProps {
   svgRef: React.RefObject<SVGSVGElement | null>;
@@ -62,11 +63,20 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
     replaceDamagedComponent,
     setStatusMessage,
     moveJunction,
+    colorWiresByLoad,
+    drawingWall,
+    setDrawingWall,
+    selectedWallId,
+    setSelectedWallId,
+    addFloorWall,
+    config,
+    logicResult,
   } = useWorkspaceStore();
 
   const isInstallView = viewMode === 'installation';
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const [wallDraftStart, setWallDraftStart] = useState<Point | null>(null);
 
   // Live charge particles animation via rAF directly on SVG DOM
   useEffect(() => {
@@ -173,7 +183,10 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
       } else if (e.key === 'Escape') {
         e.preventDefault();
         e.stopPropagation();
-        if (editorMode === 'wiring') {
+        if (drawingWall) {
+          setDrawingWall(false);
+          setWallDraftStart(null);
+        } else if (editorMode === 'wiring') {
           cancelWiring();
         } else if (editorMode === 'placing') {
           setPlacingType(null);
@@ -195,7 +208,7 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
     };
-  }, [editorMode, toggleWiringDirection, undoWiringWaypoint, cancelWiring, setPlacingType, clearSelection]);
+  }, [editorMode, toggleWiringDirection, undoWiringWaypoint, cancelWiring, setPlacingType, clearSelection, drawingWall, setDrawingWall]);
 
   // Pointer Handlers
   const handlePointerDown = (e: React.PointerEvent) => {
@@ -210,6 +223,26 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
     if (e.button !== 0) return; // Only left click for editing
     const worldPt = screenToWorld(e.clientX, e.clientY);
     const snapPt = snapPointToGrid(worldPt);
+
+    // Wall drawing mode (Installation View) - 10cm grid snap
+    if (drawingWall) {
+      const wallSnapPt = {
+        x: Math.round(worldPt.x / 10) * 10,
+        y: Math.round(worldPt.y / 10) * 10,
+      };
+      if (!wallDraftStart) {
+        setWallDraftStart(wallSnapPt);
+      } else {
+        addFloorWall({
+          x1: wallDraftStart.x,
+          y1: wallDraftStart.y,
+          x2: wallSnapPt.x,
+          y2: wallSnapPt.y,
+        });
+        setWallDraftStart(null);
+      }
+      return;
+    }
 
     // 1. Placing Mode
     if (editorMode === 'placing' && placingType) {
@@ -447,6 +480,20 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
     const isSimActive = isSimulating || simulationSnapshot !== null;
     const comp = circuit.components.find((c) => c.id === compId);
 
+    // 0. Linh kiện logic: tương tác trực tiếp mọi lúc, không cần bấm Chạy
+    if (comp) {
+      if (comp.type === 'logic_switch') {
+        updateComponentProp(compId, 'state', !comp.props.state);
+        return;
+      }
+      if (comp.type === 'logic_push_button') {
+        updateComponentProp(compId, 'state', true);
+        activeButtonRef.current = compId;
+        (e.target as HTMLElement)?.setPointerCapture?.(e.pointerId);
+        return;
+      }
+    }
+
     // 1. Khi mô phỏng đang chạy (hoặc tạm dừng sau khi đã chạy): bấm vào kí hiệu aptomat bật/tắt trong MỌI trạng thái (kể cả sau khi NHẢY: bấm = ĐÓNG LẠI). Công tắc cũng vậy.
     if (isSimActive && comp) {
       if (comp.type === 'cb' || comp.type === 'knife_switch') {
@@ -641,6 +688,119 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
     );
   };
 
+  // Dynamic Floor Plan Data (chế độ LẮP ĐẶT)
+  const fp: FloorPlanData = circuit.floorPlan || {
+    name: 'MẶT BẰNG PHÒNG',
+    widthM: 5,
+    lengthM: 4,
+    x: 80,
+    y: 80,
+    doors: [{ id: 'door1', wall: 'bottom', offset: 1.0, width: 0.9 }],
+    partitionWalls: [],
+  };
+  const fpX = fp.x ?? 80;
+  const fpY = fp.y ?? 80;
+  const fpW = (fp.widthM ?? 5) * 100;
+  const fpH = (fp.lengthM ?? 4) * 100;
+
+  const renderWallWithDoors = (
+    wallSide: 'top' | 'bottom' | 'left' | 'right',
+    doors: FloorDoor[],
+    startX: number,
+    startY: number,
+    length: number,
+    isHorizontal: boolean
+  ) => {
+    const wallDoors = doors
+      .filter((d) => d.wall === wallSide)
+      .sort((a, b) => a.offset - b.offset);
+
+    let cur = 0;
+    const segments: { start: number; end: number }[] = [];
+
+    for (const d of wallDoors) {
+      const dStart = Math.max(0, d.offset * 100);
+      const dEnd = Math.min(length, (d.offset + d.width) * 100);
+      if (dStart > cur) {
+        segments.push({ start: cur, end: dStart });
+      }
+      cur = Math.max(cur, dEnd);
+    }
+    if (cur < length) {
+      segments.push({ start: cur, end: length });
+    }
+
+    return segments.map((seg, idx) => {
+      const x1 = isHorizontal ? startX + seg.start : startX;
+      const y1 = isHorizontal ? startY : startY + seg.start;
+      const x2 = isHorizontal ? startX + seg.end : startX;
+      const y2 = isHorizontal ? startY : startY + seg.end;
+      return <line key={`${wallSide}_seg_${idx}`} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#0F172A" strokeWidth={5} />;
+    });
+  };
+
+  const renderDoorSwing = (door: FloorDoor) => {
+    const wPx = door.width * 100;
+    if (door.wall === 'bottom') {
+      const x1 = fpX + door.offset * 100;
+      const y1 = fpY + fpH;
+      const x2 = x1 + wPx;
+      const y2 = y1 - wPx;
+      return (
+        <g key={door.id || `door_b_${door.offset}`}>
+          <path d={`M ${x1} ${y1} A ${wPx} ${wPx} 0 0 1 ${x2} ${y2}`} fill="none" stroke="#64748B" strokeWidth={1.5} strokeDasharray="4 3" />
+          <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="#0F172A" strokeWidth={3} />
+        </g>
+      );
+    }
+    if (door.wall === 'top') {
+      const x1 = fpX + door.offset * 100;
+      const y1 = fpY;
+      const x2 = x1 + wPx;
+      const y2 = y1 + wPx;
+      return (
+        <g key={door.id || `door_t_${door.offset}`}>
+          <path d={`M ${x1} ${y1} A ${wPx} ${wPx} 0 0 0 ${x2} ${y2}`} fill="none" stroke="#64748B" strokeWidth={1.5} strokeDasharray="4 3" />
+          <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="#0F172A" strokeWidth={3} />
+        </g>
+      );
+    }
+    if (door.wall === 'left') {
+      const x1 = fpX;
+      const y1 = fpY + door.offset * 100;
+      const x2 = x1 + wPx;
+      const y2 = y1 + wPx;
+      return (
+        <g key={door.id || `door_l_${door.offset}`}>
+          <path d={`M ${x1} ${y1} A ${wPx} ${wPx} 0 0 0 ${x2} ${y2}`} fill="none" stroke="#64748B" strokeWidth={1.5} strokeDasharray="4 3" />
+          <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="#0F172A" strokeWidth={3} />
+        </g>
+      );
+    }
+    if (door.wall === 'right') {
+      const x1 = fpX + fpW;
+      const y1 = fpY + door.offset * 100;
+      const x2 = x1 - wPx;
+      const y2 = y1 + wPx;
+      return (
+        <g key={door.id || `door_r_${door.offset}`}>
+          <path d={`M ${x1} ${y1} A ${wPx} ${wPx} 0 0 1 ${x2} ${y2}`} fill="none" stroke="#64748B" strokeWidth={1.5} strokeDasharray="4 3" />
+          <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="#0F172A" strokeWidth={3} />
+        </g>
+      );
+    }
+    return null;
+  };
+
+  const gridLinesX: number[] = [];
+  for (let gx = fpX + 100; gx < fpX + fpW - 10; gx += 100) {
+    gridLinesX.push(gx);
+  }
+  const gridLinesY: number[] = [];
+  for (let gy = fpY + 100; gy < fpY + fpH - 10; gy += 100) {
+    gridLinesY.push(gy);
+  }
+
   return (
     <div
       ref={containerRef}
@@ -685,71 +845,116 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
         >
           {/* -1. FLOOR PLAN BACKGROUND LAYER (chế độ LẮP ĐẶT) */}
           {isInstallView && showFloorPlan && (
-            <g id="floor-plan-layer" pointerEvents="none">
+            <g id="floor-plan-layer">
               {/* Floor surface */}
               <rect
-                x={80}
-                y={80}
-                width={500}
-                height={400}
+                x={fpX}
+                y={fpY}
+                width={fpW}
+                height={fpH}
                 fill="#F8FAFC"
                 stroke="none"
+                pointerEvents="none"
               />
               {/* 1m Grid lines inside room */}
-              {[180, 280, 380, 480].map((gx) => (
+              {gridLinesX.map((gx) => (
                 <line
                   key={`floor_vx_${gx}`}
                   x1={gx}
-                  y1={80}
+                  y1={fpY}
                   x2={gx}
-                  y2={480}
+                  y2={fpY + fpH}
                   stroke="#E2E8F0"
                   strokeWidth={1}
                   strokeDasharray="4 4"
+                  pointerEvents="none"
                 />
               ))}
-              {[180, 280, 380].map((gy) => (
+              {gridLinesY.map((gy) => (
                 <line
                   key={`floor_hy_${gy}`}
-                  x1={80}
+                  x1={fpX}
                   y1={gy}
-                  x2={580}
+                  x2={fpX + fpW}
                   y2={gy}
                   stroke="#E2E8F0"
                   strokeWidth={1}
                   strokeDasharray="4 4"
+                  pointerEvents="none"
                 />
               ))}
-              {/* Outer walls (5px black lines) */}
-              <line x1={80} y1={80} x2={580} y2={80} stroke="#0F172A" strokeWidth={5} />
-              <line x1={80} y1={80} x2={80} y2={480} stroke="#0F172A" strokeWidth={5} />
-              <line x1={580} y1={80} x2={580} y2={480} stroke="#0F172A" strokeWidth={5} />
-              {/* Bottom wall with 90cm doorway gap between x:180 and x:270 */}
-              <line x1={80} y1={480} x2={180} y2={480} stroke="#0F172A" strokeWidth={5} />
-              <line x1={270} y1={480} x2={580} y2={480} stroke="#0F172A" strokeWidth={5} />
-              {/* Door swing arc & leaf */}
-              <path
-                d="M 180 480 A 90 90 0 0 1 270 390"
-                fill="none"
-                stroke="#64748B"
-                strokeWidth={1.5}
-                strokeDasharray="4 3"
-              />
-              <line x1={180} y1={480} x2={270} y2={390} stroke="#0F172A" strokeWidth={3} />
+
+              {/* Outer walls with door openings */}
+              <g pointerEvents="none">
+                {renderWallWithDoors('top', fp.doors, fpX, fpY, fpW, true)}
+                {renderWallWithDoors('bottom', fp.doors, fpX, fpY + fpH, fpW, true)}
+                {renderWallWithDoors('left', fp.doors, fpX, fpY, fpH, false)}
+                {renderWallWithDoors('right', fp.doors, fpX + fpW, fpY, fpH, false)}
+                {/* Doors leaves and swing arcs */}
+                {fp.doors.map((d) => renderDoorSwing(d))}
+              </g>
+
+              {/* Partition walls (Tường ngăn) - interactive */}
+              <g id="partition-walls-layer">
+                {fp.partitionWalls?.map((w) => {
+                  const isSelected = selectedWallId === w.id;
+                  return (
+                    <g
+                      key={w.id}
+                      className="cursor-pointer"
+                      onPointerDown={(e) => {
+                        e.stopPropagation();
+                        setSelectedWallId(w.id);
+                      }}
+                    >
+                      <line x1={w.x1} y1={w.y1} x2={w.x2} y2={w.y2} stroke="transparent" strokeWidth={16} />
+                      {isSelected && (
+                        <line x1={w.x1} y1={w.y1} x2={w.x2} y2={w.y2} stroke="#FFD84D" strokeWidth={8} strokeLinecap="round" />
+                      )}
+                      <line
+                        x1={w.x1}
+                        y1={w.y1}
+                        x2={w.x2}
+                        y2={w.y2}
+                        stroke={isSelected ? '#2563EB' : '#0F172A'}
+                        strokeWidth={4}
+                        strokeLinecap="round"
+                      />
+                    </g>
+                  );
+                })}
+              </g>
+
+              {/* Drawing wall preview line */}
+              {drawingWall && wallDraftStart && (
+                <line
+                  x1={wallDraftStart.x}
+                  y1={wallDraftStart.y}
+                  x2={worldCursor.x}
+                  y2={worldCursor.y}
+                  stroke="#2563EB"
+                  strokeWidth={4}
+                  strokeDasharray="6 4"
+                  pointerEvents="none"
+                />
+              )}
+
               {/* Floor Plan Title */}
               <text
-                x={100}
-                y={110}
+                x={fpX + 20}
+                y={fpY + 30}
                 fill="#475569"
                 fontSize={13}
                 fontWeight={900}
                 letterSpacing="0.05em"
                 fontFamily="system-ui"
+                pointerEvents="none"
               >
-                MẶT BẰNG PHÒNG (4m × 5m)
+                {fp.name} ({fp.lengthM}m × {fp.widthM}m)
               </text>
+
               {/* 1m Scale Bar */}
-              <g transform="translate(100, 440)">
+              <g transform={`translate(${fpX + 20}, ${fpY + fpH - 25})`} pointerEvents="none">
                 <line x1={0} y1={0} x2={100} y2={0} stroke="#0F172A" strokeWidth={3} />
                 <line x1={0} y1={-5} x2={0} y2={5} stroke="#0F172A" strokeWidth={2} />
                 <line x1={100} y1={-5} x2={100} y2={5} stroke="#0F172A" strokeWidth={2} />
@@ -784,6 +989,31 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
             const isMelted = flow?.isMelted || w.isBurnt;
             const isOverheated = flow?.isOverheated;
 
+            const isLogicMode = config.mode === 'logic';
+            const logicVal = isLogicMode ? (logicResult?.wireValues?.[w.id] ?? 'X') : null;
+            let logicTooltip = '';
+            if (isLogicMode) {
+              if (logicVal === 1) logicTooltip = 'Mức 1';
+              else if (logicVal === 0) logicTooltip = 'Mức 0';
+              else if (logicVal === 'CONFLICT') logicTooltip = 'XUNG ĐỘT';
+              else logicTooltip = 'Mức X';
+            }
+
+            const wireCurrentA = Math.abs(flow?.current ?? simulationSnapshot?.solverResult?.wireCurrents?.[w.id] ?? 0);
+            const effectiveWireColor = isLogicMode
+              ? (logicVal === 1 ? '#10B981' : logicVal === 0 ? '#475569' : logicVal === 'CONFLICT' ? '#EF4444' : '#EAB308')
+              : isMelted
+              ? '#B71C1C'
+              : isOverheated
+              ? '#EA580C'
+              : colorWiresByLoad
+              ? getWireLoadColor(w, wireCurrentA)
+              : w.color;
+
+            const effectiveDashArray = isLogicMode
+              ? (logicVal === 'X' ? '6 4' : undefined)
+              : (isMelted ? '6 4' : undefined);
+
             return (
               <g
                 key={w.id}
@@ -792,6 +1022,7 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
                 onPointerLeave={() => setHoveredWire(null)}
                 className="cursor-pointer"
               >
+                {isLogicMode && <title>{logicTooltip}</title>}
                 {/* Fat invisible hit area */}
                 <polyline
                   points={pointsStr}
@@ -841,9 +1072,9 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
                 <polyline
                   points={pointsStr}
                   fill="none"
-                  stroke={isMelted ? '#B71C1C' : isOverheated ? '#EA580C' : w.color}
+                  stroke={effectiveWireColor}
                   strokeWidth={Math.max(2, w.crossSection)}
-                  strokeDasharray={isMelted ? '6 4' : undefined}
+                  strokeDasharray={effectiveDashArray}
                   strokeLinecap="square"
                   strokeLinejoin="miter"
                 />

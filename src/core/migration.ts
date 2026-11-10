@@ -184,10 +184,33 @@ export function migrateCircuitState(state: CircuitState, workspaceSlug?: string)
       : { x: j.x, y: j.y },
   }));
 
+  const migratedFloorPlan = state.floorPlan
+    ? {
+        name: state.floorPlan.name || 'MẶT BẰNG PHÒNG',
+        widthM: typeof state.floorPlan.widthM === 'number' && state.floorPlan.widthM > 0 ? state.floorPlan.widthM : 5,
+        lengthM: typeof state.floorPlan.lengthM === 'number' && state.floorPlan.lengthM > 0 ? state.floorPlan.lengthM : 4,
+        x: typeof state.floorPlan.x === 'number' ? state.floorPlan.x : 80,
+        y: typeof state.floorPlan.y === 'number' ? state.floorPlan.y : 80,
+        doors: Array.isArray(state.floorPlan.doors) ? state.floorPlan.doors : [{ id: 'door1', wall: 'bottom' as const, offset: 1.0, width: 0.9 }],
+        partitionWalls: Array.isArray(state.floorPlan.partitionWalls) ? state.floorPlan.partitionWalls : [],
+      }
+    : isHousehold
+    ? {
+        name: 'MẶT BẰNG PHÒNG',
+        widthM: 5,
+        lengthM: 4,
+        x: 80,
+        y: 80,
+        doors: [{ id: 'door1', wall: 'bottom' as const, offset: 1.0, width: 0.9 }],
+        partitionWalls: [],
+      }
+    : undefined;
+
   return {
     ...state,
     components: migratedComponents,
     wires: migratedWires,
     junctions: migratedJunctions,
+    floorPlan: migratedFloorPlan,
   };
 }

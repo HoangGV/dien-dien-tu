@@ -23,6 +23,7 @@ import {
   MoreHorizontal,
   Sliders,
   ShieldCheck,
+  ShieldAlert,
   CheckCircle2,
   RotateCcw,
   Activity,
@@ -41,6 +42,9 @@ import { DiagnosticsModal } from '../modals/DiagnosticsModal';
 import { CurriculumModal } from '../modals/CurriculumModal';
 import { AboutModal } from '../modals/AboutModal';
 import { WireSummaryModal } from '../modals/WireSummaryModal';
+import { FloorPlanModal } from '../modals/FloorPlanModal';
+import { WireAuditModal } from '../modals/WireAuditModal';
+import { TruthTableModal } from '../modals/TruthTableModal';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
 
 export interface TopBarProps {
@@ -86,6 +90,11 @@ export const TopBar: React.FC<TopBarProps> = ({ svgRef }) => {
     toggleShowFloorPlan,
     wireSummaryOpen,
     setWireSummaryOpen,
+    setFloorPlanModalOpen,
+    setWireAuditModalOpen,
+    colorWiresByLoad,
+    toggleColorWiresByLoad,
+    setTruthTableModalOpen,
   } = useWorkspaceStore();
 
   const { isInstallable, install } = usePWAInstall();
@@ -247,11 +256,40 @@ export const TopBar: React.FC<TopBarProps> = ({ svgRef }) => {
       active: oscilloscopePanelOpen,
       onClick: () => toggleOscilloscopePanel(),
     },
+    {
+      id: 'wire_audit',
+      label: 'Kiểm tra dây và bảo vệ...',
+      icon: <ShieldAlert size={14} />,
+      onClick: () => setWireAuditModalOpen(true),
+    },
+    {
+      id: 'color_wires_by_load',
+      label: colorWiresByLoad ? 'Tô màu dây theo tải: ĐANG BẬT' : 'Tô màu dây theo tải: ĐANG TẮT',
+      icon: <Sparkles size={14} />,
+      active: colorWiresByLoad,
+      onClick: toggleColorWiresByLoad,
+    },
+    ...(config.mode === 'logic'
+      ? [
+          {
+            id: 'truth_table',
+            label: 'Bảng chân trị (Truth Table)...',
+            icon: <Cpu size={14} />,
+            onClick: () => setTruthTableModalOpen(true),
+          },
+        ]
+      : []),
     ...(config.installView
       ? [
           {
+            id: 'floor_plan_config',
+            label: 'Mặt bằng phòng...',
+            icon: <Home size={14} />,
+            onClick: () => setFloorPlanModalOpen(true),
+          },
+          {
             id: 'toggle_floor_plan',
-            label: showFloorPlan ? 'Ẩn mặt bằng (Phòng 4×5m)' : 'Hiện mặt bằng (Phòng 4×5m)',
+            label: showFloorPlan ? 'Ẩn mặt bằng phòng' : 'Hiện mặt bằng phòng',
             icon: <Grid size={14} />,
             active: showFloorPlan,
             onClick: toggleShowFloorPlan,
@@ -348,6 +386,16 @@ export const TopBar: React.FC<TopBarProps> = ({ svgRef }) => {
 
   // Overflow dropdown items for lower priority menus on narrower screens
   const overflowItems: DropdownItem[] = [
+    ...(isCompact && config.mode === 'logic'
+      ? [
+          {
+            id: 'overflow_truth_table',
+            label: 'Bảng chân trị (Truth Table)...',
+            icon: <Cpu size={14} />,
+            onClick: () => setTruthTableModalOpen(true),
+          },
+        ]
+      : []),
     ...(isCompact && config.installView
       ? [
           {
@@ -385,30 +433,46 @@ export const TopBar: React.FC<TopBarProps> = ({ svgRef }) => {
 
           <span className="h-4 w-[2px] bg-black mx-0.5" />
 
-          {/* PLAY */}
-          <NeoButton
-            variant={isSimulating ? 'success' : 'primary'}
-            onClick={toggleSimulating}
-            icon={<Play size={13} strokeWidth={3} />}
-            className={`!h-[26px] !px-2 ${
-              isSimulating ? '!bg-[#2DB84D] !text-white' : ''
-            }`}
-            title="Mô phỏng dòng điện và linh kiện (Giải thuật MNA)"
-          >
-            {isSimulating ? 'ĐANG CHẠY' : 'CHẠY'}
-          </NeoButton>
+          {config.mode === 'logic' ? (
+            !isCompact && (
+              <NeoButton
+                variant="primary"
+                onClick={() => setTruthTableModalOpen(true)}
+                icon={<Cpu size={13} strokeWidth={3} />}
+                className="!h-[26px] !px-2 font-black text-[11px]"
+                title="Bảng chân trị tự sinh cho mạch tổ hợp"
+              >
+                BẢNG CHÂN TRỊ
+              </NeoButton>
+            )
+          ) : (
+            <>
+              {/* PLAY */}
+              <NeoButton
+                variant={isSimulating ? 'success' : 'primary'}
+                onClick={toggleSimulating}
+                icon={<Play size={13} strokeWidth={3} />}
+                className={`!h-[26px] !px-2 ${
+                  isSimulating ? '!bg-[#2DB84D] !text-white' : ''
+                }`}
+                title="Mô phỏng dòng điện và linh kiện (Giải thuật MNA)"
+              >
+                {isSimulating ? 'ĐANG CHẠY' : 'CHẠY'}
+              </NeoButton>
 
-          {/* STOP */}
-          <NeoButton
-            variant="danger"
-            onClick={stopSimulating}
-            disabled={!isSimulating}
-            icon={<Square size={13} strokeWidth={3} />}
-            className="!h-[26px] !px-1.5"
-            title="Dừng mô phỏng"
-          >
-            DỪNG
-          </NeoButton>
+              {/* STOP */}
+              <NeoButton
+                variant="danger"
+                onClick={stopSimulating}
+                disabled={!isSimulating}
+                icon={<Square size={13} strokeWidth={3} />}
+                className="!h-[26px] !px-1.5"
+                title="Dừng mô phỏng"
+              >
+                DỪNG
+              </NeoButton>
+            </>
+          )}
 
           {/* UNDO */}
           <NeoButton
@@ -464,6 +528,15 @@ export const TopBar: React.FC<TopBarProps> = ({ svgRef }) => {
                   LẮP ĐẶT
                 </button>
               </div>
+              <NeoButton
+                variant="secondary"
+                onClick={() => setFloorPlanModalOpen(true)}
+                icon={<Home size={11} strokeWidth={2.5} />}
+                className="!h-[24px] !px-1.5 font-black text-[11px]"
+                title="Cấu hình mặt bằng phòng (Kích thước, cửa, tường)"
+              >
+                MẶT BẰNG
+              </NeoButton>
             </>
           )}
         </div>
@@ -475,7 +548,7 @@ export const TopBar: React.FC<TopBarProps> = ({ svgRef }) => {
               {config.title}
             </span>
             <span className="bg-[#FFD84D] text-black text-[9px] font-black px-1 py-0.5 border border-black shrink-0">
-              {config.mode === 'rms' ? '220 V RMS' : 'DC'}
+              {config.mode === 'rms' ? '220 V RMS' : config.mode === 'logic' ? 'LOGIC 0/1' : 'DC'}
             </span>
           </div>
         )}
@@ -540,6 +613,9 @@ export const TopBar: React.FC<TopBarProps> = ({ svgRef }) => {
         isOpen={wireSummaryOpen}
         onClose={() => setWireSummaryOpen(false)}
       />
+      <FloorPlanModal />
+      <WireAuditModal />
+      <TruthTableModal />
     </>
   );
 };
