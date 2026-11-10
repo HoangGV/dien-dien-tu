@@ -4,8 +4,10 @@ import { fileURLToPath, URL } from 'node:url';
 import {defineConfig} from 'vite';
 import {VitePWA} from 'vite-plugin-pwa';
 
-export default defineConfig(() => {
-  const base = process.env.VITE_BASE || '/';
+export default defineConfig(({ command }) => {
+  // If VITE_BASE is specified, use it. Otherwise, default to './' for production build
+  // (so assets resolve relatively regardless of custom domain or subdirectory path), and '/' in dev.
+  const base = process.env.VITE_BASE || (command === 'build' ? './' : '/');
   return {
     base,
     plugins: [
@@ -15,7 +17,7 @@ export default defineConfig(() => {
         registerType: 'prompt',
         includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'icon.svg'],
         manifest: {
-          id: base,
+          id: './',
           name: 'Mạch điện – Điện tử',
           short_name: 'Mạch điện',
           description: 'Mô phỏng thí nghiệm mạch điện và điện tử THCS & THPT môn Công nghệ',
@@ -23,8 +25,8 @@ export default defineConfig(() => {
           theme_color: '#4169E1',
           background_color: '#4169E1',
           display: 'standalone',
-          start_url: base,
-          scope: base,
+          start_url: './',
+          scope: './',
           icons: [
             {
               src: 'pwa-192x192.png',
