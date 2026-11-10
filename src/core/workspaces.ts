@@ -171,7 +171,7 @@ export const WORKSPACE_DIGITAL_LOGIC: WorkspaceConfig = {
   slug: 'dien-tu-so',
   title: 'Điện tử số',
   grades: 'Lớp 12',
-  description: 'Mô phỏng mạch điện tử số (logic): cổng logic cơ bản (AND, OR, NOT, NAND, NOR, XOR, XNOR), công tắc logic 0/1, nút nhấn, mức 1, mức 0, LED logic, tự sinh bảng chân trị 2^n trạng thái.',
+  description: 'Mô phỏng mạch điện tử số: cổng logic cơ bản (AND, OR, NOT, NAND, NOR, XOR, XNOR), mạch dãy (Flip-flop D/JK/T, bộ đếm, thanh ghi dịch), máy phát xung, LED 7 đoạn, tự sinh bảng chân trị.',
   mode: 'logic',
   paletteIds: [
     'logic_switch',
@@ -179,20 +179,24 @@ export const WORKSPACE_DIGITAL_LOGIC: WorkspaceConfig = {
     'logic_high',
     'logic_low',
     'logic_gate',
+    'logic_flip_flop',
+    'logic_clock',
+    'logic_7segment',
     'logic_led',
     'boundary',
     'textbox',
   ],
   presets: DIGITAL_LOGIC_PRESETS,
-  helpText: `HƯỚNG DẪN ĐIỆN TỬ SỐ & MẠCH TỔ HỢP (LỚP 12):
-• Cổng logic cơ bản:
-  - AND: Ngõ ra bằng 1 khi TẤT CẢ các ngõ vào bằng 1.
-  - OR: Ngõ ra bằng 1 khi CÓ ÍT NHẤT MỘT ngõ vào bằng 1.
-  - NOT: Đảo mức logic (0 thành 1, 1 thành 0).
-  - NAND / NOR: Phủ định ngõ ra của AND / OR (có vòng tròn đảo ở ngõ ra).
-  - XOR: Ngõ ra bằng 1 khi hai ngõ vào khác mức nhau.
-  - XNOR: Ngõ ra bằng 1 khi hai ngõ vào cùng mức nhau.
-• Bảng chân trị tự sinh: Bấm nút [BẢNG CHÂN TRỊ] trên thanh trên để khảo sát toàn bộ 2^n tổ hợp và biểu thức logic.`,
+  helpText: `HƯỚNG DẪN ĐIỆN TỬ SỐ & MẠCH TỔ HỢP - MẠCH DÃY (LỚP 12):
+• Cổng logic cơ bản: AND, OR, NOT, NAND, NOR, XOR, XNOR.
+• Mạch dãy & Flip-Flop:
+  - D: Chốt dữ liệu ngõ vào D tại cạnh kích.
+  - T: Đảo trạng thái Q khi T = 1 tại cạnh kích (chia đôi tần số).
+  - JK: Đa năng (00 giữ, 01 về 0, 10 lên 1, 11 đảo).
+  - Chân CLR: Mức 0 xóa Q về 0 tức thời.
+• Máy phát xung: Tần số 0,5–10 Hz (bật Chạy để phát xung).
+• LED 7 đoạn BCD: Hiển thị 0–9 từ 4 ngõ vào D0..D3.
+• Bảng chân trị tự sinh: Bấm nút [BẢNG CHÂN TRỊ] trên thanh trên.`,
 };
 
 export const WORKSPACE_REGISTRY: WorkspaceConfig[] = [

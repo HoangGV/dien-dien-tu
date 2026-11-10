@@ -28,6 +28,11 @@ import {
   createPresetLogicD1,
   createPresetLogicD2,
   createPresetLogicD3,
+  createPresetLogicE1,
+  createPresetLogicE2,
+  createPresetLogicE3,
+  createPresetLogicE4,
+  createPresetLogicE5,
   HOUSEHOLD_PRESETS,
   ELECTRONICS_PRESETS,
   SENSOR_PRESETS,
@@ -2593,6 +2598,264 @@ export const ALL_SOLVER_TEST_CASES: SolverTestCase[] = [
 
       return {
         actualStr: `Dao động nối vòng: ${loopHandled ? 'Cảnh báo đạt (' + Math.round(elapsed) + ' ms)' : 'Không đạt'} — Ngõ vào hở: ${floatPassed ? 'Mức X' : floatVal} — Nguồn 0 & 1 chung net: ${conflictPassed ? 'XUNG ĐỘT' : confWireVal}`,
+        passed,
+      };
+    },
+  }),
+  defineTestCase({
+    id: 'case70_flipflop_characteristics_d_t_jk_clr_edge',
+    stt: 70,
+    group: 'Mạch mẫu',
+    name: 'Ca 70: Bảng đặc tính flip-flop D, T, JK (4 tổ hợp J,K) ở cạnh lên; CLR = 0 đặt Q = 0 không cần xung; cạnh xuống không đổi Q ở loại cạnh lên',
+    expectedStr: 'D, T, JK (4 tổ hợp) đúng bảng đặc tính tại cạnh lên; CLR=0 đặt Q=0 tức thời; cạnh xuống không đổi Q',
+    toleranceStr: 'Chính xác 100%',
+    createCircuit: () => createPresetLogicE1(),
+    evaluate: () => {
+      // 1. D flip-flop rising edge
+      const swD: ComponentInstance = { id: 'sw_d', type: 'logic_switch', x: 80, y: 120, rot: 0, flip: false, label: 'D', props: { state: false } };
+      const swClk: ComponentInstance = { id: 'sw_clk', type: 'logic_switch', x: 80, y: 220, rot: 0, flip: false, label: 'CLK', props: { state: false } };
+      const ffD: ComponentInstance = { id: 'ff_d', type: 'logic_flip_flop', x: 260, y: 160, rot: 0, flip: false, label: 'FF-D', props: { kind: 'D', triggerEdge: 'rising', initialState: 0 } };
+      const wD = makeWire('w_d', 'sw_d', 'Q', 'ff_d', 'D', []);
+      const wClk = makeWire('w_clk', 'sw_clk', 'Q', 'ff_d', 'CLK', []);
+      const circD: CircuitState = { components: [swD, swClk, ffD], wires: [wD, wClk], junctions: [], viewport: { x: 0, y: 0, zoom: 1 } };
+
+      runLogicSimulation(circD);
+      let dOk = true;
+
+      // Pulse 1: D=1, rising edge -> Q=1
+      swD.props.state = true;
+      runLogicSimulation(circD);
+      swClk.props.state = true;
+      runLogicSimulation(circD);
+      if (circD.components[2].props.qState !== 1) dOk = false;
+
+      // Falling edge: CLK 1->0 with D=0 -> Q remains 1
+      swD.props.state = false;
+      swClk.props.state = false;
+      runLogicSimulation(circD);
+      if (circD.components[2].props.qState !== 1) dOk = false;
+
+      // Pulse 2: rising edge with D=0 -> Q=0
+      swClk.props.state = true;
+      runLogicSimulation(circD);
+      if (circD.components[2].props.qState !== 0) dOk = false;
+
+      // 2. T flip-flop rising edge
+      const swT: ComponentInstance = { id: 'sw_t', type: 'logic_switch', x: 80, y: 120, rot: 0, flip: false, label: 'T', props: { state: true } };
+      const swClk2: ComponentInstance = { id: 'sw_clk2', type: 'logic_switch', x: 80, y: 220, rot: 0, flip: false, label: 'CLK', props: { state: false } };
+      const ffT: ComponentInstance = { id: 'ff_t', type: 'logic_flip_flop', x: 260, y: 160, rot: 0, flip: false, label: 'FF-T', props: { kind: 'T', triggerEdge: 'rising', initialState: 0 } };
+      const wT = makeWire('w_t', 'sw_t', 'Q', 'ff_t', 'T', []);
+      const wClk2 = makeWire('w_clk2', 'sw_clk2', 'Q', 'ff_t', 'CLK', []);
+      const circT: CircuitState = { components: [swT, swClk2, ffT], wires: [wT, wClk2], junctions: [], viewport: { x: 0, y: 0, zoom: 1 } };
+
+      runLogicSimulation(circT);
+      let tOk = true;
+      // Pulse 1 with T=1: Q toggles 0 -> 1
+      swClk2.props.state = true;
+      runLogicSimulation(circT);
+      if (circT.components[2].props.qState !== 1) tOk = false;
+
+      // Return CLK to 0
+      swClk2.props.state = false;
+      runLogicSimulation(circT);
+
+      // Pulse 2 with T=1: Q toggles 1 -> 0
+      swClk2.props.state = true;
+      runLogicSimulation(circT);
+      if (circT.components[2].props.qState !== 0) tOk = false;
+
+      // With T=0: Q does not toggle on rising edge
+      swT.props.state = false;
+      swClk2.props.state = false;
+      runLogicSimulation(circT);
+      swClk2.props.state = true;
+      runLogicSimulation(circT);
+      if (circT.components[2].props.qState !== 0) tOk = false;
+
+      // 3. JK flip-flop rising edge (4 combinations)
+      const swJ: ComponentInstance = { id: 'sw_j', type: 'logic_switch', x: 80, y: 100, rot: 0, flip: false, label: 'J', props: { state: false } };
+      const swK: ComponentInstance = { id: 'sw_k', type: 'logic_switch', x: 80, y: 200, rot: 0, flip: false, label: 'K', props: { state: false } };
+      const swClk3: ComponentInstance = { id: 'sw_clk3', type: 'logic_switch', x: 80, y: 300, rot: 0, flip: false, label: 'CLK', props: { state: false } };
+      const ffJK: ComponentInstance = { id: 'ff_jk', type: 'logic_flip_flop', x: 260, y: 200, rot: 0, flip: false, label: 'FF-JK', props: { kind: 'JK', triggerEdge: 'rising', initialState: 0 } };
+      const wJ = makeWire('w_j', 'sw_j', 'Q', 'ff_jk', 'J', []);
+      const wK = makeWire('w_k', 'sw_k', 'Q', 'ff_jk', 'K', []);
+      const wClk3 = makeWire('w_clk3', 'sw_clk3', 'Q', 'ff_jk', 'CLK', []);
+      const circJK: CircuitState = { components: [swJ, swK, swClk3, ffJK], wires: [wJ, wK, wClk3], junctions: [], viewport: { x: 0, y: 0, zoom: 1 } };
+
+      runLogicSimulation(circJK);
+      let jkOk = true;
+
+      const pulseJK = (j: boolean, k: boolean) => {
+        swJ.props.state = j;
+        swK.props.state = k;
+        swClk3.props.state = false;
+        runLogicSimulation(circJK);
+        swClk3.props.state = true;
+        runLogicSimulation(circJK);
+        return circJK.components[3].props.qState;
+      };
+
+      if (pulseJK(false, true) !== 0) jkOk = false;
+      if (pulseJK(false, false) !== 0) jkOk = false;
+      if (pulseJK(true, false) !== 1) jkOk = false;
+      if (pulseJK(false, false) !== 1) jkOk = false;
+      if (pulseJK(true, true) !== 0) jkOk = false;
+      if (pulseJK(true, true) !== 1) jkOk = false;
+
+      // 4. CLR = 0 forces Q = 0 without clock
+      const swClr: ComponentInstance = { id: 'sw_clr', type: 'logic_switch', x: 80, y: 100, rot: 0, flip: false, label: 'CLR', props: { state: true } };
+      const ffClr: ComponentInstance = { id: 'ff_clr', type: 'logic_flip_flop', x: 260, y: 160, rot: 0, flip: false, label: 'FF', props: { kind: 'D', triggerEdge: 'rising', hasClr: true, initialState: 1, qState: 1 } };
+      const wClr = makeWire('w_clr', 'sw_clr', 'Q', 'ff_clr', 'CLR', []);
+      const circClr: CircuitState = { components: [swClr, ffClr], wires: [wClr], junctions: [], viewport: { x: 0, y: 0, zoom: 1 } };
+
+      runLogicSimulation(circClr);
+      let clrOk = circClr.components[1].props.qState === 1;
+      swClr.props.state = false;
+      runLogicSimulation(circClr);
+      if (circClr.components[1].props.qState !== 0) clrOk = false;
+
+      const passed = dOk && tOk && jkOk && clrOk;
+      return {
+        actualStr: `D: ${dOk ? 'ĐÚNG' : 'SAI'}, T: ${tOk ? 'ĐÚNG' : 'SAI'}, JK (4 tổ hợp): ${jkOk ? 'ĐÚNG' : 'SAI'}, CLR tức thời: ${clrOk ? 'ĐÚNG' : 'SAI'}`,
+        passed,
+      };
+    },
+  }),
+  defineTestCase({
+    id: 'case71_cross_coupled_d_flipflops_no_race',
+    stt: 71,
+    group: 'Mạch mẫu',
+    name: 'Ca 71: Hai flip-flop D mắc chéo (D1 = Q2, D2 = Q1), chung CLK, ban đầu Q1 = 1, Q2 = 0: sau 1 xung hoán đổi Q1 = 0, Q2 = 1 (không chạy đua)',
+    expectedStr: 'Sau 1 xung CLK, Q1 và Q2 hoán đổi thành Q1=0, Q2=1 đồng thời không chạy đua',
+    toleranceStr: 'Chính xác 100%',
+    createCircuit: () => {
+      const swClk: ComponentInstance = { id: 'sw_clk', type: 'logic_switch', x: 80, y: 180, rot: 0, flip: false, label: 'CLK', props: { state: false } };
+      const ff1: ComponentInstance = { id: 'ff1', type: 'logic_flip_flop', x: 240, y: 120, rot: 0, flip: false, label: 'FF1', props: { kind: 'D', triggerEdge: 'rising', initialState: 1, qState: 1 } };
+      const ff2: ComponentInstance = { id: 'ff2', type: 'logic_flip_flop', x: 240, y: 260, rot: 0, flip: false, label: 'FF2', props: { kind: 'D', triggerEdge: 'rising', initialState: 0, qState: 0 } };
+
+      const wClk1 = makeWire('w_clk1', 'sw_clk', 'Q', 'ff1', 'CLK', []);
+      const wClk2 = makeWire('w_clk2', 'sw_clk', 'Q', 'ff2', 'CLK', []);
+      const wCross1 = makeWire('w_c1', 'ff2', 'Q', 'ff1', 'D', []);
+      const wCross2 = makeWire('w_c2', 'ff1', 'Q', 'ff2', 'D', []);
+
+      return { components: [swClk, ff1, ff2], wires: [wClk1, wClk2, wCross1, wCross2], junctions: [], viewport: { x: 0, y: 0, zoom: 1 } };
+    },
+    evaluate: () => {
+      const swClk: ComponentInstance = { id: 'sw_clk', type: 'logic_switch', x: 80, y: 180, rot: 0, flip: false, label: 'CLK', props: { state: false } };
+      const ff1: ComponentInstance = { id: 'ff1', type: 'logic_flip_flop', x: 240, y: 120, rot: 0, flip: false, label: 'FF1', props: { kind: 'D', triggerEdge: 'rising', initialState: 1, qState: 1 } };
+      const ff2: ComponentInstance = { id: 'ff2', type: 'logic_flip_flop', x: 240, y: 260, rot: 0, flip: false, label: 'FF2', props: { kind: 'D', triggerEdge: 'rising', initialState: 0, qState: 0 } };
+
+      const wClk1 = makeWire('w_clk1', 'sw_clk', 'Q', 'ff1', 'CLK', []);
+      const wClk2 = makeWire('w_clk2', 'sw_clk', 'Q', 'ff2', 'CLK', []);
+      const wCross1 = makeWire('w_c1', 'ff2', 'Q', 'ff1', 'D', []);
+      const wCross2 = makeWire('w_c2', 'ff1', 'Q', 'ff2', 'D', []);
+
+      const circ: CircuitState = { components: [swClk, ff1, ff2], wires: [wClk1, wClk2, wCross1, wCross2], junctions: [], viewport: { x: 0, y: 0, zoom: 1 } };
+
+      runLogicSimulation(circ);
+      const initQ1 = circ.components[1].props.qState;
+      const initQ2 = circ.components[2].props.qState;
+
+      // Pulse 1: rising edge
+      swClk.props.state = true;
+      runLogicSimulation(circ);
+      const pulse1Q1 = circ.components[1].props.qState;
+      const pulse1Q2 = circ.components[2].props.qState;
+
+      // Falling edge
+      swClk.props.state = false;
+      runLogicSimulation(circ);
+
+      // Pulse 2: rising edge
+      swClk.props.state = true;
+      runLogicSimulation(circ);
+      const pulse2Q1 = circ.components[1].props.qState;
+      const pulse2Q2 = circ.components[2].props.qState;
+
+      const passed =
+        initQ1 === 1 && initQ2 === 0 &&
+        pulse1Q1 === 0 && pulse1Q2 === 1 &&
+        pulse2Q1 === 1 && pulse2Q2 === 0;
+
+      return {
+        actualStr: `Ban đầu: Q1=${initQ1}, Q2=${initQ2} → Sau xung 1: Q1=${pulse1Q1}, Q2=${pulse1Q2} → Sau xung 2: Q1=${pulse2Q1}, Q2=${pulse2Q2}`,
+        passed,
+      };
+    },
+  }),
+  defineTestCase({
+    id: 'case72_ripple_counter_4bit_sequence',
+    stt: 72,
+    group: 'Mạch mẫu',
+    name: 'Ca 72: Bộ đếm E3: sau 16 xung vào tầng đầu, chuỗi Q3Q2Q1Q0 là 0000 → 0001 → ... → 1111 → 0000',
+    expectedStr: 'Chuỗi đếm nhị phân 4 bit chính xác từ 0000 đến 1111 và tràn về 0000 sau 16 xung',
+    toleranceStr: 'Chính xác 100%',
+    createCircuit: () => createPresetLogicE3(),
+    evaluate: () => {
+      const circ = createPresetLogicE3();
+      const clkComp = circ.components.find(c => c.id === 'clk1')!;
+      clkComp.props.state = false;
+
+      runLogicSimulation(circ);
+
+      const sequence: number[] = [];
+      const getVal = () => {
+        const q0 = circ.components.find(c => c.id === 'ff0')?.props.qState ?? 0;
+        const q1 = circ.components.find(c => c.id === 'ff1')?.props.qState ?? 0;
+        const q2 = circ.components.find(c => c.id === 'ff2')?.props.qState ?? 0;
+        const q3 = circ.components.find(c => c.id === 'ff3')?.props.qState ?? 0;
+        return (q3 << 3) | (q2 << 2) | (q1 << 1) | q0;
+      };
+
+      sequence.push(getVal());
+
+      for (let i = 1; i <= 16; i++) {
+        clkComp.props.state = true;
+        runLogicSimulation(circ);
+        clkComp.props.state = false;
+        runLogicSimulation(circ);
+        sequence.push(getVal());
+      }
+
+      const expected = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0];
+      const passed = sequence.length === expected.length && sequence.every((v, idx) => v === expected[idx]);
+
+      return {
+        actualStr: `Chuỗi 16 xung: ${sequence.map(v => v.toString(2).padStart(4, '0')).slice(0, 5).join(' → ')} ... → ${sequence[15].toString(2).padStart(4, '0')} → ${sequence[16].toString(2).padStart(4, '0')}`,
+        passed,
+      };
+    },
+  }),
+  defineTestCase({
+    id: 'case73_bcd_counter_7segment_sequence',
+    stt: 73,
+    group: 'Mạch mẫu',
+    name: 'Ca 73: Bộ đếm E4: chuỗi chữ số trên LED 7 đoạn sau mỗi xung là 1, 2, ..., 9, 0, 1',
+    expectedStr: 'Chuỗi chữ số trên LED 7 đoạn sau mỗi xung là 1, 2, ..., 9, 0, 1',
+    toleranceStr: 'Chính xác 100%',
+    createCircuit: () => createPresetLogicE4(),
+    evaluate: () => {
+      const circ = createPresetLogicE4();
+      const clkComp = circ.components.find(c => c.id === 'clk1')!;
+      clkComp.props.state = false;
+
+      let res = runLogicSimulation(circ);
+      const digits: string[] = [];
+
+      for (let i = 1; i <= 11; i++) {
+        clkComp.props.state = true;
+        runLogicSimulation(circ);
+        clkComp.props.state = false;
+        res = runLogicSimulation(circ);
+        const d = res.componentStates['disp7']?.digit ?? '?';
+        digits.push(d);
+      }
+
+      const expected = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '1'];
+      const passed = digits.length === expected.length && digits.every((v, idx) => v === expected[idx]);
+
+      return {
+        actualStr: `Chuỗi chữ số: ${digits.join(' → ')}`,
         passed,
       };
     },

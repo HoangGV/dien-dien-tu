@@ -433,19 +433,19 @@ export const TopBar: React.FC<TopBarProps> = ({ svgRef }) => {
 
           <span className="h-4 w-[2px] bg-black mx-0.5" />
 
-          {config.mode === 'logic' ? (
-            !isCompact && (
-              <NeoButton
-                variant="primary"
-                onClick={() => setTruthTableModalOpen(true)}
-                icon={<Cpu size={13} strokeWidth={3} />}
-                className="!h-[26px] !px-2 font-black text-[11px]"
-                title="Bảng chân trị tự sinh cho mạch tổ hợp"
-              >
-                BẢNG CHÂN TRỊ
-              </NeoButton>
-            )
-          ) : (
+          {config.mode === 'logic' && !isCompact && (
+            <NeoButton
+              variant="primary"
+              onClick={() => setTruthTableModalOpen(true)}
+              icon={<Cpu size={13} strokeWidth={3} />}
+              className="!h-[26px] !px-2 font-black text-[11px]"
+              title="Bảng chân trị tự sinh cho mạch tổ hợp"
+            >
+              BẢNG CHÂN TRỊ
+            </NeoButton>
+          )}
+
+          {(config.mode !== 'logic' || circuit.components.some(c => c.type === 'logic_clock')) && (
             <>
               {/* PLAY */}
               <NeoButton
@@ -455,7 +455,7 @@ export const TopBar: React.FC<TopBarProps> = ({ svgRef }) => {
                 className={`!h-[26px] !px-2 ${
                   isSimulating ? '!bg-[#2DB84D] !text-white' : ''
                 }`}
-                title="Mô phỏng dòng điện và linh kiện (Giải thuật MNA)"
+                title={config.mode === 'logic' ? 'Chạy phát xung nhịp tự động' : 'Mô phỏng dòng điện và linh kiện (Giải thuật MNA)'}
               >
                 {isSimulating ? 'ĐANG CHẠY' : 'CHẠY'}
               </NeoButton>

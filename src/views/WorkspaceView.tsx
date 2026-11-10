@@ -18,6 +18,7 @@ export interface WorkspaceViewProps {
 export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ slug }) => {
   const {
     circuit,
+    config,
     loadWorkspace,
     lintWarnings,
     statusMessage,
@@ -286,12 +287,12 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ slug }) => {
             </div>
           )}
 
-          {/* Speed Buttons [x0.01] [x0.1] [x1] [x10] & Tua nhanh kWh [x1] [x60] [x600] [x3600] */}
-          {isSimulating && (
-            <div className="flex items-center gap-1.5">
-              <div className="flex items-center border border-black bg-white overflow-hidden text-[9px] font-black">
-                {[0.01, 0.1, 1.0, 10.0].map((spd) => {
-                  const label = spd === 0.01 ? '×0,01' : spd === 0.1 ? '×0,1' : spd === 1.0 ? '×1' : '×10';
+          {/* Speed Buttons for Logic Clock or Analog Simulation */}
+          {config.mode === 'logic' ? (
+            circuit.components.some(c => c.type === 'logic_clock') && (
+              <div className="flex items-center border border-black bg-white overflow-hidden text-[9px] font-black shadow-[1px_1px_0_#000]">
+                {[0.5, 1.0, 2.0].map((spd) => {
+                  const label = spd === 0.5 ? '×0,5' : spd === 1.0 ? '×1' : '×2';
                   const isActive = Math.abs(timeSpeed - spd) < 0.005;
                   return (
                     <button
@@ -300,46 +301,69 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ slug }) => {
                       className={`px-1.5 py-0.5 border-r last:border-r-0 border-black transition-colors ${
                         isActive ? 'bg-[#FFD84D] text-black font-extrabold' : 'bg-white hover:bg-gray-100 text-gray-700'
                       }`}
-                      title={`Tốc độ mô phỏng ${label}`}
+                      title={`Tốc độ xung nhịp ${label}`}
                     >
                       {label}
                     </button>
                   );
                 })}
               </div>
-
-              {isHeavy && (
-                <div className="hidden lg:flex items-center gap-1 bg-[#FEF3C7] text-[#92400E] border border-black px-1.5 py-0.5 text-[9px] font-bold shadow-[1px_1px_0_#000]">
-                  <AlertTriangle size={10} strokeWidth={2.5} />
-                  <span>Mạch nặng: tốc độ thực tế thấp hơn tốc độ đã chọn</span>
+            )
+          ) : (
+            isSimulating && (
+              <div className="flex items-center gap-1.5">
+                <div className="flex items-center border border-black bg-white overflow-hidden text-[9px] font-black">
+                  {[0.01, 0.1, 1.0, 10.0].map((spd) => {
+                    const label = spd === 0.01 ? '×0,01' : spd === 0.1 ? '×0,1' : spd === 1.0 ? '×1' : '×10';
+                    const isActive = Math.abs(timeSpeed - spd) < 0.005;
+                    return (
+                      <button
+                        key={spd}
+                        onClick={() => setTimeSpeed(spd)}
+                        className={`px-1.5 py-0.5 border-r last:border-r-0 border-black transition-colors ${
+                          isActive ? 'bg-[#FFD84D] text-black font-extrabold' : 'bg-white hover:bg-gray-100 text-gray-700'
+                        }`}
+                        title={`Tốc độ mô phỏng ${label}`}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
                 </div>
-              )}
 
-              <div className="flex items-center border border-black bg-white overflow-hidden text-[9px] font-black">
-                <span className="px-1 py-0.5 bg-[#EEF2FF] border-r border-black text-gray-600 font-bold">
-                  TUA:
-                </span>
-                {[1, 60, 600, 3600].map((spd) => {
-                  const label = `×${spd}`;
-                  const isActive = energyMult === spd;
-                  return (
-                    <button
-                      key={spd}
-                      onClick={() => {
-                        setEnergyMult(spd);
-                        simulationService.setEnergyMultiplier(spd);
-                      }}
-                      className={`px-1.5 py-0.5 border-r last:border-r-0 border-black transition-colors ${
-                        isActive ? 'bg-[#FFD84D] text-black font-extrabold' : 'bg-white hover:bg-gray-100 text-gray-700'
-                      }`}
-                      title={`Tua nhanh điện năng công tơ ${label}`}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
+                {isHeavy && (
+                  <div className="hidden lg:flex items-center gap-1 bg-[#FEF3C7] text-[#92400E] border border-black px-1.5 py-0.5 text-[9px] font-bold shadow-[1px_1px_0_#000]">
+                    <AlertTriangle size={10} strokeWidth={2.5} />
+                    <span>Mạch nặng: tốc độ thực tế thấp hơn tốc độ đã chọn</span>
+                  </div>
+                )}
+
+                <div className="flex items-center border border-black bg-white overflow-hidden text-[9px] font-black">
+                  <span className="px-1 py-0.5 bg-[#EEF2FF] border-r border-black text-gray-600 font-bold">
+                    TUA:
+                  </span>
+                  {[1, 60, 600, 3600].map((spd) => {
+                    const label = `×${spd}`;
+                    const isActive = energyMult === spd;
+                    return (
+                      <button
+                        key={spd}
+                        onClick={() => {
+                          setEnergyMult(spd);
+                          simulationService.setEnergyMultiplier(spd);
+                        }}
+                        className={`px-1.5 py-0.5 border-r last:border-r-0 border-black transition-colors ${
+                          isActive ? 'bg-[#FFD84D] text-black font-extrabold' : 'bg-white hover:bg-gray-100 text-gray-700'
+                        }`}
+                        title={`Tua nhanh điện năng công tơ ${label}`}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
+            )
           )}
 
           {statusMessage ? (

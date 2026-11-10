@@ -136,11 +136,13 @@ const CURRICULUM_DATA: Record<string, WorkspaceCurriculumInfo> = {
           'Trình bày nội dung cơ bản về tín hiệu, mạch xử lí tín hiệu (mạch tổ hợp, mạch dãy).',
           'Vẽ kí hiệu, nêu công dụng, nhận biết cổng logic cơ bản (AND, OR, NOT, NAND, NOR, XOR, XNOR).',
           'Lắp ráp, kiểm tra mạch điện tử số đơn giản dùng các cổng logic cơ bản.',
+          'Phần tử nhớ Flip-Flop (D, JK, T): lưu trữ trạng thái 1 bit, kích theo cạnh xung (cạnh lên / cạnh xuống) và chân xóa CLR tức thời.',
+          'Lắp ráp mạch dãy cơ bản: chia tần số, bộ đếm nhị phân nối tiếp, bộ đếm 0–9 hiển thị LED 7 đoạn BCD, thanh ghi dịch.',
         ],
       },
     ],
     unsupportedPoints: [
-      'Chưa hỗ trợ: mạch dãy (flip-flop, bộ đếm).',
+      'Chưa hỗ trợ: bộ nhớ, thanh ghi vào song song, mạch dãy phức tạp.',
     ],
   },
 };

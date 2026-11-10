@@ -48,6 +48,9 @@ import {
   LogicLowSymbol,
   LogicGateSymbol,
   LogicLEDSymbol,
+  LogicFlipFlopSymbol,
+  LogicClockSymbol,
+  Logic7SegmentSymbol,
 } from '../components/symbols/LogicSymbols';
 
 export const COMPONENT_DEFINITIONS: ComponentDef[] = [
@@ -1208,6 +1211,157 @@ export const COMPONENT_DEFINITIONS: ComponentDef[] = [
     ],
     defaultProps: {
       color: '#EF4444',
+    },
+  },
+  {
+    type: 'logic_flip_flop',
+    nameVi: 'Flip-flop',
+    category: 'control',
+    refPrefix: 'FF',
+    width: 80,
+    height: 80,
+    pins: (props) => {
+      const kind = (props.kind || 'D').toUpperCase();
+      const hasClr = Boolean(props.hasClr);
+      const pinsList: PinDef[] = [];
+      if (kind === 'JK') {
+        pinsList.push(
+          { id: 'J', label: 'J', dx: -2, dy: -1 },
+          { id: 'CLK', label: 'CLK', dx: -2, dy: 0 },
+          { id: 'K', label: 'K', dx: -2, dy: 1 },
+          { id: 'Q', label: 'Q', dx: 2, dy: -1 },
+          { id: 'NQ', label: 'Q̅', dx: 2, dy: 1 }
+        );
+      } else if (kind === 'T') {
+        pinsList.push(
+          { id: 'T', label: 'T', dx: -2, dy: -1 },
+          { id: 'CLK', label: 'CLK', dx: -2, dy: 1 },
+          { id: 'Q', label: 'Q', dx: 2, dy: -1 },
+          { id: 'NQ', label: 'Q̅', dx: 2, dy: 1 }
+        );
+      } else {
+        // D
+        pinsList.push(
+          { id: 'D', label: 'D', dx: -2, dy: -1 },
+          { id: 'CLK', label: 'CLK', dx: -2, dy: 1 },
+          { id: 'Q', label: 'Q', dx: 2, dy: -1 },
+          { id: 'NQ', label: 'Q̅', dx: 2, dy: 1 }
+        );
+      }
+      if (hasClr) {
+        pinsList.push({ id: 'CLR', label: 'CLR', dx: 0, dy: 2 });
+      }
+      return pinsList;
+    },
+    symbol: LogicFlipFlopSymbol,
+    propsSchema: [
+      {
+        key: 'kind',
+        label: 'Loại Flip-flop',
+        kind: 'select',
+        options: [
+          { label: 'D (Data)', value: 'D' },
+          { label: 'JK (Đa năng)', value: 'JK' },
+          { label: 'T (Toggle / Chia tần)', value: 'T' },
+        ],
+        default: 'D',
+      },
+      {
+        key: 'triggerEdge',
+        label: 'Cạnh kích',
+        kind: 'select',
+        options: [
+          { label: 'Cạnh lên (Rising ↑)', value: 'rising' },
+          { label: 'Cạnh xuống (Falling ↓)', value: 'falling' },
+        ],
+        default: 'rising',
+      },
+      {
+        key: 'hasClr',
+        label: 'Chân xóa CLR (tác động mức 0)',
+        kind: 'bool',
+        default: false,
+      },
+      {
+        key: 'initialState',
+        label: 'Trạng thái ban đầu (Q)',
+        kind: 'select',
+        options: [
+          { label: '0 (Mức thấp)', value: 0 },
+          { label: '1 (Mức cao)', value: 1 },
+        ],
+        default: 0,
+      },
+    ],
+    defaultProps: {
+      kind: 'D',
+      triggerEdge: 'rising',
+      hasClr: false,
+      initialState: 0,
+      qState: 0,
+      edgeCount: 0,
+    },
+  },
+  {
+    type: 'logic_clock',
+    nameVi: 'Máy phát xung',
+    category: 'source',
+    refPrefix: 'CLK',
+    width: 80,
+    height: 60,
+    pins: [{ id: 'Q', label: 'Q', dx: 2, dy: 0 }],
+    symbol: LogicClockSymbol,
+    propsSchema: [
+      {
+        key: 'frequency',
+        label: 'Tần số xung',
+        kind: 'select',
+        options: [
+          { label: '0,5 Hz (Chu kì 2 s)', value: 0.5 },
+          { label: '1 Hz (Chu kì 1 s)', value: 1 },
+          { label: '2 Hz (Chu kì 0,5 s)', value: 2 },
+          { label: '5 Hz (Chu kì 0,2 s)', value: 5 },
+          { label: '10 Hz (Chu kì 0,1 s)', value: 10 },
+        ],
+        default: 1,
+      },
+    ],
+    defaultProps: {
+      frequency: 1,
+      state: false,
+    },
+  },
+  {
+    type: 'logic_7segment',
+    nameVi: 'LED 7 đoạn BCD',
+    category: 'load',
+    refPrefix: 'DISP',
+    width: 80,
+    height: 100,
+    pins: [
+      { id: 'D3', label: 'D3', dx: -2, dy: -2 },
+      { id: 'D2', label: 'D2', dx: -2, dy: -1 },
+      { id: 'D1', label: 'D1', dx: -2, dy: 0 },
+      { id: 'D0', label: 'D0', dx: -2, dy: 1 },
+    ],
+    symbol: Logic7SegmentSymbol,
+    propsSchema: [
+      {
+        key: 'color',
+        label: 'Màu phát quang',
+        kind: 'select',
+        options: [
+          { label: 'Xanh lá', value: '#22C55E' },
+          { label: 'Đỏ', value: '#EF4444' },
+          { label: 'Xanh dương', value: '#3B82F6' },
+          { label: 'Vàng', value: '#EAB308' },
+        ],
+        default: '#22C55E',
+      },
+    ],
+    defaultProps: {
+      color: '#22C55E',
+      digit: '0',
     },
   },
 ];

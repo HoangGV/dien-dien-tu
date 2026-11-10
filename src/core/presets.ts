@@ -1060,6 +1060,165 @@ export function createPresetLogicD4(): CircuitState {
   return { components: [swA, swB, gNot, gAnd, ledPump], wires: [w1, w2, w3, w4], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
 }
 
+// Preset (E1): Flip-flop D 1 bit
+export function createPresetLogicE1(): CircuitState {
+  const swD: ComponentInstance = { id: 'sw_d', type: 'logic_switch', x: 80, y: 120, rot: 0, flip: false, label: 'D', props: { state: true, label: 'D' } };
+  const btnClk: ComponentInstance = { id: 'btn_clk', type: 'logic_push_button', x: 80, y: 220, rot: 0, flip: false, label: 'Xung CLK', props: { state: false, label: 'CLK' } };
+  const ff1: ComponentInstance = { id: 'ff1', type: 'logic_flip_flop', x: 260, y: 160, rot: 0, flip: false, label: 'FF-D', props: { kind: 'D', triggerEdge: 'rising', initialState: 0 } };
+  const ledQ: ComponentInstance = { id: 'led_q', type: 'logic_led', x: 440, y: 140, rot: 0, flip: false, label: 'Q', props: { color: '#10B981' } };
+  const ledNq: ComponentInstance = { id: 'led_nq', type: 'logic_led', x: 440, y: 200, rot: 0, flip: false, label: 'Q̅', props: { color: '#EF4444' } };
+
+  const w1 = makePresetWire('w1', 'sw_d', 'Q', 'ff1', 'D', [{ x: 120, y: 120 }, { x: 180, y: 120 }, { x: 180, y: 140 }, { x: 220, y: 140 }], 'other');
+  const w2 = makePresetWire('w2', 'btn_clk', 'Q', 'ff1', 'CLK', [{ x: 120, y: 220 }, { x: 180, y: 220 }, { x: 180, y: 180 }, { x: 220, y: 180 }], 'other');
+  const w3 = makePresetWire('w3', 'ff1', 'Q', 'led_q', 'in', [{ x: 300, y: 140 }, { x: 400, y: 140 }], 'other');
+  const w4 = makePresetWire('w4', 'ff1', 'NQ', 'led_nq', 'in', [{ x: 300, y: 180 }, { x: 360, y: 180 }, { x: 360, y: 200 }, { x: 400, y: 200 }], 'other');
+
+  return { components: [swD, btnClk, ff1, ledQ, ledNq], wires: [w1, w2, w3, w4], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+}
+
+// Preset (E2): Chia đôi tần số: máy phát xung 2 Hz → flip-flop T (T = 1) → LED Q (nháy 1 Hz)
+export function createPresetLogicE2(): CircuitState {
+  const h1: ComponentInstance = { id: 'h1', type: 'logic_high', x: 80, y: 120, rot: 0, flip: false, label: 'T=1', props: {} };
+  const clk1: ComponentInstance = { id: 'clk1', type: 'logic_clock', x: 80, y: 220, rot: 0, flip: false, label: '2 Hz', props: { frequency: 2 } };
+  const ff1: ComponentInstance = { id: 'ff1', type: 'logic_flip_flop', x: 260, y: 160, rot: 0, flip: false, label: 'FF-T', props: { kind: 'T', triggerEdge: 'rising', initialState: 0 } };
+  const ledClk: ComponentInstance = { id: 'led_clk', type: 'logic_led', x: 260, y: 260, rot: 0, flip: false, label: 'CLK (2 Hz)', props: { color: '#3B82F6' } };
+  const ledQ: ComponentInstance = { id: 'led_q', type: 'logic_led', x: 440, y: 140, rot: 0, flip: false, label: 'Q (1 Hz)', props: { color: '#10B981' } };
+
+  const w1 = makePresetWire('w1', 'h1', 'Q', 'ff1', 'T', [{ x: 120, y: 120 }, { x: 180, y: 120 }, { x: 180, y: 140 }, { x: 220, y: 140 }], 'other');
+  const w2 = makePresetWire('w2', 'clk1', 'Q', 'ff1', 'CLK', [{ x: 120, y: 220 }, { x: 180, y: 220 }, { x: 180, y: 180 }, { x: 220, y: 180 }], 'other');
+  const w3 = makePresetWire('w3', 'clk1', 'Q', 'led_clk', 'in', [{ x: 120, y: 220 }, { x: 180, y: 220 }, { x: 180, y: 260 }, { x: 220, y: 260 }], 'other');
+  const w4 = makePresetWire('w4', 'ff1', 'Q', 'led_q', 'in', [{ x: 300, y: 140 }, { x: 400, y: 140 }], 'other');
+
+  return { components: [h1, clk1, ff1, ledClk, ledQ], wires: [w1, w2, w3, w4], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+}
+
+// Preset (E3): Bộ đếm nhị phân 4 bit nối tiếp: 4 flip-flop T (T = 1, cạnh xuống), CLK sau nối Q trước
+export function createPresetLogicE3(): CircuitState {
+  const h1: ComponentInstance = { id: 'h1', type: 'logic_high', x: 60, y: 80, rot: 0, flip: false, label: 'T=1', props: {} };
+  const clk1: ComponentInstance = { id: 'clk1', type: 'logic_clock', x: 60, y: 180, rot: 0, flip: false, label: 'CLK 2Hz', props: { frequency: 2 } };
+
+  const ff0: ComponentInstance = { id: 'ff0', type: 'logic_flip_flop', x: 200, y: 160, rot: 0, flip: false, label: 'FF0', props: { kind: 'T', triggerEdge: 'falling', initialState: 0 } };
+  const ff1: ComponentInstance = { id: 'ff1', type: 'logic_flip_flop', x: 380, y: 160, rot: 0, flip: false, label: 'FF1', props: { kind: 'T', triggerEdge: 'falling', initialState: 0 } };
+  const ff2: ComponentInstance = { id: 'ff2', type: 'logic_flip_flop', x: 560, y: 160, rot: 0, flip: false, label: 'FF2', props: { kind: 'T', triggerEdge: 'falling', initialState: 0 } };
+  const ff3: ComponentInstance = { id: 'ff3', type: 'logic_flip_flop', x: 740, y: 160, rot: 0, flip: false, label: 'FF3', props: { kind: 'T', triggerEdge: 'falling', initialState: 0 } };
+
+  const led0: ComponentInstance = { id: 'led0', type: 'logic_led', x: 200, y: 280, rot: 0, flip: false, label: 'Q0 (LSB)', props: { color: '#10B981' } };
+  const led1: ComponentInstance = { id: 'led1', type: 'logic_led', x: 380, y: 280, rot: 0, flip: false, label: 'Q1', props: { color: '#10B981' } };
+  const led2: ComponentInstance = { id: 'led2', type: 'logic_led', x: 560, y: 280, rot: 0, flip: false, label: 'Q2', props: { color: '#10B981' } };
+  const led3: ComponentInstance = { id: 'led3', type: 'logic_led', x: 740, y: 280, rot: 0, flip: false, label: 'Q3 (MSB)', props: { color: '#10B981' } };
+
+  const w_t0 = makePresetWire('w_t0', 'h1', 'Q', 'ff0', 'T', [{ x: 100, y: 80 }, { x: 140, y: 80 }, { x: 140, y: 140 }, { x: 160, y: 140 }], 'other');
+  const w_t1 = makePresetWire('w_t1', 'h1', 'Q', 'ff1', 'T', [{ x: 100, y: 80 }, { x: 320, y: 80 }, { x: 320, y: 140 }, { x: 340, y: 140 }], 'other');
+  const w_t2 = makePresetWire('w_t2', 'h1', 'Q', 'ff2', 'T', [{ x: 100, y: 80 }, { x: 500, y: 80 }, { x: 500, y: 140 }, { x: 520, y: 140 }], 'other');
+  const w_t3 = makePresetWire('w_t3', 'h1', 'Q', 'ff3', 'T', [{ x: 100, y: 80 }, { x: 680, y: 80 }, { x: 680, y: 140 }, { x: 700, y: 140 }], 'other');
+
+  const w_clk = makePresetWire('w_clk', 'clk1', 'Q', 'ff0', 'CLK', [{ x: 100, y: 180 }, { x: 160, y: 180 }], 'other');
+  const w_q0_clk1 = makePresetWire('w_q0_clk1', 'ff0', 'Q', 'ff1', 'CLK', [{ x: 240, y: 140 }, { x: 280, y: 140 }, { x: 280, y: 180 }, { x: 340, y: 180 }], 'other');
+  const w_q0_led = makePresetWire('w_q0_led', 'ff0', 'Q', 'led0', 'in', [{ x: 240, y: 140 }, { x: 280, y: 140 }, { x: 280, y: 240 }, { x: 140, y: 240 }, { x: 140, y: 280 }, { x: 160, y: 280 }], 'other');
+
+  const w_q1_clk2 = makePresetWire('w_q1_clk2', 'ff1', 'Q', 'ff2', 'CLK', [{ x: 420, y: 140 }, { x: 460, y: 140 }, { x: 460, y: 180 }, { x: 520, y: 180 }], 'other');
+  const w_q1_led = makePresetWire('w_q1_led', 'ff1', 'Q', 'led1', 'in', [{ x: 420, y: 140 }, { x: 460, y: 140 }, { x: 460, y: 240 }, { x: 320, y: 240 }, { x: 320, y: 280 }, { x: 340, y: 280 }], 'other');
+
+  const w_q2_clk3 = makePresetWire('w_q2_clk3', 'ff2', 'Q', 'ff3', 'CLK', [{ x: 600, y: 140 }, { x: 640, y: 140 }, { x: 640, y: 180 }, { x: 700, y: 180 }], 'other');
+  const w_q2_led = makePresetWire('w_q2_led', 'ff2', 'Q', 'led2', 'in', [{ x: 600, y: 140 }, { x: 640, y: 140 }, { x: 640, y: 240 }, { x: 500, y: 240 }, { x: 500, y: 280 }, { x: 520, y: 280 }], 'other');
+
+  const w_q3_led = makePresetWire('w_q3_led', 'ff3', 'Q', 'led3', 'in', [{ x: 780, y: 140 }, { x: 820, y: 140 }, { x: 820, y: 280 }, { x: 780, y: 280 }], 'other');
+
+  return {
+    components: [h1, clk1, ff0, ff1, ff2, ff3, led0, led1, led2, led3],
+    wires: [w_t0, w_t1, w_t2, w_t3, w_clk, w_q0_clk1, w_q0_led, w_q1_clk2, w_q1_led, w_q2_clk3, w_q2_led, w_q3_led],
+    junctions: [],
+    viewport: { x: 20, y: 20, zoom: 0.9 },
+  };
+}
+
+// Preset (E4): Bộ đếm 0–9 hiển thị LED 7 đoạn: E3 + NAND(Q3, Q1) nối CLR
+export function createPresetLogicE4(): CircuitState {
+  const h1: ComponentInstance = { id: 'h1', type: 'logic_high', x: 60, y: 60, rot: 0, flip: false, label: 'T=1', props: {} };
+  const clk1: ComponentInstance = { id: 'clk1', type: 'logic_clock', x: 60, y: 160, rot: 0, flip: false, label: 'CLK 2Hz', props: { frequency: 2 } };
+
+  const ff0: ComponentInstance = { id: 'ff0', type: 'logic_flip_flop', x: 180, y: 140, rot: 0, flip: false, label: 'FF0', props: { kind: 'T', triggerEdge: 'falling', hasClr: true, initialState: 0 } };
+  const ff1: ComponentInstance = { id: 'ff1', type: 'logic_flip_flop', x: 320, y: 140, rot: 0, flip: false, label: 'FF1', props: { kind: 'T', triggerEdge: 'falling', hasClr: true, initialState: 0 } };
+  const ff2: ComponentInstance = { id: 'ff2', type: 'logic_flip_flop', x: 460, y: 140, rot: 0, flip: false, label: 'FF2', props: { kind: 'T', triggerEdge: 'falling', hasClr: true, initialState: 0 } };
+  const ff3: ComponentInstance = { id: 'ff3', type: 'logic_flip_flop', x: 600, y: 140, rot: 0, flip: false, label: 'FF3', props: { kind: 'T', triggerEdge: 'falling', hasClr: true, initialState: 0 } };
+
+  const gNand: ComponentInstance = { id: 'g_nand', type: 'logic_gate', x: 460, y: 280, rot: 0, flip: false, label: 'NAND (10)', props: { gateType: 'NAND', inputsCount: 2 } };
+  const disp7: ComponentInstance = { id: 'disp7', type: 'logic_7segment', x: 780, y: 180, rot: 0, flip: false, label: 'Đếm 0-9', props: {} };
+
+  const w_t0 = makePresetWire('w_t0', 'h1', 'Q', 'ff0', 'T', [{ x: 100, y: 60 }, { x: 140, y: 120 }], 'other');
+  const w_t1 = makePresetWire('w_t1', 'h1', 'Q', 'ff1', 'T', [{ x: 100, y: 60 }, { x: 280, y: 120 }], 'other');
+  const w_t2 = makePresetWire('w_t2', 'h1', 'Q', 'ff2', 'T', [{ x: 100, y: 60 }, { x: 420, y: 120 }], 'other');
+  const w_t3 = makePresetWire('w_t3', 'h1', 'Q', 'ff3', 'T', [{ x: 100, y: 60 }, { x: 560, y: 120 }], 'other');
+
+  const w_clk = makePresetWire('w_clk', 'clk1', 'Q', 'ff0', 'CLK', [{ x: 100, y: 160 }, { x: 140, y: 160 }], 'other');
+  const w_q0_clk1 = makePresetWire('w_q0_clk1', 'ff0', 'Q', 'ff1', 'CLK', [{ x: 220, y: 120 }, { x: 260, y: 120 }, { x: 260, y: 160 }, { x: 280, y: 160 }], 'other');
+  const w_q1_clk2 = makePresetWire('w_q1_clk2', 'ff1', 'Q', 'ff2', 'CLK', [{ x: 360, y: 120 }, { x: 400, y: 120 }, { x: 400, y: 160 }, { x: 420, y: 160 }], 'other');
+  const w_q2_clk3 = makePresetWire('w_q2_clk3', 'ff2', 'Q', 'ff3', 'CLK', [{ x: 500, y: 120 }, { x: 540, y: 120 }, { x: 540, y: 160 }, { x: 560, y: 160 }], 'other');
+
+  // Display inputs D0..D3 (D0=ff0.Q, D1=ff1.Q, D2=ff2.Q, D3=ff3.Q)
+  const w_d0 = makePresetWire('w_d0', 'ff0', 'Q', 'disp7', 'D0', [{ x: 220, y: 120 }, { x: 240, y: 120 }, { x: 240, y: 200 }, { x: 740, y: 200 }], 'other');
+  const w_d1 = makePresetWire('w_d1', 'ff1', 'Q', 'disp7', 'D1', [{ x: 360, y: 120 }, { x: 380, y: 120 }, { x: 380, y: 180 }, { x: 740, y: 180 }], 'other');
+  const w_d2 = makePresetWire('w_d2', 'ff2', 'Q', 'disp7', 'D2', [{ x: 500, y: 120 }, { x: 520, y: 120 }, { x: 520, y: 160 }, { x: 740, y: 160 }], 'other');
+  const w_d3 = makePresetWire('w_d3', 'ff3', 'Q', 'disp7', 'D3', [{ x: 640, y: 120 }, { x: 740, y: 140 }], 'other');
+
+  // NAND gate detects 10 (Q3=1 and Q1=1)
+  const w_nand_a = makePresetWire('w_nand_a', 'ff1', 'Q', 'g_nand', 'A', [{ x: 360, y: 120 }, { x: 380, y: 260 }, { x: 420, y: 260 }], 'other');
+  const w_nand_b = makePresetWire('w_nand_b', 'ff3', 'Q', 'g_nand', 'B', [{ x: 640, y: 120 }, { x: 660, y: 300 }, { x: 420, y: 300 }], 'other');
+
+  // NAND output to CLR of all 4 flip-flops
+  const w_clr0 = makePresetWire('w_clr0', 'g_nand', 'Y', 'ff0', 'CLR', [{ x: 500, y: 280 }, { x: 180, y: 280 }, { x: 180, y: 180 }], 'other');
+  const w_clr1 = makePresetWire('w_clr1', 'g_nand', 'Y', 'ff1', 'CLR', [{ x: 500, y: 280 }, { x: 320, y: 280 }, { x: 320, y: 180 }], 'other');
+  const w_clr2 = makePresetWire('w_clr2', 'g_nand', 'Y', 'ff2', 'CLR', [{ x: 500, y: 280 }, { x: 460, y: 280 }, { x: 460, y: 180 }], 'other');
+  const w_clr3 = makePresetWire('w_clr3', 'g_nand', 'Y', 'ff3', 'CLR', [{ x: 500, y: 280 }, { x: 600, y: 280 }, { x: 600, y: 180 }], 'other');
+
+  return {
+    components: [h1, clk1, ff0, ff1, ff2, ff3, gNand, disp7],
+    wires: [w_t0, w_t1, w_t2, w_t3, w_clk, w_q0_clk1, w_q1_clk2, w_q2_clk3, w_d0, w_d1, w_d2, w_d3, w_nand_a, w_nand_b, w_clr0, w_clr1, w_clr2, w_clr3],
+    junctions: [],
+    viewport: { x: 20, y: 20, zoom: 0.85 },
+  };
+}
+
+// Preset (E5): Thanh ghi dịch 4 bit: 4 flip-flop D nối tiếp, chung CLK từ nút xung tay, công tắc D
+export function createPresetLogicE5(): CircuitState {
+  const swD: ComponentInstance = { id: 'sw_d', type: 'logic_switch', x: 60, y: 120, rot: 0, flip: false, label: 'D_in', props: { state: true, label: 'D_in' } };
+  const btnClk: ComponentInstance = { id: 'btn_clk', type: 'logic_push_button', x: 60, y: 240, rot: 0, flip: false, label: 'CLK', props: { state: false, label: 'CLK' } };
+
+  const ff0: ComponentInstance = { id: 'ff0', type: 'logic_flip_flop', x: 200, y: 160, rot: 0, flip: false, label: 'FF0', props: { kind: 'D', triggerEdge: 'rising', initialState: 0 } };
+  const ff1: ComponentInstance = { id: 'ff1', type: 'logic_flip_flop', x: 360, y: 160, rot: 0, flip: false, label: 'FF1', props: { kind: 'D', triggerEdge: 'rising', initialState: 0 } };
+  const ff2: ComponentInstance = { id: 'ff2', type: 'logic_flip_flop', x: 520, y: 160, rot: 0, flip: false, label: 'FF2', props: { kind: 'D', triggerEdge: 'rising', initialState: 0 } };
+  const ff3: ComponentInstance = { id: 'ff3', type: 'logic_flip_flop', x: 680, y: 160, rot: 0, flip: false, label: 'FF3', props: { kind: 'D', triggerEdge: 'rising', initialState: 0 } };
+
+  const led0: ComponentInstance = { id: 'led0', type: 'logic_led', x: 200, y: 280, rot: 0, flip: false, label: 'Q0', props: { color: '#10B981' } };
+  const led1: ComponentInstance = { id: 'led1', type: 'logic_led', x: 360, y: 280, rot: 0, flip: false, label: 'Q1', props: { color: '#10B981' } };
+  const led2: ComponentInstance = { id: 'led2', type: 'logic_led', x: 520, y: 280, rot: 0, flip: false, label: 'Q2', props: { color: '#10B981' } };
+  const led3: ComponentInstance = { id: 'led3', type: 'logic_led', x: 680, y: 280, rot: 0, flip: false, label: 'Q3', props: { color: '#10B981' } };
+
+  const w_d = makePresetWire('w_d', 'sw_d', 'Q', 'ff0', 'D', [{ x: 100, y: 120 }, { x: 160, y: 140 }], 'other');
+  const w_clk0 = makePresetWire('w_clk0', 'btn_clk', 'Q', 'ff0', 'CLK', [{ x: 100, y: 240 }, { x: 160, y: 180 }], 'other');
+  const w_clk1 = makePresetWire('w_clk1', 'btn_clk', 'Q', 'ff1', 'CLK', [{ x: 100, y: 240 }, { x: 320, y: 240 }, { x: 320, y: 180 }], 'other');
+  const w_clk2 = makePresetWire('w_clk2', 'btn_clk', 'Q', 'ff2', 'CLK', [{ x: 100, y: 240 }, { x: 480, y: 240 }, { x: 480, y: 180 }], 'other');
+  const w_clk3 = makePresetWire('w_clk3', 'btn_clk', 'Q', 'ff3', 'CLK', [{ x: 100, y: 240 }, { x: 640, y: 240 }, { x: 640, y: 180 }], 'other');
+
+  const w_q0_d1 = makePresetWire('w_q0_d1', 'ff0', 'Q', 'ff1', 'D', [{ x: 240, y: 140 }, { x: 320, y: 140 }], 'other');
+  const w_q0_led = makePresetWire('w_q0_led', 'ff0', 'Q', 'led0', 'in', [{ x: 240, y: 140 }, { x: 260, y: 140 }, { x: 260, y: 260 }, { x: 160, y: 260 }, { x: 160, y: 280 }], 'other');
+
+  const w_q1_d2 = makePresetWire('w_q1_d2', 'ff1', 'Q', 'ff2', 'D', [{ x: 400, y: 140 }, { x: 480, y: 140 }], 'other');
+  const w_q1_led = makePresetWire('w_q1_led', 'ff1', 'Q', 'led1', 'in', [{ x: 400, y: 140 }, { x: 420, y: 140 }, { x: 420, y: 260 }, { x: 320, y: 260 }, { x: 320, y: 280 }], 'other');
+
+  const w_q2_d3 = makePresetWire('w_q2_d3', 'ff2', 'Q', 'ff3', 'D', [{ x: 560, y: 140 }, { x: 640, y: 140 }], 'other');
+  const w_q2_led = makePresetWire('w_q2_led', 'ff2', 'Q', 'led2', 'in', [{ x: 560, y: 140 }, { x: 580, y: 140 }, { x: 580, y: 260 }, { x: 480, y: 260 }, { x: 480, y: 280 }], 'other');
+
+  const w_q3_led = makePresetWire('w_q3_led', 'ff3', 'Q', 'led3', 'in', [{ x: 720, y: 140 }, { x: 740, y: 140 }, { x: 740, y: 260 }, { x: 640, y: 260 }, { x: 640, y: 280 }], 'other');
+
+  return {
+    components: [swD, btnClk, ff0, ff1, ff2, ff3, led0, led1, led2, led3],
+    wires: [w_d, w_clk0, w_clk1, w_clk2, w_clk3, w_q0_d1, w_q0_led, w_q1_d2, w_q1_led, w_q2_d3, w_q2_led, w_q3_led],
+    junctions: [],
+    viewport: { x: 20, y: 20, zoom: 0.9 },
+  };
+}
+
 export const DIGITAL_LOGIC_PRESETS: Preset[] = [
   // --- Nhóm: Cổng logic cơ bản (L12) ---
   {
@@ -1099,6 +1258,53 @@ export const DIGITAL_LOGIC_PRESETS: Preset[] = [
     description: 'Mạch an toàn bảo vệ động cơ bơm nước: Bơm chỉ chạy khi thiếu nước (A=1) và nhiệt độ an toàn (B=0).',
     expectation: 'Kì vọng: Bơm chạy khi Nước thấp = 1 và Quá nhiệt = 0; nếu Quá nhiệt = 1 thì bơm ngắt ngay lập tức.',
     state: createPresetLogicD4(),
+  },
+
+  // --- Nhóm: Mạch dãy (L12) ---
+  {
+    id: 'logic_e1',
+    group: 'Mạch dãy (L12)',
+    grade: 'L12',
+    title: 'E1) Flip-flop D 1 bit: nút xung tay + công tắc D + LED Q',
+    description: 'Khảo sát lưu trữ dữ liệu 1 bit theo cạnh lên của xung nhịp CLK.',
+    expectation: 'Kì vọng: Khi đổi D, Q chưa đổi ngay; chỉ khi bấm nút xung CLK thì Q mới cập nhật bằng D.',
+    state: createPresetLogicE1(),
+  },
+  {
+    id: 'logic_e2',
+    group: 'Mạch dãy (L12)',
+    grade: 'L12',
+    title: 'E2) Chia đôi tần số: máy phát xung 2 Hz → flip-flop T (T = 1) → LED Q (nháy 1 Hz)',
+    description: 'Mạch chia đôi tần số dùng Flip-flop T kích cạnh lên với ngõ vào T nối mức 1.',
+    expectation: 'Kì vọng: Bấm CHẠY, xung vào nhấp nháy 2 Hz, LED Q nhấp nháy với chu kì gấp đôi (1 Hz).',
+    state: createPresetLogicE2(),
+  },
+  {
+    id: 'logic_e3',
+    group: 'Mạch dãy (L12)',
+    grade: 'L12',
+    title: 'E3) Bộ đếm nhị phân 4 bit nối tiếp: 4 flip-flop T (T=1, cạnh xuống), 4 LED Q0–Q3',
+    description: 'Bộ đếm gợn (ripple counter) 4 bit đếm tiến từ 0000 đến 1111 rồi quay về 0000.',
+    expectation: 'Kì vọng: Bấm CHẠY, 4 LED đếm nhị phân tiến: 0000 → 0001 → 0010 ... → 1111 → 0000.',
+    state: createPresetLogicE3(),
+  },
+  {
+    id: 'logic_e4',
+    group: 'Mạch dãy (L12)',
+    grade: 'L12',
+    title: 'E4) Bộ đếm 0–9 hiển thị LED 7 đoạn: 4 flip-flop T + NAND(Q3, Q1) nối CLR',
+    description: 'Bộ đếm BCD Modulo-10: khi đếm tới 10 (1010₂), cổng NAND kích chân xóa CLR đặt tức thời về 0.',
+    expectation: 'Kì vọng: Bấm CHẠY, màn hình LED 7 đoạn lần lượt hiển thị 0, 1, 2, ..., 9 rồi quay về 0.',
+    state: createPresetLogicE4(),
+  },
+  {
+    id: 'logic_e5',
+    group: 'Mạch dãy (L12)',
+    grade: 'L12',
+    title: 'E5) Thanh ghi dịch 4 bit: 4 flip-flop D nối tiếp, chung CLK từ nút xung tay, 4 LED',
+    description: 'Dịch dữ liệu nối tiếp từ ngõ vào D qua 4 tầng flip-flop D sau mỗi lần bấm xung CLK.',
+    expectation: 'Kì vọng: Bật/tắt công tắc D rồi bấm CLK, các bit 0 và 1 lần lượt dịch qua Q0 → Q1 → Q2 → Q3.',
+    state: createPresetLogicE5(),
   },
 ];
 

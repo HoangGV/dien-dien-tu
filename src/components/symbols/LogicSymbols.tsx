@@ -555,3 +555,307 @@ export const LogicLEDSymbol: React.FC<SymbolProps> = ({
     </g>
   );
 };
+
+/**
+ * 6. Logic Flip-Flop (D / JK / T)
+ * Synchronous edge-triggered storage element with optional active-low CLR
+ */
+export const LogicFlipFlopSymbol: React.FC<SymbolProps> = ({
+  comp,
+  isSelected,
+  hoveredPinId,
+  onPinPointerDown,
+  onPinHover,
+}) => {
+  const { logicResult } = useWorkspaceStore();
+  const kind = (comp.props.kind || 'D').toUpperCase();
+  const isFalling = comp.props.triggerEdge === 'falling';
+  const hasClr = Boolean(comp.props.hasClr);
+
+  // State from simulation result or saved props
+  const stateVal = logicResult?.componentStates?.[comp.id]?.q ?? comp.props.qState ?? comp.props.initialState ?? 0;
+  const isOne = stateVal === 1;
+  const isZero = stateVal === 0;
+  const isX = stateVal === 'X';
+
+  const clkY = kind === 'JK' ? 0 : 20;
+  const in1Y = -20;
+  const in2Y = 20;
+
+  // Pin definitions
+  const pinQ: PinDef = { id: 'Q', label: 'Q', dx: 2, dy: -1 };
+  const pinNQ: PinDef = { id: 'NQ', label: 'Q̅', dx: 2, dy: 1 };
+  const pinCLK: PinDef = { id: 'CLK', label: 'CLK', dx: -2, dy: kind === 'JK' ? 0 : 1 };
+  const pinClr: PinDef = { id: 'CLR', label: 'CLR', dx: 0, dy: 2 };
+
+  let pinIn1: PinDef;
+  let pinIn2: PinDef | null = null;
+  if (kind === 'JK') {
+    pinIn1 = { id: 'J', label: 'J', dx: -2, dy: -1 };
+    pinIn2 = { id: 'K', label: 'K', dx: -2, dy: 1 };
+  } else if (kind === 'T') {
+    pinIn1 = { id: 'T', label: 'T', dx: -2, dy: -1 };
+  } else {
+    pinIn1 = { id: 'D', label: 'D', dx: -2, dy: -1 };
+  }
+
+  const boxTop = -36;
+  const boxHeight = hasClr ? 76 : 72;
+
+  return (
+    <g>
+      {/* Input leads */}
+      <line x1={-40} y1={in1Y} x2={-24} y2={in1Y} stroke="#000000" strokeWidth={2} />
+      {pinIn2 && <line x1={-40} y1={in2Y} x2={-24} y2={in2Y} stroke="#000000" strokeWidth={2} />}
+      <line x1={-40} y1={clkY} x2={isFalling ? -27 : -24} y2={clkY} stroke="#000000" strokeWidth={2} />
+
+      {/* Output leads */}
+      <line x1={24} y1={-20} x2={40} y2={-20} stroke="#000000" strokeWidth={2} />
+      <line x1={27} y1={20} x2={40} y2={20} stroke="#000000" strokeWidth={2} />
+
+      {/* Optional CLR lead at bottom */}
+      {hasClr && (
+        <>
+          <line x1={0} y1={boxTop + boxHeight + 3} x2={0} y2={40} stroke="#000000" strokeWidth={2} />
+          {/* Active-low inversion circle on CLR */}
+          <circle cx={0} cy={boxTop + boxHeight + 3} r={3} fill="#FFFFFF" stroke="#000000" strokeWidth={1.5} />
+          <UprightText x={0} y={boxTop + boxHeight - 8} rot={comp.rot} fontSize={9} fontWeight={900} fill="#EF4444">
+            CLR
+          </UprightText>
+        </>
+      )}
+
+      {/* Inversion circle for NQ (Q̅) output */}
+      <circle cx={25.5} cy={20} r={2.5} fill="#FFFFFF" stroke="#000000" strokeWidth={1.5} />
+
+      {/* Falling-edge inversion circle on CLK */}
+      {isFalling && (
+        <circle cx={-25.5} cy={clkY} r={2.5} fill="#FFFFFF" stroke="#000000" strokeWidth={1.5} />
+      )}
+
+      {/* Flip-Flop Main Body Box (Neo-brutalism) */}
+      <rect
+        x={-24}
+        y={boxTop}
+        width={48}
+        height={boxHeight}
+        fill={isOne ? '#F0FDF4' : isZero ? '#F8FAFC' : '#FEFCE8'}
+        stroke="#000000"
+        strokeWidth={2}
+        className="cursor-pointer"
+      />
+
+      {/* Dynamic Triangle at CLK input */}
+      <polygon
+        points={`-24,${clkY - 6} -14,${clkY} -24,${clkY + 6}`}
+        fill="none"
+        stroke="#000000"
+        strokeWidth={1.8}
+      />
+
+      {/* Internal Pin Labels */}
+      <UprightText x={-15} y={in1Y} rot={comp.rot} fontSize={10} fontWeight={900} fill="#0F172A">
+        {pinIn1.label}
+      </UprightText>
+      {pinIn2 && (
+        <UprightText x={-15} y={in2Y} rot={comp.rot} fontSize={10} fontWeight={900} fill="#0F172A">
+          {pinIn2.label}
+        </UprightText>
+      )}
+      <UprightText x={14} y={-20} rot={comp.rot} fontSize={10} fontWeight={900} fill="#0F172A">
+        Q
+      </UprightText>
+      <UprightText x={14} y={20} rot={comp.rot} fontSize={10} fontWeight={900} fill="#0F172A">
+        Q̅
+      </UprightText>
+
+      {/* Header Kind */}
+      <UprightText x={0} y={boxTop + 10} rot={comp.rot} fontSize={10} fontWeight={900} fill="#3B82F6">
+        {kind}
+      </UprightText>
+
+      {/* Current Q State Badge */}
+      <rect
+        x={-8}
+        y={-7}
+        width={16}
+        height={16}
+        fill={isOne ? '#10B981' : isZero ? '#334155' : '#EAB308'}
+        stroke="#000000"
+        strokeWidth={1.5}
+      />
+      <UprightText x={0} y={0} rot={comp.rot} fontSize={11} fontWeight={900} fill="#FFFFFF">
+        {isOne ? '1' : isZero ? '0' : '?'}
+      </UprightText>
+
+      {/* External Component Label */}
+      <UprightText x={0} y={boxTop - 10} rot={comp.rot} fontSize={11} fontWeight={900} fill="#0F172A">
+        {comp.label || 'FF'}
+      </UprightText>
+
+      {/* Pins */}
+      <PinDot pin={pinIn1} rot={comp.rot} onPointerDown={onPinPointerDown} onHover={onPinHover} isHovered={hoveredPinId === pinIn1.id} />
+      {pinIn2 && <PinDot pin={pinIn2} rot={comp.rot} onPointerDown={onPinPointerDown} onHover={onPinHover} isHovered={hoveredPinId === pinIn2.id} />}
+      <PinDot pin={pinCLK} rot={comp.rot} onPointerDown={onPinPointerDown} onHover={onPinHover} isHovered={hoveredPinId === 'CLK'} />
+      <PinDot pin={pinQ} rot={comp.rot} onPointerDown={onPinPointerDown} onHover={onPinHover} isHovered={hoveredPinId === 'Q'} />
+      <PinDot pin={pinNQ} rot={comp.rot} onPointerDown={onPinPointerDown} onHover={onPinHover} isHovered={hoveredPinId === 'NQ'} />
+      {hasClr && <PinDot pin={pinClr} rot={comp.rot} onPointerDown={onPinPointerDown} onHover={onPinHover} isHovered={hoveredPinId === 'CLR'} />}
+    </g>
+  );
+};
+
+/**
+ * 7. Logic Clock (Máy phát xung vuông)
+ * Outputs periodic 50% square wave at specified frequency (0.5, 1, 2, 5, 10 Hz)
+ */
+export const LogicClockSymbol: React.FC<SymbolProps> = ({
+  comp,
+  isSelected,
+  hoveredPinId,
+  onPinPointerDown,
+  onPinHover,
+}) => {
+  const isHigh = Boolean(comp.props.state);
+  const freq = comp.props.frequency || 1;
+  const pinQ: PinDef = { id: 'Q', label: 'Q', dx: 2, dy: 0 };
+
+  return (
+    <g>
+      {/* Lead wire to pin Q */}
+      <line x1={20} y1={0} x2={40} y2={0} stroke="#000000" strokeWidth={2} />
+
+      {/* Clock Generator Body Box */}
+      <rect
+        x={-24}
+        y={-20}
+        width={44}
+        height={40}
+        fill={isHigh ? '#ECFDF5' : '#F8FAFC'}
+        stroke="#000000"
+        strokeWidth={2}
+      />
+
+      {/* Square pulse wave symbol */}
+      <path
+        d="M -16,4 L -8,4 L -8,-6 L 0,-6 L 0,4 L 8,4 L 8,-6 L 16,-6"
+        fill="none"
+        stroke={isHigh ? '#10B981' : '#0F172A'}
+        strokeWidth={2}
+      />
+
+      {/* Frequency text */}
+      <UprightText x={-2} y={12} rot={comp.rot} fontSize={9} fontWeight={900} fill="#475569">
+        {`${freq}Hz`}
+      </UprightText>
+
+      {/* Pulse indicator dot */}
+      <circle cx={14} cy={-12} r={3} fill={isHigh ? '#10B981' : '#94A3B8'} stroke="#000000" strokeWidth={1} />
+
+      {/* External Label */}
+      <UprightText x={-2} y={-28} rot={comp.rot} fontSize={11} fontWeight={900} fill="#0F172A">
+        {comp.label || 'CLK'}
+      </UprightText>
+
+      {/* Output Pin Q */}
+      <PinDot
+        pin={pinQ}
+        rot={comp.rot}
+        onPointerDown={onPinPointerDown}
+        onHover={onPinHover}
+        isHovered={hoveredPinId === 'Q'}
+      />
+    </g>
+  );
+};
+
+/**
+ * 8. Logic 7-Segment Display (LED 7 đoạn BCD)
+ * Decodes 4 inputs D0..D3 to display 0..9, '-' for 10..15, '?' for X
+ */
+export const Logic7SegmentSymbol: React.FC<SymbolProps> = ({
+  comp,
+  isSelected,
+  hoveredPinId,
+  onPinPointerDown,
+  onPinHover,
+}) => {
+  const { logicResult } = useWorkspaceStore();
+  const digit = logicResult?.componentStates?.[comp.id]?.digit ?? comp.props.digit ?? '0';
+  const color = comp.props.color || '#22C55E';
+
+  const pinD3: PinDef = { id: 'D3', label: 'D3', dx: -2, dy: -2 };
+  const pinD2: PinDef = { id: 'D2', label: 'D2', dx: -2, dy: -1 };
+  const pinD1: PinDef = { id: 'D1', label: 'D1', dx: -2, dy: 0 };
+  const pinD0: PinDef = { id: 'D0', label: 'D0', dx: -2, dy: 1 };
+
+  return (
+    <g>
+      {/* Input leads from grid to display */}
+      <line x1={-40} y1={-40} x2={-16} y2={-40} stroke="#000000" strokeWidth={2} />
+      <line x1={-40} y1={-20} x2={-16} y2={-20} stroke="#000000" strokeWidth={2} />
+      <line x1={-40} y1={0} x2={-16} y2={0} stroke="#000000" strokeWidth={2} />
+      <line x1={-40} y1={20} x2={-16} y2={20} stroke="#000000" strokeWidth={2} />
+
+      {/* Main Display Box (Dark screen) */}
+      <rect
+        x={-16}
+        y={-50}
+        width={52}
+        height={82}
+        fill="#0F172A"
+        stroke="#000000"
+        strokeWidth={2}
+        rx={2}
+      />
+
+      {/* Inner display bezel */}
+      <rect
+        x={-12}
+        y={-46}
+        width={44}
+        height={74}
+        fill="#020617"
+        stroke="#1E293B"
+        strokeWidth={1}
+      />
+
+      {/* Large 7-segment digit display */}
+      <UprightText
+        x={10}
+        y={-9}
+        rot={comp.rot}
+        fontSize={40}
+        fontWeight={900}
+        fill={color}
+        className="font-mono"
+      >
+        {digit}
+      </UprightText>
+
+      {/* Pin labels */}
+      <UprightText x={-26} y={-45} rot={comp.rot} fontSize={8} fontWeight={900} fill="#475569">
+        D3
+      </UprightText>
+      <UprightText x={-26} y={-25} rot={comp.rot} fontSize={8} fontWeight={900} fill="#475569">
+        D2
+      </UprightText>
+      <UprightText x={-26} y={-5} rot={comp.rot} fontSize={8} fontWeight={900} fill="#475569">
+        D1
+      </UprightText>
+      <UprightText x={-26} y={15} rot={comp.rot} fontSize={8} fontWeight={900} fill="#475569">
+        D0
+      </UprightText>
+
+      {/* External Label */}
+      <UprightText x={10} y={-58} rot={comp.rot} fontSize={11} fontWeight={900} fill="#0F172A">
+        {comp.label || 'DISP'}
+      </UprightText>
+
+      {/* Pins */}
+      <PinDot pin={pinD3} rot={comp.rot} onPointerDown={onPinPointerDown} onHover={onPinHover} isHovered={hoveredPinId === 'D3'} />
+      <PinDot pin={pinD2} rot={comp.rot} onPointerDown={onPinPointerDown} onHover={onPinHover} isHovered={hoveredPinId === 'D2'} />
+      <PinDot pin={pinD1} rot={comp.rot} onPointerDown={onPinPointerDown} onHover={onPinHover} isHovered={hoveredPinId === 'D1'} />
+      <PinDot pin={pinD0} rot={comp.rot} onPointerDown={onPinPointerDown} onHover={onPinHover} isHovered={hoveredPinId === 'D0'} />
+    </g>
+  );
+};

@@ -157,10 +157,21 @@ export function runLogicSimulation(circuit: CircuitState): LogicSimulationResult
 
   // Register all pins of components in circuit
   for (const c of circuit.components) {
-    if (c.type === 'logic_switch' || c.type === 'logic_push_button' || c.type === 'logic_high' || c.type === 'logic_low') {
+    if (
+      c.type === 'logic_switch' ||
+      c.type === 'logic_push_button' ||
+      c.type === 'logic_high' ||
+      c.type === 'logic_low' ||
+      c.type === 'logic_clock'
+    ) {
       registerPin(c.id, 'Q');
     } else if (c.type === 'logic_led') {
       registerPin(c.id, 'in');
+    } else if (c.type === 'logic_7segment') {
+      registerPin(c.id, 'D0');
+      registerPin(c.id, 'D1');
+      registerPin(c.id, 'D2');
+      registerPin(c.id, 'D3');
     } else if (c.type === 'logic_gate') {
       const inputsCount = c.props.inputsCount || (c.props.gateType === 'NOT' ? 1 : 2);
       const pinLetters = ['A', 'B', 'C', 'D'].slice(0, inputsCount);
@@ -168,6 +179,31 @@ export function runLogicSimulation(circuit: CircuitState): LogicSimulationResult
         registerPin(c.id, p);
       }
       registerPin(c.id, 'Y');
+    } else if (c.type === 'logic_flip_flop') {
+      const kind = (c.props.kind || 'D').toUpperCase();
+      if (kind === 'JK') {
+        registerPin(c.id, 'J');
+        registerPin(c.id, 'K');
+      } else if (kind === 'T') {
+        registerPin(c.id, 'T');
+      } else {
+        registerPin(c.id, 'D');
+      }
+      registerPin(c.id, 'CLK');
+      registerPin(c.id, 'Q');
+      registerPin(c.id, 'NQ');
+      if (c.props.hasClr) {
+        registerPin(c.id, 'CLR');
+      }
+    }
+  }
+
+  // Initialize flip-flop qState if not set
+  for (const c of circuit.components) {
+    if (c.type === 'logic_flip_flop') {
+      if (c.props.qState === undefined) {
+        c.props.qState = c.props.initialState ?? 0;
+      }
     }
   }
 
@@ -181,136 +217,230 @@ export function runLogicSimulation(circuit: CircuitState): LogicSimulationResult
     });
   };
 
-  // Track initial driver states for components
-  const fixedDrivers: Record<string, LogicValue> = {};
-  for (const c of circuit.components) {
-    if (c.type === 'logic_switch' || c.type === 'logic_push_button') {
-      fixedDrivers[`${c.id}:Q`] = c.props.state ? 1 : 0;
-    } else if (c.type === 'logic_high') {
-      fixedDrivers[`${c.id}:Q`] = 1;
-    } else if (c.type === 'logic_low') {
-      fixedDrivers[`${c.id}:Q`] = 0;
+  // Helper to get driver states of fixed components and flip-flops
+  const getFixedAndMemoryDrivers = (): Record<string, LogicValue> => {
+    const drivers: Record<string, LogicValue> = {};
+    for (const c of circuit.components) {
+      if (c.type === 'logic_switch' || c.type === 'logic_push_button' || c.type === 'logic_clock') {
+        drivers[`${c.id}:Q`] = c.props.state ? 1 : 0;
+      } else if (c.type === 'logic_high') {
+        drivers[`${c.id}:Q`] = 1;
+      } else if (c.type === 'logic_low') {
+        drivers[`${c.id}:Q`] = 0;
+      } else if (c.type === 'logic_flip_flop') {
+        const qVal: LogicValue = (c.props.qState !== undefined) ? c.props.qState : (c.props.initialState ?? 0);
+        drivers[`${c.id}:Q`] = qVal;
+        drivers[`${c.id}:NQ`] = qVal === 1 ? 0 : qVal === 0 ? 1 : 'X';
+      }
     }
-  }
-
-  // Initialize gate output drivers.
-  // When a gate feeds into itself (e.g. NOT gate Y -> A), initializing with previous or default 0
-  // allows physical feedback oscillation to trigger rather than stalling at X.
-  const gateDrivers: Record<string, LogicValue> = {};
-  for (const c of circuit.components) {
-    if (c.type === 'logic_gate') {
-      gateDrivers[`${c.id}:Y`] = 0;
-    }
-  }
+    return drivers;
+  };
 
   let netValues: Record<string, LogicValue> = {};
   let pinValues: Record<string, LogicValue> = {};
   let isOscillating = false;
-  let iteration = 0;
-  const MAX_ITERATIONS = 50;
+  let warning: string | undefined;
 
-  // History to detect cycling oscillation
-  const stateHistory: string[] = [];
+  let seqIteration = 0;
+  const MAX_SEQ_ITERATIONS = 100;
 
-  while (iteration < MAX_ITERATIONS) {
-    iteration++;
+  // Sequential update loop (cascading flip-flops, ripple counters, asynchronous resets)
+  while (seqIteration < MAX_SEQ_ITERATIONS) {
+    seqIteration++;
 
-    // Step A: For each net, collect all driver pins
-    const newNetValues: Record<string, LogicValue> = {};
-
-    for (const netId of Object.keys(netPins)) {
-      const pinsOnNet = netPins[netId];
-      const driversOnNet: LogicValue[] = [];
-
-      for (const p of pinsOnNet) {
-        if (p in fixedDrivers) {
-          driversOnNet.push(fixedDrivers[p]);
-        } else if (p in gateDrivers) {
-          // A gate Y pin is a driver ONLY if it has an active input or has been evaluated
-          driversOnNet.push(gateDrivers[p]);
-        }
-      }
-
-      // Check conflict or value
-      const hasOne = driversOnNet.some((d) => d === 1);
-      const hasZero = driversOnNet.some((d) => d === 0);
-      const hasConflict = driversOnNet.some((d) => d === 'CONFLICT') || (hasOne && hasZero);
-
-      if (hasConflict) {
-        newNetValues[netId] = 'CONFLICT';
-      } else if (hasOne) {
-        newNetValues[netId] = 1;
-      } else if (hasZero) {
-        newNetValues[netId] = 0;
-      } else {
-        newNetValues[netId] = 'X';
-      }
-    }
-
-    // Step B: Update all pin values from their net values
-    const newPinValues: Record<string, LogicValue> = {};
-    for (const [pKey, netId] of Object.entries(pinToNet)) {
-      newPinValues[pKey] = newNetValues[netId] ?? 'X';
-    }
-
-    // Step C: Update gate outputs for next iteration
-    let gatesChanged = false;
+    // Step A: Combinatorial evaluation until gates and nets stabilize
+    const fixedDrivers = getFixedAndMemoryDrivers();
+    const gateDrivers: Record<string, LogicValue> = {};
     for (const c of circuit.components) {
       if (c.type === 'logic_gate') {
-        const inputs = getGateInputs(c, newPinValues);
-        const out = evaluateGate(c.props.gateType || 'AND', inputs);
-        const yKey = `${c.id}:Y`;
-        if (gateDrivers[yKey] !== out) {
-          gateDrivers[yKey] = out;
-          gatesChanged = true;
+        gateDrivers[`${c.id}:Y`] = 0;
+      }
+    }
+
+    let combIteration = 0;
+    const MAX_COMB_ITERATIONS = 50;
+    const stateHistory: string[] = [];
+
+    while (combIteration < MAX_COMB_ITERATIONS) {
+      combIteration++;
+      const newNetValues: Record<string, LogicValue> = {};
+
+      for (const netId of Object.keys(netPins)) {
+        const pinsOnNet = netPins[netId];
+        const driversOnNet: LogicValue[] = [];
+
+        for (const p of pinsOnNet) {
+          if (p in fixedDrivers) {
+            driversOnNet.push(fixedDrivers[p]);
+          } else if (p in gateDrivers) {
+            driversOnNet.push(gateDrivers[p]);
+          }
+        }
+
+        const hasOne = driversOnNet.some((d) => d === 1);
+        const hasZero = driversOnNet.some((d) => d === 0);
+        const hasConflict = driversOnNet.some((d) => d === 'CONFLICT') || (hasOne && hasZero);
+
+        if (hasConflict) {
+          newNetValues[netId] = 'CONFLICT';
+        } else if (hasOne) {
+          newNetValues[netId] = 1;
+        } else if (hasZero) {
+          newNetValues[netId] = 0;
+        } else {
+          newNetValues[netId] = 'X';
+        }
+      }
+
+      const newPinValues: Record<string, LogicValue> = {};
+      for (const [pKey, netId] of Object.entries(pinToNet)) {
+        newPinValues[pKey] = newNetValues[netId] ?? 'X';
+      }
+
+      let gatesChanged = false;
+      for (const c of circuit.components) {
+        if (c.type === 'logic_gate') {
+          const inputs = getGateInputs(c, newPinValues);
+          const out = evaluateGate(c.props.gateType || 'AND', inputs);
+          const yKey = `${c.id}:Y`;
+          if (gateDrivers[yKey] !== out) {
+            gateDrivers[yKey] = out;
+            gatesChanged = true;
+          }
+        }
+      }
+
+      let netsChanged = false;
+      for (const [netId, val] of Object.entries(newNetValues)) {
+        if (netValues[netId] !== val) {
+          netsChanged = true;
+          break;
+        }
+      }
+
+      netValues = newNetValues;
+      pinValues = newPinValues;
+
+      if (!netsChanged && !gatesChanged) {
+        break;
+      }
+
+      const snapshotKey = Object.entries(netValues)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([k, v]) => `${k}=${v}`)
+        .join(';');
+
+      if (stateHistory.includes(snapshotKey) && combIteration > 3) {
+        isOscillating = true;
+        break;
+      }
+      stateHistory.push(snapshotKey);
+    }
+
+    if (combIteration >= MAX_COMB_ITERATIONS) {
+      isOscillating = true;
+    }
+
+    if (isOscillating) {
+      warning = 'Mạch dao động / vòng phản hồi không ổn định';
+      for (const netId of Object.keys(netValues)) {
+        netValues[netId] = 'X';
+      }
+      for (const pKey of Object.keys(pinValues)) {
+        pinValues[pKey] = 'X';
+      }
+      break;
+    }
+
+    // Step B: Sequential edge detection and sampling for Flip-Flops
+    const nextFFStates: Record<string, { q: LogicValue; triggered: boolean; clkVal: LogicValue }> = {};
+
+    for (const c of circuit.components) {
+      if (c.type === 'logic_flip_flop') {
+        const currentQ: LogicValue = (c.props.qState !== undefined) ? c.props.qState : (c.props.initialState ?? 0);
+        const isFalling = c.props.triggerEdge === 'falling';
+        const hasClr = Boolean(c.props.hasClr);
+
+        const clrVal = hasClr ? (pinValues[`${c.id}:CLR`] ?? 'X') : 1;
+        const clkVal = pinValues[`${c.id}:CLK`] ?? 'X';
+        const prevClk = (c.props.lastClk !== undefined) ? c.props.lastClk : clkVal;
+
+        let isEdge = false;
+        if (isFalling) {
+          if (prevClk === 1 && clkVal === 0) isEdge = true;
+        } else {
+          if (prevClk === 0 && clkVal === 1) isEdge = true;
+        }
+
+        let newQ = currentQ;
+        let triggered = false;
+
+        if (isEdge) {
+          triggered = true;
+          const kind = (c.props.kind || 'D').toUpperCase();
+          if (kind === 'D') {
+            const dVal = pinValues[`${c.id}:D`] ?? 'X';
+            newQ = (dVal === 'X' || dVal === 'CONFLICT') ? 'X' : dVal;
+          } else if (kind === 'T') {
+            const tVal = pinValues[`${c.id}:T`] ?? 'X';
+            if (tVal === 1) {
+              newQ = currentQ === 1 ? 0 : currentQ === 0 ? 1 : 'X';
+            } else if (tVal === 0) {
+              newQ = currentQ;
+            } else {
+              newQ = 'X';
+            }
+          } else if (kind === 'JK') {
+            const jVal = pinValues[`${c.id}:J`] ?? 'X';
+            const kVal = pinValues[`${c.id}:K`] ?? 'X';
+            if (jVal === 0 && kVal === 0) {
+              newQ = currentQ;
+            } else if (jVal === 0 && kVal === 1) {
+              newQ = 0;
+            } else if (jVal === 1 && kVal === 0) {
+              newQ = 1;
+            } else if (jVal === 1 && kVal === 1) {
+              newQ = currentQ === 1 ? 0 : currentQ === 0 ? 1 : 'X';
+            } else {
+              newQ = 'X';
+            }
+          }
+        }
+
+        // Asynchronous active-low CLR override
+        if (hasClr && clrVal === 0) {
+          newQ = 0;
+        }
+
+        nextFFStates[c.id] = { q: newQ, triggered, clkVal };
+      }
+    }
+
+    // Step C: Apply all new Q values simultaneously
+    let anyQChanged = false;
+    for (const c of circuit.components) {
+      if (c.type === 'logic_flip_flop' && nextFFStates[c.id]) {
+        const next = nextFFStates[c.id];
+        const oldQ = (c.props.qState !== undefined) ? c.props.qState : (c.props.initialState ?? 0);
+        if (next.q !== oldQ) {
+          anyQChanged = true;
+        }
+        c.props.qState = next.q;
+        c.props.lastClk = next.clkVal;
+        if (next.triggered) {
+          c.props.edgeCount = (c.props.edgeCount || 0) + 1;
         }
       }
     }
 
-    // Check convergence: did net values change?
-    let netsChanged = false;
-    for (const [netId, val] of Object.entries(newNetValues)) {
-      if (netValues[netId] !== val) {
-        netsChanged = true;
-        break;
-      }
-    }
-
-    netValues = newNetValues;
-    pinValues = newPinValues;
-
-    if (!netsChanged && !gatesChanged) {
-      // Stable state reached!
+    // If no Q changed, we have stabilized!
+    if (!anyQChanged) {
       break;
     }
-
-    // Fingerprint current state to detect cyclic oscillation
-    const snapshotKey = Object.entries(netValues)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([k, v]) => `${k}=${v}`)
-      .join(';');
-
-    if (stateHistory.includes(snapshotKey) && iteration > 3) {
-      isOscillating = true;
-      break;
-    }
-    stateHistory.push(snapshotKey);
   }
 
-  if (iteration >= MAX_ITERATIONS) {
-    isOscillating = true;
-  }
-
-  let warning: string | undefined;
-  if (isOscillating) {
-    warning = 'Mạch dao động / vòng phản hồi không ổn định';
-    // Set nets involved in oscillation to 'X'
-    for (const netId of Object.keys(netValues)) {
-      netValues[netId] = 'X';
-    }
-    for (const pKey of Object.keys(pinValues)) {
-      pinValues[pKey] = 'X';
-    }
+  if (seqIteration >= MAX_SEQ_ITERATIONS) {
+    warning = 'Mạch dãy không ổn định';
   }
 
   // Map wire values from their connected pins
@@ -321,7 +451,7 @@ export function runLogicSimulation(circuit: CircuitState): LogicSimulationResult
     wireValues[w.id] = (netId ? netValues[netId] : 'X') ?? 'X';
   }
 
-  // Component states (e.g. LED on/off/X)
+  // Component states
   const componentStates: Record<string, any> = {};
   for (const c of circuit.components) {
     if (c.type === 'logic_led') {
@@ -337,6 +467,42 @@ export function runLogicSimulation(circuit: CircuitState): LogicSimulationResult
       componentStates[c.id] = {
         output: yVal,
       };
+    } else if (c.type === 'logic_flip_flop') {
+      const qVal: LogicValue = (c.props.qState !== undefined) ? c.props.qState : (c.props.initialState ?? 0);
+      componentStates[c.id] = {
+        q: qVal,
+        nq: qVal === 1 ? 0 : qVal === 0 ? 1 : 'X',
+        edgeCount: c.props.edgeCount || 0,
+        kind: c.props.kind || 'D',
+        triggerEdge: c.props.triggerEdge || 'rising',
+        hasClr: Boolean(c.props.hasClr),
+      };
+    } else if (c.type === 'logic_clock') {
+      componentStates[c.id] = {
+        state: c.props.state ? 1 : 0,
+        frequency: c.props.frequency || 1,
+      };
+    } else if (c.type === 'logic_7segment') {
+      const d0 = pinValues[`${c.id}:D0`];
+      const d1 = pinValues[`${c.id}:D1`];
+      const d2 = pinValues[`${c.id}:D2`];
+      const d3 = pinValues[`${c.id}:D3`];
+      let digit = '?';
+      if (
+        d0 === 'X' || d1 === 'X' || d2 === 'X' || d3 === 'X' ||
+        d0 === 'CONFLICT' || d1 === 'CONFLICT' || d2 === 'CONFLICT' || d3 === 'CONFLICT' ||
+        d0 === undefined || d1 === undefined || d2 === undefined || d3 === undefined
+      ) {
+        digit = '?';
+      } else {
+        const val = (d0 === 1 ? 1 : 0) + (d1 === 1 ? 2 : 0) + (d2 === 1 ? 4 : 0) + (d3 === 1 ? 8 : 0);
+        if (val >= 0 && val <= 9) {
+          digit = String(val);
+        } else {
+          digit = '-';
+        }
+      }
+      componentStates[c.id] = { digit, d0, d1, d2, d3 };
     }
   }
 
@@ -347,7 +513,7 @@ export function runLogicSimulation(circuit: CircuitState): LogicSimulationResult
     componentStates,
     isOscillating,
     warning,
-    iterationCount: iteration,
+    iterationCount: seqIteration,
   };
 }
 

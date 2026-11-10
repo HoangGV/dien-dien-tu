@@ -396,8 +396,35 @@ export const PropsPanel: React.FC<PropsPanelProps> = ({ isBottomSheet = false })
                 )}
               </div>
 
-              {/* 1. ĐO ĐẠC DỤNG CỤ ĐO (AMPE KẾ, VÔN KẾ, OÁT KẾ, ÔM KẾ, CÔNG TƠ ĐIỆN, DAO ĐỘNG KÍ) */}
-              {['ammeter', 'voltmeter', 'wattmeter', 'ohmmeter', 'kwh_meter', 'oscilloscope'].includes(selectedComp.type) ? (
+              {/* 1. ĐO ĐẠC DỤNG CỤ ĐO & MẠCH SỐ */}
+              {selectedComp.type === 'logic_flip_flop' ? (
+                <div className="space-y-2">
+                  <div className="bg-white border-2 border-black p-2 rounded space-y-1.5 shadow-[1px_1px_0_#000]">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-600 font-bold">Ngõ ra Q:</span>
+                      <span className={`px-2 py-0.5 font-mono font-black text-xs border border-black ${
+                        selectedComp.props.qState === 1 ? 'bg-[#2DB84D] text-white' : selectedComp.props.qState === 0 ? 'bg-[#EF4444] text-white' : 'bg-gray-200 text-black'
+                      }`}>
+                        {selectedComp.props.qState !== undefined ? selectedComp.props.qState : (selectedComp.props.initialState ?? 0)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-600 font-bold">Ngõ ra Q̅ (NQ):</span>
+                      <span className={`px-2 py-0.5 font-mono font-black text-xs border border-black ${
+                        selectedComp.props.qState === 1 ? 'bg-[#EF4444] text-white' : selectedComp.props.qState === 0 ? 'bg-[#2DB84D] text-white' : 'bg-gray-200 text-black'
+                      }`}>
+                        {selectedComp.props.qState === 1 ? 0 : selectedComp.props.qState === 0 ? 1 : 'X'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs pt-1 border-t border-black/10">
+                      <span className="text-gray-600 font-bold">Số cạnh kích:</span>
+                      <span className="font-mono font-black text-xs text-black">
+                        {selectedComp.props.edgeCount || 0}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ) : ['ammeter', 'voltmeter', 'wattmeter', 'ohmmeter', 'kwh_meter', 'oscilloscope'].includes(selectedComp.type) ? (
                 <div className="space-y-2">
                   {/* DAO ĐỘNG KÍ ẢO */}
                   {selectedComp.type === 'oscilloscope' && (() => {

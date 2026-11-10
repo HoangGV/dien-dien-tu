@@ -243,6 +243,63 @@ interface WorkspaceStore {
 let clipboard: { components: ComponentInstance[]; wires: Wire[] } | null = null;
 let recompileTimer: any = null;
 let lastUiThrottleTime = 0;
+let logicClockTimer: any = null;
+let logicClockSimTime = 0;
+
+function startLogicClockLoop() {
+  if (logicClockTimer) clearInterval(logicClockTimer);
+  let lastReal = performance.now();
+  logicClockTimer = setInterval(() => {
+    const store = useWorkspaceStore.getState();
+    if (!store.isSimulating || store.config.mode !== 'logic') {
+      stopLogicClockLoop();
+      return;
+    }
+    const now = performance.now();
+    const dtReal = (now - lastReal) / 1000;
+    lastReal = now;
+    const speed = store.timeSpeed || 1.0;
+    logicClockSimTime += dtReal * speed;
+
+    let anyClockToggled = false;
+    const updatedComponents = store.circuit.components.map(c => {
+      if (c.type === 'logic_clock') {
+        const freq = Number(c.props.frequency || 1);
+        const period = 1 / freq;
+        const phaseTime = ((logicClockSimTime % period) + period) % period;
+        const curState = phaseTime < period * 0.5;
+        if (Boolean(c.props.state) !== curState) {
+          anyClockToggled = true;
+          return {
+            ...c,
+            props: {
+              ...c.props,
+              state: curState,
+            },
+          };
+        }
+      }
+      return c;
+    });
+
+    if (anyClockToggled) {
+      useWorkspaceStore.setState({
+        circuit: {
+          ...store.circuit,
+          components: updatedComponents,
+        },
+      });
+      useWorkspaceStore.getState().evaluateLogic();
+    }
+  }, 25);
+}
+
+function stopLogicClockLoop() {
+  if (logicClockTimer) {
+    clearInterval(logicClockTimer);
+    logicClockTimer = null;
+  }
+}
 
 export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   activeSlug: WORKSPACE_HOUSEHOLD.slug,
@@ -329,6 +386,8 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
         if (savedVm === 'installation') initialViewMode = 'installation';
       } catch {}
     }
+
+    stopLogicClockLoop();
 
     set({
       activeSlug: slug,
@@ -437,6 +496,15 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   toggleSimulating: () => {
     const isNowSim = !get().isSimulating;
     if (isNowSim) {
+      if (get().config.mode === 'logic') {
+        set({
+          isSimulating: true,
+          statusMessage: 'Đang chạy mô phỏng xung nhịp mạch số',
+        });
+        startLogicClockLoop();
+        return;
+      }
+
       // 1. Kiểm tra lỗi vi phạm quy tắc mạch (lint)
       const warnings = get().runLint();
       const hasErrors = warnings.some(w => w.type === 'error');
@@ -467,26 +535,51 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
         });
       }
     } else {
+      stopLogicClockLoop();
       simulationService.pause();
       set({ isSimulating: false, statusMessage: 'ĐÃ DỪNG MÔ PHỎNG' });
     }
   },
 
   stopSimulating: () => {
+    stopLogicClockLoop();
     simulationService.pause();
     set({ isSimulating: false, statusMessage: 'ĐÃ DỪNG MÔ PHỎNG' });
   },
 
   resetSimulation: () => {
+    stopLogicClockLoop();
     simulationService.reset();
+    logicClockSimTime = 0;
     const { circuit } = get();
     const nextComponents = circuit.components.map(c => {
       if (c.type === 'kwh_meter') {
         return { ...c, props: { ...c.props, kwh: 0 } };
       }
+      if (c.type === 'logic_flip_flop') {
+        return {
+          ...c,
+          props: {
+            ...c.props,
+            qState: c.props.initialState ?? 0,
+            edgeCount: 0,
+            lastClk: undefined,
+          },
+        };
+      }
+      if (c.type === 'logic_clock') {
+        return {
+          ...c,
+          props: {
+            ...c.props,
+            state: false,
+          },
+        };
+      }
       return c;
     });
     set({ circuit: { ...circuit, components: nextComponents }, isSimulating: false, simTime: 0, statusMessage: null });
+    get().evaluateLogic();
   },
 
   toggleShowMeterOverlay: () => {
