@@ -1,0 +1,68 @@
+import { SafetyMeasure } from './types';
+
+export const ALL_SAFETY_MEASURES: SafetyMeasure[] = [
+  {
+    id: 'bien_phap_cach_dien',
+    title: 'Cách điện an toàn',
+    description: 'Bọc kín toàn bộ phần kim loại mang điện bằng vật liệu cách điện chất lượng cao (nhựa PVC, cao su, sứ). Luôn thay thế hoặc dùng băng dính cách điện quấn kín ngay khi phát hiện dây dẫn bị tróc vỏ, rạn nứt. Không sử dụng dây dẫn điện trần trong nhà ở.',
+    hazardIds: ['pk_exposed_wire', 'bpt_pinched_cord'],
+    simulationPresetId: 'hh_k',
+    simulationTitle: 'Mô phỏng Dây hở chập mạch (Preset k)',
+    reviewStatus: 'cần GV đối chiếu',
+  },
+  {
+    id: 'bien_phap_noi_dat',
+    title: 'Nối đất bảo vệ vỏ thiết bị (Dây PE)',
+    description: 'Nối toàn bộ vỏ kim loại của các thiết bị có công suất lớn (máy giặt, tủ lạnh, bình nóng lạnh, quạt cây) với dây tiếp địa PE dẫn xuống cọc đất. Khi có sự cố rò điện ra vỏ, dòng điện sẽ được tiêu tán thẳng xuống đất thay vì truyền qua người. Điện áp tiếp xúc trên cơ thể người nhờ đó giảm xuống mức an toàn.',
+    hazardIds: ['pk_casing_leak', 'bpt_water_heater_no_elcb'],
+    simulationPresetId: 'hh_c',
+    simulationTitle: 'Mô phỏng Sự cố rò điện vỏ kim loại (Preset c)',
+    reviewStatus: 'cần GV đối chiếu',
+  },
+  {
+    id: 'bien_phap_aptomat_dinh_muc',
+    title: 'Dùng Aptomat / Cầu chì đúng định mức',
+    description: 'Chọn tiết diện dây dẫn và dòng định mức của Aptomat (MCB) hoặc dây chảy cầu chì phù hợp với công suất tiêu thụ của các thiết bị trong nhánh. Không tự ý thay dây chì bằng dây đồng hay dây thép to hơn. Aptomat sẽ tự động ngắt điện nhanh chóng khi xảy ra quá tải hoặc ngắn mạch để ngăn ngừa hỏa hoạn.',
+    hazardIds: ['pk_overload', 'pk_exposed_wire'],
+    simulationPresetId: 'hh_j',
+    simulationTitle: 'Mô phỏng Quá tải ổ cắm mạng điện (Preset j)',
+    reviewStatus: 'cần GV đối chiếu',
+  },
+  {
+    id: 'bien_phap_elcb_chong_ro',
+    title: 'Dùng Aptomat chống rò (ELCB / RCBO)',
+    description: 'Lắp đặt Aptomat chống dòng rò có dòng tác động ≤ 30 mA cho các khu vực ẩm ướt như bình nước nóng, bồn tắm và máy bơm. Thiết bị so sánh liên tục dòng điện trên dây pha và dây trung tính; chỉ cần chênh lệch quá 30 mA do rò điện qua người xuống đất, ELCB sẽ ngắt điện tức thì trong vòng 20 mili giây. Thường xuyên ấn nút TEST trên thân máy mỗi tháng để kiểm tra độ nhạy.',
+    hazardIds: ['bpt_water_heater_no_elcb', 'pk_casing_leak'],
+    simulationPresetId: 'hh_o',
+    simulationTitle: 'Mô phỏng Bảo vệ rò điện bằng ELCB (Preset o)',
+    reviewStatus: 'cần GV đối chiếu',
+  },
+  {
+    id: 'bien_phap_khong_tay_uot',
+    title: 'Không dùng thiết bị điện khi tay ướt',
+    description: 'Nước làm giảm điện trở tiếp xúc của da từ hàng nghìn ôm xuống chỉ còn vài trăm ôm, khiến dòng điện chạy qua tim tăng vọt gây tử vong. Tuyệt đối không cắm/rút phích, không bật công tắc khi tay còn ướt hoặc khi chân trần dính nước. Luôn dùng khăn khô lau thật sạch tay trước khi chạm vào đồ dùng điện.',
+    hazardIds: ['bpt_wet_hands', 'bpt_outlet_near_sink'],
+    reviewStatus: 'cần GV đối chiếu',
+  },
+  {
+    id: 'bien_phap_tranh_xa_day_tran',
+    title: 'Không đến gần dây điện trần, không chạm dây điện đứt',
+    description: 'Giữ khoảng cách an toàn với đường dây tải điện trên cao và các trạm biến áp (tối thiểu 10 m đối với đường dây trung/cao thế). Khi phát hiện dây điện bị đứt rơi xuống mặt đất hoặc vũng nước, tuyệt đối không được lại gần trong bán kính 10 mét để tránh điện áp bước nguy hiểm. Cử người cảnh giới từ xa và lập tức báo cơ quan điện lực xử lý khẩn cấp.',
+    hazardIds: ['nt_broken_wire', 'nt_kite_flying', 'nt_under_tree_rain', 'nt_fishing_rod'],
+    reviewStatus: 'cần GV đối chiếu',
+  },
+  {
+    id: 'bien_phap_kiem_tra_thiet_bi',
+    title: 'Kiểm tra thiết bị định kỳ trước khi dùng',
+    description: 'Thường xuyên quan sát tình trạng phích cắm, dây dẫn, ổ cắm và vỏ ngoài của thiết bị điện trước khi cấp điện. Không sử dụng các đồ dùng điện có mùi khét, phát ra tiếng kêu lạ hoặc có tia lửa điện bất thường. Bảo dưỡng, tra dầu định kỳ và làm sạch bụi bẩn bám trên động cơ để thiết bị vận hành êm ái.',
+    hazardIds: ['pk_exposed_wire', 'bpt_pinched_cord', 'pk_overload'],
+    reviewStatus: 'cần GV đối chiếu',
+  },
+  {
+    id: 'bien_phap_che_chan_o_cam',
+    title: 'Che chắn ổ cắm điện khi có trẻ nhỏ',
+    description: 'Bố trí các ổ cắm điện trên độ cao ngoài tầm với của trẻ nhỏ (từ 1,4 m trở lên). Đối với ổ cắm tầm thấp, sử dụng loại ổ cắm có màn che tự đóng hoặc dùng nắp bịt bằng nhựa cách điện chuyên dụng đậy kín các lỗ cắm. Giáo dục trẻ em không bao giờ được dùng que kim loại chọc vào các khe, lỗ của đồ điện.',
+    hazardIds: ['pk_no_cover_socket'],
+    reviewStatus: 'cần GV đối chiếu',
+  },
+];

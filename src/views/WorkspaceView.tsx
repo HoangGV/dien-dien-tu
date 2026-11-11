@@ -11,6 +11,7 @@ import { LintModal } from '../components/modals/LintModal';
 import { OscilloscopePanel } from '../components/ui/OscilloscopePanel';
 import { useOnlineStatus } from '../components/pwa/useOnlineStatus';
 import { ExplainerView } from '../components/explainer/ExplainerView';
+import { SafetyView } from '../components/safety/SafetyView';
 
 export interface WorkspaceViewProps {
   slug: string;
@@ -185,14 +186,16 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ slug }) => {
     return (
       <div className="h-[100dvh] w-screen flex flex-col overflow-hidden bg-[#FAFAFA] select-none">
         <TopBar svgRef={svgRef} />
-        <ExplainerView />
+        {config.slug === 'an-toan-dien' ? <SafetyView /> : <ExplainerView />}
         <footer className="h-[22px] bg-[#EEF2FF] border-t-2 border-black px-2 flex items-center justify-between text-[11px] font-black text-black select-none z-30 shrink-0">
           <div className="flex items-center gap-2">
             <span className="bg-[#FFD84D] text-black px-1.5 py-0.5 border border-black font-black text-[10px] uppercase shadow-[1px_1px_0_#000]">
-              LỚP 6: ĐỒ DÙNG ĐIỆN GIA ĐÌNH
+              {config.slug === 'an-toan-dien' ? 'LỚP 8: AN TOÀN ĐIỆN' : 'LỚP 6: ĐỒ DÙNG ĐIỆN GIA ĐÌNH'}
             </span>
             <span className="hidden sm:inline text-gray-700 text-[10px] font-bold">
-              Công nghệ GDPT 2018: Cấu tạo • Sơ đồ khối • Nguyên lí • Sử dụng • Điện năng tiêu thụ
+              {config.slug === 'an-toan-dien'
+                ? 'Công nghệ GDPT 2018: Mối nguy • Biện pháp • Dụng cụ bảo vệ • Sơ cứu người bị tai nạn điện'
+                : 'Công nghệ GDPT 2018: Cấu tạo • Sơ đồ khối • Nguyên lí • Sử dụng • Điện năng tiêu thụ'}
             </span>
           </div>
           <div className="flex items-center gap-2 text-[10px] text-gray-700 shrink-0">

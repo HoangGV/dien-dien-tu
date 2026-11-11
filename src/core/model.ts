@@ -5,6 +5,7 @@
 import React from 'react';
 
 import { ExplainerWorkspaceState } from '../content/do-dung-dien/types';
+import { SafetyWorkspaceState } from '../content/an-toan-dien/types';
 
 export type WorkspaceMode = 'rms' | 'dc' | 'logic' | 'explainer';
 export type CircuitViewMode = 'schematic' | 'installation';
@@ -155,6 +156,7 @@ export interface CircuitState {
   viewport: ViewportState;
   floorPlan?: FloorPlanData;
   explainerState?: ExplainerWorkspaceState;
+  safetyState?: SafetyWorkspaceState;
 }
 
 export interface Net {

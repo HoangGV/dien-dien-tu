@@ -55,6 +55,9 @@ export const TopBar: React.FC<TopBarProps> = ({ svgRef }) => {
   const {
     circuit,
     config,
+    loadWorkspace,
+    safetyReturnSlug,
+    clearSafetyReturn,
     isSimulating,
     soundEnabled,
     allowDiagonalWires,
@@ -431,6 +434,23 @@ export const TopBar: React.FC<TopBarProps> = ({ svgRef }) => {
           >
             {!isUltraNarrow ? 'TRANG CHỦ' : ''}
           </NeoButton>
+
+          {safetyReturnSlug && (
+            <NeoButton
+              variant="warning"
+              onClick={async () => {
+                const target = safetyReturnSlug;
+                clearSafetyReturn();
+                await loadWorkspace(target);
+                window.location.hash = '#/mo-phong/' + target;
+              }}
+              icon={<RotateCcw size={13} strokeWidth={3} />}
+              title="Quay lại bài học An toàn điện"
+              className="!px-2 !h-[26px] font-black text-[11px] !bg-[#FFD84D] !text-black shadow-[1px_1px_0_#000]"
+            >
+              ◀ QUAY LẠI AN TOÀN ĐIỆN
+            </NeoButton>
+          )}
 
           <span className="h-4 w-[2px] bg-black mx-0.5" />
 

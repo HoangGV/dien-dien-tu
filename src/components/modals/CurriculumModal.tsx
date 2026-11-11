@@ -166,6 +166,25 @@ const CURRICULUM_DATA: Record<string, WorkspaceCurriculumInfo> = {
       'Đồ dùng điện 3 pha hoặc thiết bị công nghiệp nặng.',
     ],
   },
+  'an-toan-dien': {
+    title: 'An toàn điện',
+    grades: 'Lớp 8',
+    coveredPoints: [
+      {
+        gradeTag: 'Lớp 8',
+        topic: 'An toàn điện (Chương trình GDPT 2018 - Công nghệ 8)',
+        items: [
+          'Nhận biết một số nguyên nhân gây tai nạn điện phổ biến trong sinh hoạt và lao động (quá tải, ngắn mạch, rò điện ra vỏ, vi phạm khoảng cách an toàn lưới điện cao áp).',
+          'Trình bày một số biện pháp an toàn điện (cách điện, nối đất bảo vệ, dùng aptomat định mức, aptomat chống rò ELCB, không dùng điện khi tay ướt, che chắn ổ cắm khi có trẻ nhỏ).',
+          'Sử dụng và kiểm tra được một số dụng cụ bảo vệ an toàn điện (găng tay cách điện, ủng cách điện, thảm cách điện, kìm/tua vít cán cách điện, bút thử điện).',
+          'Thực hiện được một số động tác cơ bản sơ cứu người bị tai nạn điện (thứ tự 5 bước chuẩn: tách nguồn điện -> gọi 115 -> kiểm tra hô hấp -> hồi sinh CPR ép tim/thổi ngạt -> giữ ấm đưa đi viện).',
+        ],
+      },
+    ],
+    unsupportedPoints: [
+      'Chưa hỗ trợ: thực hành sơ cứu thật và dùng dụng cụ thật (phần mềm chỉ ôn thứ tự và nhận biết mô phỏng).',
+    ],
+  },
 };
 
 export const CurriculumModal: React.FC<CurriculumModalProps> = ({ isOpen, onClose }) => {

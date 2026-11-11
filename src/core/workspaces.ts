@@ -216,12 +216,30 @@ export const WORKSPACE_EXPLAINER: WorkspaceConfig = {
 • Tính điện năng tiêu thụ: Công thức E = P · t / 1000 (với P tính bằng W, t tính bằng giờ).`,
 };
 
+export const WORKSPACE_SAFETY: WorkspaceConfig = {
+  slug: 'an-toan-dien',
+  title: 'An toàn điện',
+  grades: 'Lớp 8',
+  description: 'Bài học tương tác về an toàn điện theo chương trình GDPT 2018 (Công nghệ 8): nhận biết mối nguy hiểm trong tình huống thực tế, các biện pháp an toàn điện, dụng cụ bảo vệ cách điện, quy trình các bước sơ cứu người bị điện giật và bài kiểm tra kiến thức.',
+  mode: 'explainer',
+  paletteIds: [],
+  presets: [],
+  helpText: `HƯỚNG DẪN AN TOÀN ĐIỆN (LỚP 8 - CÔNG NGHỆ GDPT 2018):
+• 5 Tab học tập: [MỐI NGUY] [BIỆN PHÁP] [DỤNG CỤ] [SƠ CỨU] [KIỂM TRA].
+• Mối nguy: Tìm 12 mối nguy tiềm ẩn trong 3 cảnh (Phòng khách, Bếp & Phòng tắm, Ngoài trời). Bấm [GỢI Ý] để tìm điểm chưa phát hiện. Bấm [XEM TRONG MÔ PHỎNG] để sang mạng điện trong nhà quan sát hiện tượng.
+• Biện pháp: Xem 8 nguyên tắc bảo vệ an toàn điện sống còn.
+• Dụng cụ: Tìm hiểu tác dụng, cách dùng và kiểm tra trước khi dùng các trang bị cách điện.
+• Sơ cứu: Luyện tập sắp xếp 5 bước sơ cứu người bị điện giật đúng thứ tự chuẩn y tế và làm bài Nên/Không nên.
+• Kiểm tra: 10 câu hỏi trắc nghiệm đánh giá năng lực an toàn điện.`,
+};
+
 export const WORKSPACE_REGISTRY: WorkspaceConfig[] = [
   WORKSPACE_HOUSEHOLD,
   WORKSPACE_ELECTRONICS,
   WORKSPACE_SENSOR_CONTROL,
   WORKSPACE_DIGITAL_LOGIC,
   WORKSPACE_EXPLAINER,
+  WORKSPACE_SAFETY,
   WORKSPACE_TEST,
 ];
 

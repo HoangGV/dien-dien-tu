@@ -49,6 +49,14 @@ import {
 } from '../content/do-dung-dien/registry';
 import { formatVnNumber } from '../components/explainer/EnergyCalculator';
 import { ExplainerWorkspaceState } from '../content/do-dung-dien/types';
+import {
+  ALL_SAFETY_HAZARDS,
+  ALL_SAFETY_MEASURES,
+  ALL_SAFETY_TOOLS,
+  CORRECT_FIRST_AID_STEPS,
+  ALL_SAFETY_QUIZ_QUESTIONS,
+} from '../content/an-toan-dien';
+import { SafetyWorkspaceState } from '../content/an-toan-dien/types';
 
 // Helper to make a wire
 function makeWire(
@@ -3079,6 +3087,240 @@ export const ALL_SOLVER_TEST_CASES: SolverTestCase[] = [
           importedCircuit.explainerState.calcRows.length === 2 &&
           importedCircuit.explainerState.calcRows[1].powerWatts === 9 &&
           importedCircuit.explainerState.unitPrice === 2000
+      );
+
+      const passed = reloadMatches && ioRoundtripMatches;
+      return {
+        actualStr: `Khôi phục sau tải lại: ${reloadMatches ? 'ĐẠT' : 'LỖI'}; Xuất/nhập JSON khứ hồi: ${ioRoundtripMatches ? 'ĐẠT' : 'LỖI'}`,
+        passed,
+      };
+    },
+  }),
+  defineTestCase({
+    id: 'case77_safety_config_and_presets_integrity',
+    stt: 77,
+    group: 'Mạch mẫu',
+    name: 'Ca 77: Mọi cấu hình an toàn hợp lệ: đủ trường bắt buộc, đủ nguyên nhân/hậu quả/phòng tránh, liên kết mô phỏng tồn tại',
+    expectedStr: '12 mối nguy, 8 biện pháp, 5 dụng cụ, 5 bước sơ cứu, 10 câu hỏi; 100% trường hợp lệ; 4 mẫu mô phỏng tồn tại (hh_j, hh_k, hh_c, hh_o)',
+    toleranceStr: 'Hợp lệ 100%',
+    createCircuit: () => ({ components: [], wires: [], junctions: [], viewport: { x: 0, y: 0, zoom: 1 } }),
+    evaluate: () => {
+      // 1. Hazards check (12 items)
+      const hazardsValid =
+        ALL_SAFETY_HAZARDS.length === 12 &&
+        ALL_SAFETY_HAZARDS.every(
+          (h) =>
+            Boolean(h.id) &&
+            Boolean(h.sceneId) &&
+            h.name.trim().length > 0 &&
+            h.nguyenNhan.trim().length > 0 &&
+            h.hauQua.trim().length > 0 &&
+            h.phongTranh.trim().length > 0 &&
+            Boolean(h.hotspot) &&
+            h.reviewStatus === 'cần GV đối chiếu'
+        );
+
+      // Check sim presets: hh_j, hh_k, hh_c, hh_o
+      const simPresets = ALL_SAFETY_HAZARDS.filter((h) => h.simulationPresetId).map((h) => h.simulationPresetId as string);
+      const expectedSimIds = ['hh_j', 'hh_k', 'hh_c', 'hh_o'];
+      const simPresetsExist =
+        expectedSimIds.every((id) => simPresets.includes(id)) &&
+        simPresets.every((id) => HOUSEHOLD_PRESETS.some((p) => p.id === id));
+
+      // 2. Measures check (8 items)
+      const measuresValid =
+        ALL_SAFETY_MEASURES.length === 8 &&
+        ALL_SAFETY_MEASURES.every(
+          (m) =>
+            Boolean(m.id) &&
+            m.title.trim().length > 0 &&
+            m.description.trim().length > 0 &&
+            Array.isArray(m.hazardIds) &&
+            m.reviewStatus === 'cần GV đối chiếu' &&
+            (!m.simulationPresetId || HOUSEHOLD_PRESETS.some((p) => p.id === m.simulationPresetId))
+        );
+
+      // 3. Tools check (5 items)
+      const toolsValid =
+        ALL_SAFETY_TOOLS.length === 5 &&
+        ALL_SAFETY_TOOLS.every(
+          (t) =>
+            Boolean(t.id) &&
+            t.name.trim().length > 0 &&
+            t.tacDung.trim().length > 0 &&
+            t.cachDung.trim().length > 0 &&
+            t.kiemTra.trim().length > 0 &&
+            t.reviewStatus === 'cần GV đối chiếu'
+        );
+
+      // 4. First aid steps check (5 items)
+      const firstAidValid =
+        CORRECT_FIRST_AID_STEPS.length === 5 &&
+        CORRECT_FIRST_AID_STEPS.every(
+          (s, idx) =>
+            Boolean(s.id) &&
+            s.stepNumber === idx + 1 &&
+            s.title.trim().length > 0 &&
+            s.content.trim().length > 0 &&
+            s.reviewStatus === 'cần GV đối chiếu'
+        );
+
+      // 5. Quiz questions check (10 items)
+      const quizValid =
+        ALL_SAFETY_QUIZ_QUESTIONS.length === 10 &&
+        ALL_SAFETY_QUIZ_QUESTIONS.every(
+          (q) =>
+            Boolean(q.id) &&
+            q.question.trim().length > 0 &&
+            Array.isArray(q.options) &&
+            q.options.length === 4 &&
+            q.correctIndex >= 0 &&
+            q.correctIndex <= 3 &&
+            q.explanation.trim().length > 0 &&
+            q.reviewStatus === 'cần GV đối chiếu'
+        );
+
+      const passed =
+        hazardsValid &&
+        simPresetsExist &&
+        measuresValid &&
+        toolsValid &&
+        firstAidValid &&
+        quizValid;
+
+      return {
+        actualStr: `Mối nguy: ${hazardsValid ? 'ĐẠT' : 'LỖI'} (Mẫu mô phỏng: ${simPresetsExist ? 'ĐẠT' : 'LỖI'}); Biện pháp: ${measuresValid ? 'ĐẠT' : 'LỖI'}; Dụng cụ: ${toolsValid ? 'ĐẠT' : 'LỖI'}; Sơ cứu: ${firstAidValid ? 'ĐẠT' : 'LỖI'}; Trắc nghiệm: ${quizValid ? 'ĐẠT' : 'LỖI'}`,
+        passed,
+      };
+    },
+  }),
+  defineTestCase({
+    id: 'case78_first_aid_step_ordering_check',
+    stt: 78,
+    group: 'Mạch mẫu',
+    name: 'Ca 78: Bài sắp xếp sơ cứu: thứ tự đúng được chấp nhận; đảo bước 1 và 2 bị báo sai đúng chỗ',
+    expectedStr: 'Thứ tự đúng: 5/5 vị trí chính xác; Đảo bước 1 và 2: phát hiện sai đúng vị trí 0 (bước 1) và vị trí 1 (bước 2)',
+    toleranceStr: 'Chính xác 100%',
+    createCircuit: () => ({ components: [], wires: [], junctions: [], viewport: { x: 0, y: 0, zoom: 1 } }),
+    evaluate: () => {
+      const correctOrder = CORRECT_FIRST_AID_STEPS.map((s) => s.id);
+
+      // Check helper
+      const checkOrdering = (candidate: string[]) => {
+        const correctPositions: boolean[] = candidate.map(
+          (id, idx) => id === correctOrder[idx]
+        );
+        const incorrectIndices: number[] = correctPositions
+          .map((corr, idx) => (!corr ? idx : -1))
+          .filter((idx) => idx !== -1);
+        const isAllCorrect = incorrectIndices.length === 0;
+        return { isAllCorrect, incorrectIndices, correctPositions };
+      };
+
+      // 1. Correct test
+      const testCorrect = checkOrdering([...correctOrder]);
+      const correctAccepted = testCorrect.isAllCorrect && testCorrect.incorrectIndices.length === 0;
+
+      // 2. Swapped step 1 and step 2
+      const swappedOrder = [...correctOrder];
+      const temp = swappedOrder[0];
+      swappedOrder[0] = swappedOrder[1];
+      swappedOrder[1] = temp;
+
+      const testSwapped = checkOrdering(swappedOrder);
+      const swappedFlaggedCorrectly =
+        !testSwapped.isAllCorrect &&
+        testSwapped.incorrectIndices.length === 2 &&
+        testSwapped.incorrectIndices[0] === 0 &&
+        testSwapped.incorrectIndices[1] === 1 &&
+        testSwapped.correctPositions[2] === true &&
+        testSwapped.correctPositions[3] === true &&
+        testSwapped.correctPositions[4] === true;
+
+      const passed = correctAccepted && swappedFlaggedCorrectly;
+      return {
+        actualStr: `Thứ tự chuẩn: ${correctAccepted ? 'ĐẠT (5/5)' : 'LỖI'}; Đảo bước 1-2: ${swappedFlaggedCorrectly ? 'ĐẠT (báo sai đúng vị trí 1 và 2)' : 'LỖI'}`,
+        passed,
+      };
+    },
+  }),
+  defineTestCase({
+    id: 'case79_safety_state_persistence_and_io_roundtrip',
+    stt: 79,
+    group: 'Mạch mẫu',
+    name: 'Ca 79: Lưu rồi tải lại trang: giữ đúng tab, tiến độ hotspot đã tìm, thứ tự đang sắp xếp và điểm kiểm tra; xuất/nhập khứ hồi giống hệt',
+    expectedStr: 'Giữ tab, tiến độ mối nguy đã tìm, thứ tự sơ cứu, điểm trắc nghiệm; xuất/nhập khứ hồi khớp 100%',
+    toleranceStr: 'Khớp 100%',
+    createCircuit: () => ({ components: [], wires: [], junctions: [], viewport: { x: 0, y: 0, zoom: 1 } }),
+    evaluate: () => {
+      const originalSafetyState: SafetyWorkspaceState = {
+        activeTab: 'socuu',
+        activeSceneId: 'bep-phong-tam',
+        selectedHazardId: null,
+        discoveredHazardIds: ['pk_overload', 'bpt_wet_hands'],
+        firstAidStepIds: [
+          'step_2_call_115',
+          'step_1_disconnect',
+          'step_3_check_consciousness',
+          'step_4_cpr_rescue_breathing',
+          'step_5_recovery_position',
+        ],
+        firstAidChecked: true,
+        firstAidShouldAnswers: {},
+        quizAnswers: { q1: 1, q2: 2, q3: 0 },
+        quizScore: 9,
+        quizSubmitted: true,
+      };
+
+      const originalCircuit: CircuitState = {
+        components: [],
+        wires: [],
+        junctions: [],
+        viewport: { x: 0, y: 0, zoom: 1 },
+        safetyState: originalSafetyState,
+      };
+
+      // 1. Test reload / migration
+      const migrated = migrateCircuitState(originalCircuit, 'an-toan-dien');
+      const reloadMatches = Boolean(
+        migrated.safetyState &&
+          migrated.safetyState.activeTab === 'socuu' &&
+          migrated.safetyState.activeSceneId === 'bep-phong-tam' &&
+          migrated.safetyState.discoveredHazardIds.length === 2 &&
+          migrated.safetyState.discoveredHazardIds.includes('pk_overload') &&
+          migrated.safetyState.discoveredHazardIds.includes('bpt_wet_hands') &&
+          migrated.safetyState.firstAidStepIds[0] === 'step_2_call_115' &&
+          migrated.safetyState.firstAidStepIds[1] === 'step_1_disconnect' &&
+          migrated.safetyState.quizScore === 9 &&
+          migrated.safetyState.quizSubmitted === true
+      );
+
+      // 2. Test export package & JSON roundtrip
+      const exportPkg = createWorkspaceExportPackage(
+        'an-toan-dien',
+        'An toàn điện',
+        migrated
+      );
+      const jsonStr = JSON.stringify(exportPkg);
+      const validation = validateCircuitJson(jsonStr);
+      const importedCircuit =
+        validation.valid && validation.data && 'state' in validation.data
+          ? migrateCircuitState(validation.data.state, 'an-toan-dien')
+          : null;
+
+      const ioRoundtripMatches = Boolean(
+        validation.valid &&
+          importedCircuit &&
+          importedCircuit.safetyState &&
+          importedCircuit.safetyState.activeTab === 'socuu' &&
+          importedCircuit.safetyState.activeSceneId === 'bep-phong-tam' &&
+          importedCircuit.safetyState.discoveredHazardIds.length === 2 &&
+          importedCircuit.safetyState.discoveredHazardIds.includes('pk_overload') &&
+          importedCircuit.safetyState.discoveredHazardIds.includes('bpt_wet_hands') &&
+          importedCircuit.safetyState.firstAidStepIds[0] === 'step_2_call_115' &&
+          importedCircuit.safetyState.firstAidStepIds[1] === 'step_1_disconnect' &&
+          importedCircuit.safetyState.quizScore === 9 &&
+          importedCircuit.safetyState.quizSubmitted === true
       );
 
       const passed = reloadMatches && ioRoundtripMatches;

@@ -224,6 +224,25 @@ export function migrateCircuitState(state: CircuitState, workspaceSlug?: string)
     compareRowBId: '2',
   } : undefined);
 
+  const migratedSafetyState = state.safetyState || (workspaceSlug === 'an-toan-dien' ? {
+    activeTab: 'moinguy' as const,
+    activeSceneId: 'phong-khach' as const,
+    selectedHazardId: null,
+    discoveredHazardIds: [],
+    firstAidStepIds: [
+      'step_3_check_consciousness',
+      'step_1_disconnect',
+      'step_5_warm_hospital',
+      'step_2_call_115',
+      'step_4_cpr',
+    ],
+    firstAidChecked: false,
+    firstAidShouldAnswers: {},
+    quizAnswers: {},
+    quizScore: null,
+    quizSubmitted: false,
+  } : undefined);
+
   return {
     ...state,
     components: migratedComponents,
@@ -231,5 +250,6 @@ export function migrateCircuitState(state: CircuitState, workspaceSlug?: string)
     junctions: migratedJunctions,
     floorPlan: migratedFloorPlan,
     explainerState: migratedExplainerState,
+    safetyState: migratedSafetyState,
   };
 }

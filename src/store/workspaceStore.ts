@@ -16,6 +16,7 @@ import {
   FloorWall,
 } from '../core/model';
 import { ExplainerWorkspaceState } from '../content/do-dung-dien/types';
+import { SafetyWorkspaceState } from '../content/an-toan-dien/types';
 import { HistoryManager, DEFAULT_HISTORY_LIMIT } from '../core/history';
 import { StorageService, createDebouncedSaver, StorageStats } from '../core/storage';
 import { getWorkspaceBySlug, WORKSPACE_HOUSEHOLD } from '../core/workspaces';
@@ -184,6 +185,13 @@ interface WorkspaceStore {
   // Household Explainer actions
   updateExplainerState: (patch: Partial<ExplainerWorkspaceState>) => void;
 
+  // Electrical Safety (An toàn điện) actions
+  safetyReturnSlug: string | null;
+  setSafetyReturnSlug: (slug: string | null) => void;
+  clearSafetyReturn: () => void;
+  updateSafetyState: (patch: Partial<SafetyWorkspaceState>) => void;
+  openPresetInWorkspace: (workspaceSlug: string, presetId: string, returnSlug?: string) => Promise<void>;
+
   // Component Actions
   setPlacingType: (type: string | null) => void;
   placeComponent: (type: string, pos: Point) => void;
@@ -326,6 +334,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   selectedWallId: null,
   logicResult: null,
   truthTableModalOpen: false,
+  safetyReturnSlug: null,
 
   activeTool: 'select',
   editorMode: 'idle',
@@ -860,6 +869,53 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     };
     set({ circuit: nextCircuit });
     autoSaver.schedule(activeSlug, nextCircuit);
+  },
+
+  setSafetyReturnSlug: (slug: string | null) => set({ safetyReturnSlug: slug }),
+  clearSafetyReturn: () => set({ safetyReturnSlug: null }),
+
+  updateSafetyState: (patch: Partial<SafetyWorkspaceState>) => {
+    const { circuit, activeSlug } = get();
+    const defaultSafe: SafetyWorkspaceState = {
+      activeTab: 'moinguy',
+      activeSceneId: 'phong-khach',
+      selectedHazardId: null,
+      discoveredHazardIds: [],
+      firstAidStepIds: [
+        'step_3_check_consciousness',
+        'step_1_disconnect',
+        'step_5_warm_hospital',
+        'step_2_call_115',
+        'step_4_cpr',
+      ],
+      firstAidChecked: false,
+      firstAidShouldAnswers: {},
+      quizAnswers: {},
+      quizScore: null,
+      quizSubmitted: false,
+    };
+    const currentSafe = circuit.safetyState || defaultSafe;
+    const nextSafe: SafetyWorkspaceState = {
+      ...currentSafe,
+      ...patch,
+    };
+    const nextCircuit: CircuitState = {
+      ...circuit,
+      safetyState: nextSafe,
+    };
+    set({ circuit: nextCircuit });
+    autoSaver.schedule(activeSlug, nextCircuit);
+  },
+
+  openPresetInWorkspace: async (workspaceSlug: string, presetId: string, returnSlug?: string) => {
+    await get().loadWorkspace(workspaceSlug);
+    const targetConfig = get().config;
+    const preset = targetConfig.presets.find(p => p.id === presetId);
+    if (preset) {
+      get().setCircuit(preset.state, false);
+    }
+    set({ safetyReturnSlug: returnSlug || null });
+    window.location.hash = '#/mo-phong/' + workspaceSlug;
   },
 
   setTruthTableModalOpen: (open: boolean) => set({ truthTableModalOpen: open }),
