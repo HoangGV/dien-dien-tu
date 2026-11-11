@@ -206,11 +206,30 @@ export function migrateCircuitState(state: CircuitState, workspaceSlug?: string)
       }
     : undefined;
 
+  const migratedExplainerState = state.explainerState || (workspaceSlug === 'do-dung-dien-gia-dinh' ? {
+    selectedApplianceId: 'noi-com-dien',
+    selectedSubtypeId: 'soi-dot',
+    activeTab: 'cautao' as const,
+    viewMode: 'ngoai' as const,
+    selectedPartId: null,
+    stepIndex: 0,
+    calcRows: [
+      { id: '1', name: 'Đèn sợi đốt', powerWatts: 60, hoursPerDay: 4, daysPerMonth: 30 },
+      { id: '2', name: 'Đèn LED', powerWatts: 9, hoursPerDay: 4, daysPerMonth: 30 },
+      { id: '3', name: 'Nồi cơm điện', powerWatts: 700, hoursPerDay: 1, daysPerMonth: 30 },
+      { id: '4', name: 'Quạt điện', powerWatts: 55, hoursPerDay: 6, daysPerMonth: 30 },
+    ],
+    unitPrice: null,
+    compareRowAId: '1',
+    compareRowBId: '2',
+  } : undefined);
+
   return {
     ...state,
     components: migratedComponents,
     wires: migratedWires,
     junctions: migratedJunctions,
     floorPlan: migratedFloorPlan,
+    explainerState: migratedExplainerState,
   };
 }

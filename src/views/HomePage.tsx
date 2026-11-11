@@ -152,7 +152,7 @@ export const HomePage: React.FC = () => {
                           {ws.grades}
                         </span>
                         <span className="bg-white border border-black text-[#4169E1] text-[10px] font-black px-1.5 py-0.2">
-                          {ws.mode === 'rms' ? '220 V RMS' : ws.mode === 'logic' ? 'LOGIC 0/1' : 'DC MỘT CHIỀU'}
+                          {ws.mode === 'rms' ? '220 V RMS' : ws.mode === 'logic' ? 'LOGIC 0/1' : ws.mode === 'explainer' ? 'BÀI HỌC TƯƠNG TÁC' : 'DC MỘT CHIỀU'}
                         </span>
                       </div>
                     </div>

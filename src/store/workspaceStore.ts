@@ -15,6 +15,7 @@ import {
   FloorDoor,
   FloorWall,
 } from '../core/model';
+import { ExplainerWorkspaceState } from '../content/do-dung-dien/types';
 import { HistoryManager, DEFAULT_HISTORY_LIMIT } from '../core/history';
 import { StorageService, createDebouncedSaver, StorageStats } from '../core/storage';
 import { getWorkspaceBySlug, WORKSPACE_HOUSEHOLD } from '../core/workspaces';
@@ -179,6 +180,9 @@ interface WorkspaceStore {
   truthTableModalOpen: boolean;
   setTruthTableModalOpen: (open: boolean) => void;
   evaluateLogic: () => void;
+
+  // Household Explainer actions
+  updateExplainerState: (patch: Partial<ExplainerWorkspaceState>) => void;
 
   // Component Actions
   setPlacingType: (type: string | null) => void;
@@ -824,6 +828,38 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     set({ circuit: nextState });
     autoSaver.schedule(get().activeSlug, nextState);
     get().evaluateLogic();
+  },
+
+  updateExplainerState: (patch: Partial<ExplainerWorkspaceState>) => {
+    const { circuit, activeSlug } = get();
+    const defaultExp: ExplainerWorkspaceState = {
+      selectedApplianceId: 'noi-com-dien',
+      selectedSubtypeId: 'soi-dot',
+      activeTab: 'cautao',
+      viewMode: 'ngoai',
+      selectedPartId: null,
+      stepIndex: 0,
+      calcRows: [
+        { id: '1', name: 'Đèn sợi đốt', powerWatts: 60, hoursPerDay: 4, daysPerMonth: 30 },
+        { id: '2', name: 'Đèn LED', powerWatts: 9, hoursPerDay: 4, daysPerMonth: 30 },
+        { id: '3', name: 'Nồi cơm điện', powerWatts: 700, hoursPerDay: 1, daysPerMonth: 30 },
+        { id: '4', name: 'Quạt điện', powerWatts: 55, hoursPerDay: 6, daysPerMonth: 30 },
+      ],
+      unitPrice: null,
+      compareRowAId: '1',
+      compareRowBId: '2',
+    };
+    const currentExp = circuit.explainerState || defaultExp;
+    const nextExp: ExplainerWorkspaceState = {
+      ...currentExp,
+      ...patch,
+    };
+    const nextCircuit: CircuitState = {
+      ...circuit,
+      explainerState: nextExp,
+    };
+    set({ circuit: nextCircuit });
+    autoSaver.schedule(activeSlug, nextCircuit);
   },
 
   setTruthTableModalOpen: (open: boolean) => set({ truthTableModalOpen: open }),

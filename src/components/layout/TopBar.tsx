@@ -53,6 +53,7 @@ export interface TopBarProps {
 
 export const TopBar: React.FC<TopBarProps> = ({ svgRef }) => {
   const {
+    circuit,
     config,
     isSimulating,
     soundEnabled,
@@ -445,58 +446,62 @@ export const TopBar: React.FC<TopBarProps> = ({ svgRef }) => {
             </NeoButton>
           )}
 
-          {(config.mode !== 'logic' || circuit.components.some(c => c.type === 'logic_clock')) && (
+          {config.mode !== 'explainer' && (
             <>
-              {/* PLAY */}
+              {(config.mode !== 'logic' || circuit.components.some(c => c.type === 'logic_clock')) && (
+                <>
+                  {/* PLAY */}
+                  <NeoButton
+                    variant={isSimulating ? 'success' : 'primary'}
+                    onClick={toggleSimulating}
+                    icon={<Play size={13} strokeWidth={3} />}
+                    className={`!h-[26px] !px-2 ${
+                      isSimulating ? '!bg-[#2DB84D] !text-white' : ''
+                    }`}
+                    title={config.mode === 'logic' ? 'Chạy phát xung nhịp tự động' : 'Mô phỏng dòng điện và linh kiện (Giải thuật MNA)'}
+                  >
+                    {isSimulating ? 'ĐANG CHẠY' : 'CHẠY'}
+                  </NeoButton>
+
+                  {/* STOP */}
+                  <NeoButton
+                    variant="danger"
+                    onClick={stopSimulating}
+                    disabled={!isSimulating}
+                    icon={<Square size={13} strokeWidth={3} />}
+                    className="!h-[26px] !px-1.5"
+                    title="Dừng mô phỏng"
+                  >
+                    DỪNG
+                  </NeoButton>
+                </>
+              )}
+
+              {/* UNDO */}
               <NeoButton
-                variant={isSimulating ? 'success' : 'primary'}
-                onClick={toggleSimulating}
-                icon={<Play size={13} strokeWidth={3} />}
-                className={`!h-[26px] !px-2 ${
-                  isSimulating ? '!bg-[#2DB84D] !text-white' : ''
-                }`}
-                title={config.mode === 'logic' ? 'Chạy phát xung nhịp tự động' : 'Mô phỏng dòng điện và linh kiện (Giải thuật MNA)'}
+                variant="secondary"
+                onClick={undo}
+                disabled={!canUndo}
+                icon={<Undo2 size={13} strokeWidth={3} />}
+                className="!h-[26px] !px-1.5"
+                title="Hoàn tác (Ctrl+Z)"
               >
-                {isSimulating ? 'ĐANG CHẠY' : 'CHẠY'}
+                {!isUltraNarrow ? 'HOÀN TÁC' : ''}
               </NeoButton>
 
-              {/* STOP */}
+              {/* REDO */}
               <NeoButton
-                variant="danger"
-                onClick={stopSimulating}
-                disabled={!isSimulating}
-                icon={<Square size={13} strokeWidth={3} />}
+                variant="secondary"
+                onClick={redo}
+                disabled={!canRedo}
+                icon={<Redo2 size={13} strokeWidth={3} />}
                 className="!h-[26px] !px-1.5"
-                title="Dừng mô phỏng"
+                title="Làm lại (Ctrl+Y)"
               >
-                DỪNG
+                {!isUltraNarrow ? 'LÀM LẠI' : ''}
               </NeoButton>
             </>
           )}
-
-          {/* UNDO */}
-          <NeoButton
-            variant="secondary"
-            onClick={undo}
-            disabled={!canUndo}
-            icon={<Undo2 size={13} strokeWidth={3} />}
-            className="!h-[26px] !px-1.5"
-            title="Hoàn tác (Ctrl+Z)"
-          >
-            {!isUltraNarrow ? 'HOÀN TÁC' : ''}
-          </NeoButton>
-
-          {/* REDO */}
-          <NeoButton
-            variant="secondary"
-            onClick={redo}
-            disabled={!canRedo}
-            icon={<Redo2 size={13} strokeWidth={3} />}
-            className="!h-[26px] !px-1.5"
-            title="Làm lại (Ctrl+Y)"
-          >
-            {!isUltraNarrow ? 'LÀM LẠI' : ''}
-          </NeoButton>
 
           {/* Mode Switcher [NGUYÊN LÍ] [LẮP ĐẶT] (Neo-brutalism, --blue background when active) */}
           {config.installView && !isCompact && (

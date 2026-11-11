@@ -199,11 +199,29 @@ export const WORKSPACE_DIGITAL_LOGIC: WorkspaceConfig = {
 • Bảng chân trị tự sinh: Bấm nút [BẢNG CHÂN TRỊ] trên thanh trên.`,
 };
 
+export const WORKSPACE_EXPLAINER: WorkspaceConfig = {
+  slug: 'do-dung-dien-gia-dinh',
+  title: 'Đồ dùng điện trong gia đình',
+  grades: 'Lớp 6',
+  description: 'Bài học tương tác về cấu tạo, nguyên lí hoạt động, sơ đồ khối, sử dụng an toàn - tiết kiệm và tính toán điện năng tiêu thụ cho đồ dùng điện gia đình (Nồi cơm điện, Quạt điện, Đèn điện) theo SGK Công nghệ Lớp 6 GDPT 2018.',
+  mode: 'explainer',
+  paletteIds: [],
+  presets: [],
+  helpText: `HƯỚNG DẪN ĐỒ DÙNG ĐIỆN GIA ĐÌNH (LỚP 6 - CÔNG NGHỆ GDPT 2018):
+• Chọn đồ dùng điện: Nồi cơm điện, Quạt điện, Đèn điện (Sợi đốt, Huỳnh quang, LED) hoặc Bảng tính điện năng.
+• Cấu tạo: Chuyển đổi giữa góc nhìn Bên ngoài và Cắt lớp bên trong, bấm vào từng bộ phận để xem chức năng chi tiết.
+• Sơ đồ khối: Xem các khối chức năng và dòng truyền năng lượng/tín hiệu.
+• Nguyên lí hoạt động: Bấm Trước/Sau hoặc Tự chạy để xem quy trình hoạt động từng bước theo thời gian thực.
+• Sử dụng an toàn & tiết kiệm: Nắm vững các thông số kĩ thuật, lưu ý an toàn và mẹo tiết kiệm điện năng.
+• Tính điện năng tiêu thụ: Công thức E = P · t / 1000 (với P tính bằng W, t tính bằng giờ).`,
+};
+
 export const WORKSPACE_REGISTRY: WorkspaceConfig[] = [
   WORKSPACE_HOUSEHOLD,
   WORKSPACE_ELECTRONICS,
   WORKSPACE_SENSOR_CONTROL,
   WORKSPACE_DIGITAL_LOGIC,
+  WORKSPACE_EXPLAINER,
   WORKSPACE_TEST,
 ];
 

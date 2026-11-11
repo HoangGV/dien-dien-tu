@@ -145,6 +145,27 @@ const CURRICULUM_DATA: Record<string, WorkspaceCurriculumInfo> = {
       'Chưa hỗ trợ: bộ nhớ, thanh ghi vào song song, mạch dãy phức tạp.',
     ],
   },
+  'do-dung-dien-gia-dinh': {
+    title: 'Đồ dùng điện trong gia đình',
+    grades: 'Lớp 6',
+    coveredPoints: [
+      {
+        gradeTag: 'Lớp 6',
+        topic: 'Đồ dùng điện trong gia đình (Chủ đề 4 - Công nghệ 6)',
+        items: [
+          'Kể tên, nêu được chức năng các bộ phận chính của một số đồ dùng điện phổ biến trong gia đình (Nồi cơm điện, Quạt điện, Đèn điện sợi đốt / huỳnh quang / LED).',
+          'Trình bày và giải thích được sơ đồ khối, nguyên lí làm việc của nồi cơm điện, quạt điện và các loại đèn điện.',
+          'Đọc và giải thích được ý nghĩa các thông số kĩ thuật cơ bản ghi trên nhãn đồ dùng điện (điện áp định mức, công suất định mức, dung tích, tốc độ...).',
+          'Thực hiện các nguyên tắc sử dụng đồ dùng điện đúng cách, an toàn phòng tránh điện giật, cháy nổ và tiết kiệm năng lượng.',
+          'Tính toán được điện năng tiêu thụ của các đồ dùng điện trong gia đình theo công thức E = P · t / 1000 (với P tính bằng W, t tính bằng giờ).',
+        ],
+      },
+    ],
+    unsupportedPoints: [
+      'Thao tác tháo lắp sửa chữa cơ khí trực tiếp (phần mềm tập trung mô phỏng cấu tạo sư phạm cắt lớp, sơ đồ khối và tính toán).',
+      'Đồ dùng điện 3 pha hoặc thiết bị công nghiệp nặng.',
+    ],
+  },
 };
 
 export const CurriculumModal: React.FC<CurriculumModalProps> = ({ isOpen, onClose }) => {

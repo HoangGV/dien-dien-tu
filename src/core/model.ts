@@ -4,7 +4,9 @@
 
 import React from 'react';
 
-export type WorkspaceMode = 'rms' | 'dc' | 'logic';
+import { ExplainerWorkspaceState } from '../content/do-dung-dien/types';
+
+export type WorkspaceMode = 'rms' | 'dc' | 'logic' | 'explainer';
 export type CircuitViewMode = 'schematic' | 'installation';
 export type WireType = 'phase' | 'neutral' | 'ground' | 'other';
 
@@ -152,6 +154,7 @@ export interface CircuitState {
   junctions: Junction[];
   viewport: ViewportState;
   floorPlan?: FloorPlanData;
+  explainerState?: ExplainerWorkspaceState;
 }
 
 export interface Net {

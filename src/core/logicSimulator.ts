@@ -365,11 +365,16 @@ export function runLogicSimulation(circuit: CircuitState): LogicSimulationResult
         const clkVal = pinValues[`${c.id}:CLK`] ?? 'X';
         const prevClk = (c.props.lastClk !== undefined) ? c.props.lastClk : clkVal;
 
+        const wasCleared = Boolean(c.props._justCleared);
+        c.props._justCleared = false;
+
         let isEdge = false;
-        if (isFalling) {
-          if (prevClk === 1 && clkVal === 0) isEdge = true;
-        } else {
-          if (prevClk === 0 && clkVal === 1) isEdge = true;
+        if (!wasCleared) {
+          if (isFalling) {
+            if (prevClk === 1 && clkVal === 0) isEdge = true;
+          } else {
+            if (prevClk === 0 && clkVal === 1) isEdge = true;
+          }
         }
 
         let newQ = currentQ;
@@ -410,6 +415,7 @@ export function runLogicSimulation(circuit: CircuitState): LogicSimulationResult
         // Asynchronous active-low CLR override
         if (hasClr && clrVal === 0) {
           newQ = 0;
+          c.props._justCleared = true;
         }
 
         nextFFStates[c.id] = { q: newQ, triggered, clkVal };

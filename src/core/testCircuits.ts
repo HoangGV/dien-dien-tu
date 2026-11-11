@@ -40,6 +40,15 @@ import {
 } from './presets';
 import { runLogicSimulation, evaluateGate } from './logicSimulator';
 import { oscilloscopeService } from './oscilloscopeService';
+import {
+  NOI_COM_DIEN,
+  QUAT_DIEN,
+  DEN_SOI_DOT,
+  DEN_HUYNH_QUANG,
+  DEN_LED,
+} from '../content/do-dung-dien/registry';
+import { formatVnNumber } from '../components/explainer/EnergyCalculator';
+import { ExplainerWorkspaceState } from '../content/do-dung-dien/types';
 
 // Helper to make a wire
 function makeWire(
@@ -2856,6 +2865,225 @@ export const ALL_SOLVER_TEST_CASES: SolverTestCase[] = [
 
       return {
         actualStr: `Chuỗi chữ số: ${digits.join(' → ')}`,
+        passed,
+      };
+    },
+  }),
+  defineTestCase({
+    id: 'case74_household_appliances_config_validity',
+    stt: 74,
+    group: 'Mạch mẫu',
+    name: 'Ca 74: Mọi cấu hình đồ dùng hợp lệ: đủ trường bắt buộc, mọi bước trỏ tới bộ phận/khối/mũi tên tồn tại, mọi hotspot có id trùng boPhan',
+    expectedStr: '5/5 đồ dùng hợp lệ: đầy đủ trường bắt buộc, reviewStatus chuẩn, hotspot và tham chiếu bước/sơ đồ khối chính xác',
+    toleranceStr: 'Chính xác 100%',
+    createCircuit: () => ({ components: [], wires: [], junctions: [], viewport: { x: 0, y: 0, zoom: 1 } }),
+    evaluate: () => {
+      const allDefs = [NOI_COM_DIEN, QUAT_DIEN, DEN_SOI_DOT, DEN_HUYNH_QUANG, DEN_LED];
+      const errors: string[] = [];
+
+      allDefs.forEach((def) => {
+        if (!def.id || !def.ten || !def.moTaNgan) {
+          errors.push(`${def.ten}: thiếu trường id, tên hoặc mô tả`);
+        }
+        if (def.reviewStatus !== 'cần GV đối chiếu') {
+          errors.push(`${def.ten}: reviewStatus không đúng ('${def.reviewStatus}')`);
+        }
+        if (!def.hinhSVG || !def.hinhSVG.viewBox || typeof def.hinhSVG.ngoai !== 'function' || typeof def.hinhSVG.trong !== 'function') {
+          errors.push(`${def.ten}: thiếu hàm render hinhSVG`);
+        }
+        if (!Array.isArray(def.boPhan) || def.boPhan.length === 0) {
+          errors.push(`${def.ten}: không có bộ phận cấu tạo`);
+        }
+        if (!Array.isArray(def.khoi) || def.khoi.length === 0) {
+          errors.push(`${def.ten}: không có khối sơ đồ`);
+        }
+        if (!Array.isArray(def.mui_ten)) {
+          errors.push(`${def.ten}: mui_ten không phải mảng`);
+        }
+        if (!Array.isArray(def.buoc) || def.buoc.length === 0) {
+          errors.push(`${def.ten}: không có bước nguyên lí`);
+        }
+        if (!Array.isArray(def.thongSo) || def.thongSo.length === 0) {
+          errors.push(`${def.ten}: thiếu thông số kĩ thuật`);
+        }
+        if (!Array.isArray(def.anToan) || def.anToan.length === 0) {
+          errors.push(`${def.ten}: thiếu lưu ý an toàn`);
+        }
+        if (!Array.isArray(def.tietKiem) || def.tietKiem.length === 0) {
+          errors.push(`${def.ten}: thiếu mẹo tiết kiệm`);
+        }
+
+        // Validate boPhan & hotspot
+        const boPhanIds = new Set(def.boPhan.map((p) => p.id));
+        def.boPhan.forEach((p) => {
+          if (!p.hotspot || p.hotspot.id !== p.id) {
+            errors.push(`${def.ten}: hotspot.id '${p.hotspot?.id}' không khớp boPhan.id '${p.id}'`);
+          }
+        });
+
+        // Validate mui_ten
+        const khoiIds = new Set(def.khoi.map((k) => k.id));
+        const muiTenIds = new Set(def.mui_ten.map((m) => m.id));
+        def.mui_ten.forEach((mt) => {
+          if (!khoiIds.has(mt.tu)) {
+            errors.push(`${def.ten}: mũi tên '${mt.id}' trỏ từ khối không tồn tại '${mt.tu}'`);
+          }
+          if (!khoiIds.has(mt.den)) {
+            errors.push(`${def.ten}: mũi tên '${mt.id}' trỏ đến khối không tồn tại '${mt.den}'`);
+          }
+        });
+
+        // Validate buoc references
+        def.buoc.forEach((b, idx) => {
+          b.sangBoPhan.forEach((bpId) => {
+            if (!boPhanIds.has(bpId)) {
+              errors.push(`${def.ten}: bước ${idx + 1} trỏ sang bộ phận không tồn tại '${bpId}'`);
+            }
+          });
+          b.sangKhoi.forEach((kId) => {
+            if (!khoiIds.has(kId)) {
+              errors.push(`${def.ten}: bước ${idx + 1} trỏ sang khối không tồn tại '${kId}'`);
+            }
+          });
+          b.sangMuiTen.forEach((mtId) => {
+            if (!muiTenIds.has(mtId)) {
+              errors.push(`${def.ten}: bước ${idx + 1} trỏ sang mũi tên không tồn tại '${mtId}'`);
+            }
+          });
+        });
+      });
+
+      const passed = errors.length === 0;
+      return {
+        actualStr: passed
+          ? `Hợp lệ toàn bộ 5 cấu hình: Nồi cơm, Quạt, Đèn sợi đốt, Đèn huỳnh quang, Đèn LED (0 lỗi)`
+          : `Phát hiện ${errors.length} lỗi cấu hình: ${errors.slice(0, 3).join('; ')}`,
+        passed,
+      };
+    },
+  }),
+  defineTestCase({
+    id: 'case75_energy_consumption_calc_and_comparison',
+    stt: 75,
+    group: 'Mạch mẫu',
+    name: 'Ca 75: Bảng tính: đèn 60 W × 4 h × 30 ngày = 7,2 kWh; đèn 9 W cùng điều kiện = 1,08 kWh; so sánh: tiết kiệm 6,12 kWh/tháng (85%)',
+    expectedStr: 'Đèn 60 W: 7,2 kWh/tháng; Đèn 9 W: 1,08 kWh/tháng; Tiết kiệm: 6,12 kWh/tháng (85%)',
+    toleranceStr: 'Chính xác 100%',
+    createCircuit: () => ({ components: [], wires: [], junctions: [], viewport: { x: 0, y: 0, zoom: 1 } }),
+    evaluate: () => {
+      const p1 = 60;
+      const h1 = 4;
+      const d1 = 30;
+      const p2 = 9;
+      const h2 = 4;
+      const d2 = 30;
+
+      const e1 = (p1 * h1 * d1) / 1000;
+      const e2 = (p2 * h2 * d2) / 1000;
+      const diff = e1 - e2;
+      const percent = (diff / e1) * 100;
+
+      const strE1 = `${formatVnNumber(e1, 2)} kWh`;
+      const strE2 = `${formatVnNumber(e2, 2)} kWh`;
+      const strDiff = `${formatVnNumber(diff, 2)} kWh/tháng`;
+      const strPct = `${formatVnNumber(percent, 0)}%`;
+
+      const matchE1 = Math.abs(e1 - 7.2) < 1e-6;
+      const matchE2 = Math.abs(e2 - 1.08) < 1e-6;
+      const matchDiff = Math.abs(diff - 6.12) < 1e-6;
+      const matchPct = Math.abs(percent - 85.0) < 1e-6;
+
+      const passed =
+        matchE1 &&
+        matchE2 &&
+        matchDiff &&
+        matchPct &&
+        strE1 === '7,2 kWh' &&
+        strE2 === '1,08 kWh' &&
+        strDiff === '6,12 kWh/tháng' &&
+        strPct === '85%';
+
+      return {
+        actualStr: `Đèn 60 W = ${strE1}; Đèn 9 W = ${strE2}; Giảm = ${strDiff} (${strPct})`,
+        passed,
+      };
+    },
+  }),
+  defineTestCase({
+    id: 'case76_explainer_state_persistence_and_io_roundtrip',
+    stt: 76,
+    group: 'Mạch mẫu',
+    name: 'Ca 76: Lưu rồi tải lại trang: giữ đúng đồ dùng, tab, bước nguyên lí và các dòng bảng tính; xuất/nhập khứ hồi giống hệt',
+    expectedStr: 'Giữ nguyên đồ dùng, tab, bước nguyên lí, bảng tính; xuất/nhập khứ hồi khớp 100%',
+    toleranceStr: 'Khớp 100%',
+    createCircuit: () => ({ components: [], wires: [], junctions: [], viewport: { x: 0, y: 0, zoom: 1 } }),
+    evaluate: () => {
+      const originalExplainerState: ExplainerWorkspaceState = {
+        selectedApplianceId: 'den-dien',
+        selectedSubtypeId: 'led',
+        activeTab: 'nguyenli',
+        viewMode: 'trong',
+        selectedPartId: 'chip_led',
+        stepIndex: 2,
+        calcRows: [
+          { id: 'c1', name: 'Đèn sợi đốt 60W', powerWatts: 60, hoursPerDay: 4, daysPerMonth: 30 },
+          { id: 'c2', name: 'Đèn LED 9W', powerWatts: 9, hoursPerDay: 4, daysPerMonth: 30 },
+        ],
+        unitPrice: 2000,
+        compareRowAId: 'c1',
+        compareRowBId: 'c2',
+      };
+
+      const originalCircuit: CircuitState = {
+        components: [],
+        wires: [],
+        junctions: [],
+        viewport: { x: 0, y: 0, zoom: 1 },
+        explainerState: originalExplainerState,
+      };
+
+      // 1. Test migration & reload
+      const migrated = migrateCircuitState(originalCircuit, 'do-dung-dien-gia-dinh');
+      const reloadMatches = Boolean(
+        migrated.explainerState &&
+          migrated.explainerState.selectedApplianceId === 'den-dien' &&
+          migrated.explainerState.selectedSubtypeId === 'led' &&
+          migrated.explainerState.activeTab === 'nguyenli' &&
+          migrated.explainerState.stepIndex === 2 &&
+          migrated.explainerState.calcRows.length === 2 &&
+          migrated.explainerState.calcRows[0].powerWatts === 60 &&
+          migrated.explainerState.calcRows[1].powerWatts === 9 &&
+          migrated.explainerState.unitPrice === 2000
+      );
+
+      // 2. Test export package & JSON roundtrip
+      const exportPkg = createWorkspaceExportPackage(
+        'do-dung-dien-gia-dinh',
+        'Đồ dùng điện trong gia đình',
+        migrated
+      );
+      const jsonStr = JSON.stringify(exportPkg);
+      const validation = validateCircuitJson(jsonStr);
+      const importedCircuit =
+        validation.valid && validation.data && 'state' in validation.data
+          ? migrateCircuitState(validation.data.state, 'do-dung-dien-gia-dinh')
+          : null;
+
+      const ioRoundtripMatches = Boolean(
+        validation.valid &&
+          importedCircuit &&
+          importedCircuit.explainerState &&
+          importedCircuit.explainerState.selectedApplianceId === 'den-dien' &&
+          importedCircuit.explainerState.selectedSubtypeId === 'led' &&
+          importedCircuit.explainerState.stepIndex === 2 &&
+          importedCircuit.explainerState.calcRows.length === 2 &&
+          importedCircuit.explainerState.calcRows[1].powerWatts === 9 &&
+          importedCircuit.explainerState.unitPrice === 2000
+      );
+
+      const passed = reloadMatches && ioRoundtripMatches;
+      return {
+        actualStr: `Khôi phục sau tải lại: ${reloadMatches ? 'ĐẠT' : 'LỖI'}; Xuất/nhập JSON khứ hồi: ${ioRoundtripMatches ? 'ĐẠT' : 'LỖI'}`,
         passed,
       };
     },
