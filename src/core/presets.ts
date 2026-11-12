@@ -693,8 +693,8 @@ export const ELECTRONICS_PRESETS: Preset[] = [
     group: 'Linh kiện cơ bản (L9, L12)',
     grade: 'L12',
     title: 'v) Quá trình nạp tụ RC (Dao động kí ảo)',
-    description: 'Nguồn 5 V + điện trở 1 kΩ + tụ 100 µF + công tắc. Kênh CH1 đo điện áp tức thời trên tụ. Kì vọng: V_tụ tăng theo đường cong, đạt ≈ 3,16 V (63%) sau 0,1 s.',
-    expectation: 'Kì vọng: V_tụ tăng theo đường cong, đạt ≈ 3,16 V (63%) sau 0,1 s.',
+    description: 'Nguồn 5 V + điện trở 1 kΩ + tụ 100 µF + công tắc. Kênh CH1 đo điện áp tức thời trên tụ.',
+    expectation: 'Kì vọng: Bấm [TỰ ĐẶT] rồi [TÍNH VÀ VẼ] sẽ thấy đường cong nạp tụ (V_tụ đạt ≈ 3,16 V sau 0,1 s).',
     state: createPresetElectronicsV(),
   },
   {
@@ -703,7 +703,7 @@ export const ELECTRONICS_PRESETS: Preset[] = [
     grade: 'L12',
     title: 'x) Nguồn xoay chiều sin 5 V đỉnh, 50 Hz (Dao động kí)',
     description: 'Nguồn xoay chiều 5 V đỉnh, 50 Hz nối vào kênh CH1 của dao động kí.',
-    expectation: 'Kì vọng: sóng sin chu kì 20 ms, đỉnh ±5 V.',
+    expectation: 'Kì vọng: Bấm [TỰ ĐẶT] rồi [TÍNH VÀ VẼ] sẽ thấy sóng sin (chu kì 20 ms, đỉnh ±5 V).',
     state: createPresetElectronicsX(),
   },
   {
@@ -712,7 +712,7 @@ export const ELECTRONICS_PRESETS: Preset[] = [
     grade: 'L12',
     title: 'y) Chỉnh lưu nửa chu kì (Diode 1N4007 + Tải 1 kΩ)',
     description: 'Nguồn 5 V đỉnh 50 Hz qua diode 1N4007 nạp tải 1 kΩ. CH1 đo nguồn, CH2 đo tải.',
-    expectation: 'Kì vọng: CH2 chỉ có nửa chu kì dương, đỉnh ≈ 4,3 V.',
+    expectation: 'Kì vọng: Bấm [TỰ ĐẶT] rồi [TÍNH VÀ VẼ] sẽ thấy dạng sóng chỉnh lưu (CH2 bán kì dương, đỉnh ≈ 4,3 V).',
     state: createPresetElectronicsY(),
   },
 
@@ -1305,6 +1305,149 @@ export const DIGITAL_LOGIC_PRESETS: Preset[] = [
     description: 'Dịch dữ liệu nối tiếp từ ngõ vào D qua 4 tầng flip-flop D sau mỗi lần bấm xung CLK.',
     expectation: 'Kì vọng: Bật/tắt công tắc D rồi bấm CLK, các bit 0 và 1 lần lượt dịch qua Q0 → Q1 → Q2 → Q3.',
     state: createPresetLogicE5(),
+  },
+];
+
+// ----------------------------------------------------
+// Khuếch đại thuật toán (Analog Op-Amp Presets - Lớp 12)
+// ----------------------------------------------------
+
+export function createPresetOpampInverting(): CircuitState {
+  const vin: ComponentInstance = { id: 'vin', type: 'dc_source', x: 80, y: 180, rot: 0, flip: false, label: 'V_vào', props: { voltage: 0.5 } };
+  const g_in: ComponentInstance = { id: 'g_in', type: 'gnd', x: 80, y: 240, rot: 0, flip: false, label: '', props: {} };
+  const rin: ComponentInstance = { id: 'rin', type: 'resistor', x: 200, y: 140, rot: 0, flip: false, label: 'R_in', props: { resistance: 1000 } };
+  const rf: ComponentInstance = { id: 'rf', type: 'resistor', x: 380, y: 100, rot: 0, flip: false, label: 'R_f', props: { resistance: 10000 } };
+  const op: ComponentInstance = { id: 'op1', type: 'opamp', x: 380, y: 200, rot: 0, flip: false, label: 'OP1', props: { drop_voltage: 1.0 } };
+  const vp: ComponentInstance = { id: 'vp', type: 'dc_source', x: 280, y: 80, rot: 0, flip: false, label: '+12V', props: { voltage: 12 } };
+  const g_vp: ComponentInstance = { id: 'g_vp', type: 'gnd', x: 280, y: 140, rot: 0, flip: false, label: '', props: {} };
+  const vn: ComponentInstance = { id: 'vn', type: 'dc_source', x: 280, y: 280, rot: 0, flip: false, label: '-12V', props: { voltage: 12 } };
+  const g_vn: ComponentInstance = { id: 'g_vn', type: 'gnd', x: 280, y: 260, rot: 0, flip: false, label: '', props: {} };
+  const g_op: ComponentInstance = { id: 'g_op', type: 'gnd', x: 320, y: 240, rot: 0, flip: false, label: '', props: {} };
+  const vm: ComponentInstance = { id: 'vm1', type: 'voltmeter', x: 520, y: 200, rot: 0, flip: false, label: 'V_ra', props: {} };
+  const g_vm: ComponentInstance = { id: 'g_vm', type: 'gnd', x: 560, y: 220, rot: 0, flip: false, label: '', props: {} };
+
+  const wires: Wire[] = [
+    makePresetWire('w1', 'vin', 'pos', 'rin', '1', [{ x: 80, y: 140 }, { x: 160, y: 140 }], 'phase'),
+    makePresetWire('w2', 'vin', 'neg', 'g_in', 'gnd', [{ x: 80, y: 220 }, { x: 80, y: 220 }], 'ground'),
+    makePresetWire('w3', 'rin', '2', 'op1', 'in_neg', [{ x: 240, y: 140 }, { x: 280, y: 140 }, { x: 280, y: 180 }, { x: 320, y: 180 }], 'phase'),
+    makePresetWire('w4', 'rin', '2', 'rf', '1', [{ x: 240, y: 140 }, { x: 280, y: 140 }, { x: 280, y: 100 }, { x: 340, y: 100 }], 'phase'),
+    makePresetWire('w5', 'rf', '2', 'op1', 'out', [{ x: 420, y: 100 }, { x: 440, y: 100 }, { x: 440, y: 200 }], 'phase'),
+    makePresetWire('w6', 'op1', 'in_pos', 'g_op', 'gnd', [{ x: 320, y: 220 }, { x: 320, y: 220 }], 'ground'),
+    makePresetWire('w7', 'vp', 'pos', 'op1', 'v_pos', [{ x: 280, y: 40 }, { x: 380, y: 40 }, { x: 380, y: 160 }], 'phase'),
+    makePresetWire('w8', 'vp', 'neg', 'g_vp', 'gnd', [{ x: 280, y: 120 }, { x: 280, y: 120 }], 'ground'),
+    makePresetWire('w9', 'vn', 'pos', 'g_vn', 'gnd', [{ x: 280, y: 240 }, { x: 280, y: 240 }], 'ground'),
+    makePresetWire('w10', 'vn', 'neg', 'op1', 'v_neg', [{ x: 280, y: 320 }, { x: 380, y: 320 }, { x: 380, y: 240 }], 'phase'),
+    makePresetWire('w11', 'op1', 'out', 'vm1', 'pos', [{ x: 440, y: 200 }, { x: 480, y: 200 }], 'phase'),
+    makePresetWire('w12', 'vm1', 'neg', 'g_vm', 'gnd', [{ x: 560, y: 200 }, { x: 560, y: 200 }], 'ground'),
+  ];
+
+  return {
+    components: [vin, g_in, rin, rf, op, vp, g_vp, vn, g_vn, g_op, vm, g_vm],
+    wires,
+    junctions: [],
+    viewport: { x: 40, y: 40, zoom: 1 },
+  };
+}
+
+export function createPresetOpampNonInverting(): CircuitState {
+  const vin: ComponentInstance = { id: 'vin', type: 'dc_source', x: 80, y: 220, rot: 0, flip: false, label: 'V_vào', props: { voltage: 0.5 } };
+  const g_in: ComponentInstance = { id: 'g_in', type: 'gnd', x: 80, y: 280, rot: 0, flip: false, label: '', props: {} };
+  const r1: ComponentInstance = { id: 'r1', type: 'resistor', x: 240, y: 180, rot: 0, flip: false, label: 'R1', props: { resistance: 1000 } };
+  const g_r1: ComponentInstance = { id: 'g_r1', type: 'gnd', x: 200, y: 200, rot: 0, flip: false, label: '', props: {} };
+  const rf: ComponentInstance = { id: 'rf', type: 'resistor', x: 380, y: 100, rot: 0, flip: false, label: 'R_f', props: { resistance: 10000 } };
+  const op: ComponentInstance = { id: 'op1', type: 'opamp', x: 380, y: 200, rot: 0, flip: false, label: 'OP1', props: { drop_voltage: 1.0 } };
+  const vp: ComponentInstance = { id: 'vp', type: 'dc_source', x: 280, y: 60, rot: 0, flip: false, label: '+12V', props: { voltage: 12 } };
+  const g_vp: ComponentInstance = { id: 'g_vp', type: 'gnd', x: 280, y: 120, rot: 0, flip: false, label: '', props: {} };
+  const vn: ComponentInstance = { id: 'vn', type: 'dc_source', x: 280, y: 300, rot: 0, flip: false, label: '-12V', props: { voltage: 12 } };
+  const g_vn: ComponentInstance = { id: 'g_vn', type: 'gnd', x: 280, y: 280, rot: 0, flip: false, label: '', props: {} };
+  const vm: ComponentInstance = { id: 'vm1', type: 'voltmeter', x: 520, y: 200, rot: 0, flip: false, label: 'V_ra', props: {} };
+  const g_vm: ComponentInstance = { id: 'g_vm', type: 'gnd', x: 560, y: 220, rot: 0, flip: false, label: '', props: {} };
+
+  const wires: Wire[] = [
+    makePresetWire('w1', 'vin', 'pos', 'op1', 'in_pos', [{ x: 80, y: 180 }, { x: 320, y: 220 }], 'phase'),
+    makePresetWire('w2', 'vin', 'neg', 'g_in', 'gnd', [{ x: 80, y: 260 }, { x: 80, y: 260 }], 'ground'),
+    makePresetWire('w3', 'r1', '1', 'g_r1', 'gnd', [{ x: 200, y: 180 }, { x: 200, y: 180 }], 'ground'),
+    makePresetWire('w4', 'r1', '2', 'op1', 'in_neg', [{ x: 280, y: 180 }, { x: 320, y: 180 }], 'phase'),
+    makePresetWire('w5', 'r1', '2', 'rf', '1', [{ x: 280, y: 180 }, { x: 300, y: 180 }, { x: 300, y: 100 }, { x: 340, y: 100 }], 'phase'),
+    makePresetWire('w6', 'rf', '2', 'op1', 'out', [{ x: 420, y: 100 }, { x: 440, y: 100 }, { x: 440, y: 200 }], 'phase'),
+    makePresetWire('w7', 'vp', 'pos', 'op1', 'v_pos', [{ x: 280, y: 20 }, { x: 380, y: 20 }, { x: 380, y: 160 }], 'phase'),
+    makePresetWire('w8', 'vp', 'neg', 'g_vp', 'gnd', [{ x: 280, y: 100 }, { x: 280, y: 100 }], 'ground'),
+    makePresetWire('w9', 'vn', 'pos', 'g_vn', 'gnd', [{ x: 280, y: 260 }, { x: 280, y: 260 }], 'ground'),
+    makePresetWire('w10', 'vn', 'neg', 'op1', 'v_neg', [{ x: 280, y: 340 }, { x: 380, y: 340 }, { x: 380, y: 240 }], 'phase'),
+    makePresetWire('w11', 'op1', 'out', 'vm1', 'pos', [{ x: 440, y: 200 }, { x: 480, y: 200 }], 'phase'),
+    makePresetWire('w12', 'vm1', 'neg', 'g_vm', 'gnd', [{ x: 560, y: 200 }, { x: 560, y: 200 }], 'ground'),
+  ];
+
+  return {
+    components: [vin, g_in, r1, g_r1, rf, op, vp, g_vp, vn, g_vn, vm, g_vm],
+    wires,
+    junctions: [],
+    viewport: { x: 40, y: 40, zoom: 1 },
+  };
+}
+
+export function createPresetOpampComparator(): CircuitState {
+  const vcc: ComponentInstance = { id: 'vcc', type: 'dc_source', x: 80, y: 100, rot: 0, flip: false, label: '+5V', props: { voltage: 5 } };
+  const g_vcc: ComponentInstance = { id: 'g_vcc', type: 'gnd', x: 80, y: 160, rot: 0, flip: false, label: '', props: {} };
+  const pot: ComponentInstance = { id: 'pot1', type: 'potentiometer', x: 200, y: 100, rot: 0, flip: false, label: 'VR1', props: { resistance: 10000, ratio: 50 } };
+  const g_pot: ComponentInstance = { id: 'g_pot', type: 'gnd', x: 160, y: 120, rot: 0, flip: false, label: '', props: {} };
+  const vref: ComponentInstance = { id: 'vref', type: 'dc_source', x: 260, y: 220, rot: 0, flip: false, label: 'U_chuẩn', props: { voltage: 2 } };
+  const g_ref: ComponentInstance = { id: 'g_ref', type: 'gnd', x: 260, y: 280, rot: 0, flip: false, label: '', props: {} };
+  const op: ComponentInstance = { id: 'op1', type: 'opamp', x: 380, y: 200, rot: 0, flip: false, label: 'OP1', props: { drop_voltage: 1.0 } };
+  const g_opneg: ComponentInstance = { id: 'g_opneg', type: 'gnd', x: 380, y: 260, rot: 0, flip: false, label: '', props: {} };
+  const r1: ComponentInstance = { id: 'r1', type: 'resistor', x: 480, y: 200, rot: 0, flip: false, label: 'R_hạn', props: { resistance: 1000 } };
+  const led: ComponentInstance = { id: 'led1', type: 'led', x: 580, y: 200, rot: 0, flip: false, label: 'D1', props: { color: 'red' } };
+  const g_led: ComponentInstance = { id: 'g_led', type: 'gnd', x: 620, y: 220, rot: 0, flip: false, label: '', props: {} };
+
+  const wires: Wire[] = [
+    makePresetWire('w1', 'vcc', 'pos', 'pot1', '3', [{ x: 80, y: 60 }, { x: 240, y: 60 }, { x: 240, y: 100 }], 'phase'),
+    makePresetWire('w2', 'vcc', 'pos', 'op1', 'v_pos', [{ x: 80, y: 60 }, { x: 380, y: 60 }, { x: 380, y: 160 }], 'phase'),
+    makePresetWire('w3', 'vcc', 'neg', 'g_vcc', 'gnd', [{ x: 80, y: 140 }, { x: 80, y: 140 }], 'ground'),
+    makePresetWire('w4', 'pot1', '1', 'g_pot', 'gnd', [{ x: 160, y: 100 }, { x: 160, y: 100 }], 'ground'),
+    makePresetWire('w5', 'pot1', '2', 'op1', 'in_pos', [{ x: 200, y: 140 }, { x: 200, y: 220 }, { x: 320, y: 220 }], 'phase'),
+    makePresetWire('w6', 'vref', 'pos', 'op1', 'in_neg', [{ x: 260, y: 180 }, { x: 320, y: 180 }], 'phase'),
+    makePresetWire('w7', 'vref', 'neg', 'g_ref', 'gnd', [{ x: 260, y: 260 }, { x: 260, y: 260 }], 'ground'),
+    makePresetWire('w8', 'op1', 'v_neg', 'g_opneg', 'gnd', [{ x: 380, y: 240 }, { x: 380, y: 240 }], 'ground'),
+    makePresetWire('w9', 'op1', 'out', 'r1', '1', [{ x: 440, y: 200 }, { x: 440, y: 200 }], 'phase'),
+    makePresetWire('w10', 'r1', '2', 'led1', 'A', [{ x: 520, y: 200 }, { x: 540, y: 200 }], 'phase'),
+    makePresetWire('w11', 'led1', 'K', 'g_led', 'gnd', [{ x: 620, y: 200 }, { x: 620, y: 200 }], 'ground'),
+  ];
+
+  return {
+    components: [vcc, g_vcc, pot, g_pot, vref, g_ref, op, g_opneg, r1, led, g_led],
+    wires,
+    junctions: [],
+    viewport: { x: 40, y: 40, zoom: 1 },
+  };
+}
+
+export const ANALOG_PRESETS: Preset[] = [
+  {
+    id: 'opamp_op1',
+    group: 'Khuếch đại thuật toán (L12)',
+    grade: 'L12',
+    title: 'OP1) Mạch khuếch đại đảo: Rin = 1 kΩ, Rf = 10 kΩ, nguồn đối xứng ±12 V',
+    description: 'Mạch khuếch đại đảo tỉ số K = −Rf/Rin = −10; khi Vin = 0,5 V thì Vra = −5 V; Vin = 2 V thì bão hòa ở −11 V.',
+    expectation: 'Kì vọng: Vra = −10·Vvào (Vvào = 0,5 V → −5 V); Vvào = 2 V → bão hòa ở −11 V.',
+    state: createPresetOpampInverting(),
+  },
+  {
+    id: 'opamp_op2',
+    group: 'Khuếch đại thuật toán (L12)',
+    grade: 'L12',
+    title: 'OP2) Mạch khuếch đại không đảo: R1 = 1 kΩ, Rf = 10 kΩ, nguồn đối xứng ±12 V',
+    description: 'Mạch khuếch đại không đảo tỉ số K = 1 + Rf/R1 = 11; khi Vin = 0,5 V thì Vra = 5,5 V.',
+    expectation: 'Kì vọng: Vra = 11·Vvào (0,5 V → 5,5 V).',
+    state: createPresetOpampNonInverting(),
+  },
+  {
+    id: 'opamp_op3',
+    group: 'Khuếch đại thuật toán (L12)',
+    grade: 'L12',
+    title: 'OP3) Mạch so sánh: ngõ vào phân áp biến trở, chuẩn 2 V, ngõ ra điều khiển LED',
+    description: 'Mạch so sánh điện áp không hồi tiếp: khi điện áp ngõ vào IN+ > 2 V ngõ ra bão hòa dương làm sáng LED; < 2 V thì LED tắt.',
+    expectation: 'Kì vọng: IN+ > 2 V thì LED sáng; < 2 V thì tắt.',
+    state: createPresetOpampComparator(),
   },
 ];
 

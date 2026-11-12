@@ -113,6 +113,25 @@ export function extractNetlist(
       dsu.union(`${c.id}:O`, `${c.id}:out_O`);
       dsu.union(`${c.id}:PE`, `${c.id}:in_PE`);
       dsu.union(`${c.id}:PE`, `${c.id}:out_PE`);
+    } else if (c.type === 'diode' || c.type === 'led') {
+      dsu.union(`${c.id}:A`, `${c.id}:pos`);
+      dsu.union(`${c.id}:A`, `${c.id}:1`);
+      dsu.union(`${c.id}:K`, `${c.id}:neg`);
+      dsu.union(`${c.id}:K`, `${c.id}:2`);
+    } else if (c.type === 'opamp') {
+      dsu.union(`${c.id}:in_pos`, `${c.id}:inp`);
+      dsu.union(`${c.id}:in_neg`, `${c.id}:inm`);
+      dsu.union(`${c.id}:v_pos`, `${c.id}:vcc`);
+      dsu.union(`${c.id}:v_neg`, `${c.id}:vee`);
+    }
+  }
+
+  // All 'gnd' symbols share the same reference ground net in electronics schematics
+  const gndComponents = components.filter((c) => c.type === 'gnd');
+  if (gndComponents.length > 1) {
+    const firstGndKey = `${gndComponents[0].id}:gnd`;
+    for (let i = 1; i < gndComponents.length; i++) {
+      dsu.union(firstGndKey, `${gndComponents[i].id}:gnd`);
     }
   }
 

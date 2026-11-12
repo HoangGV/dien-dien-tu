@@ -22,7 +22,6 @@ import {
   Net,
   CaseStatus,
 } from './model';
-import { oscilloscopeService } from './oscilloscopeService';
 import { COMPONENT_MAP, COMPONENT_REGISTRY, getComponentDef } from './registry';
 import { extractNetlist, getComponentPins } from './netlist';
 import {
@@ -746,14 +745,6 @@ export class SimulationService {
     this.stepCount++;
     this.simTime = tSolve;
 
-    // Record oscilloscope samples if an oscilloscope is present in the circuit
-    const osc = components.find(c => c.type === 'oscilloscope');
-    if (osc) {
-      const v1 = Number(osc.props._vCh1 ?? 0);
-      const v2 = Number(osc.props._vCh2 ?? 0);
-      oscilloscopeService.addSample(this.simTime, v1, v2);
-    }
-
     const snapshot: SimulationSnapshot = {
       time: this.simTime,
       simTime: this.simTime,
@@ -860,13 +851,11 @@ export class SimulationService {
       : Math.max(10e-6, Math.min(0.001, duration / 500));
 
     let timeElapsed = 0;
-    oscilloscopeService.setHeld(false);
     while (timeElapsed < duration - 1e-9) {
       const stepDt = Math.min(duration - timeElapsed, dt);
       this.step(stepDt);
       timeElapsed += stepDt;
     }
-    oscilloscopeService.setHeld(true);
     if (this.lastSnapshot) {
       this.listeners.forEach((fn) => fn(this.lastSnapshot!));
     }
@@ -896,7 +885,6 @@ export class SimulationService {
 
     let timeElapsed = 0;
     let cancelled = false;
-    oscilloscopeService.setHeld(false);
 
     const slice = () => {
       if (cancelled) return;
@@ -911,7 +899,6 @@ export class SimulationService {
       onProgress?.(pct);
 
       if (timeElapsed >= duration - 1e-9) {
-        oscilloscopeService.setHeld(true);
         if (this.lastSnapshot) {
           this.listeners.forEach((fn) => fn(this.lastSnapshot!));
         }
@@ -929,7 +916,6 @@ export class SimulationService {
   };
 
   public start(state?: CircuitState, mode: 'rms' | 'dc' = 'rms') {
-    oscilloscopeService.setHeld(false);
     if (state) {
       this.currentCircuitState = state;
       this.currentMode = mode;
@@ -960,8 +946,6 @@ export class SimulationService {
     this.particles = [];
     this.thermalStates = {};
     this.wireThermalStates = {};
-    oscilloscopeService.clear();
-    oscilloscopeService.setHeld(false);
     this.addLog('Đặt lại mô phỏng về trạng thái ban đầu.');
     if (this.currentCircuitState) {
       for (const c of this.currentCircuitState.components) {

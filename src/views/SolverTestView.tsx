@@ -309,7 +309,7 @@ export const SolverTestView: React.FC = () => {
               <div className="flex items-center gap-2">
                 <Activity size={18} className="text-[#FFD84D]" strokeWidth={2.5} />
                 <span className="font-black text-sm uppercase tracking-wide">
-                  KIỂM TRA DAO ĐỘNG KÍ ẢO (CHẨN ĐOÁN SỐ LIỆU THÔ D1 – D6)
+                  PHÂN TÍCH QUÁ ĐỘ (TRANSIENT ANALYSIS) — SỐ LIỆU THÔ
                 </span>
                 {oscDiag && (
                   <span
@@ -319,7 +319,7 @@ export const SolverTestView: React.FC = () => {
                         : 'bg-[#E5322D] text-white'
                     }`}
                   >
-                    {oscDiag.conclusionType === 'success' ? 'TẤT CẢ D1–D6 ĐẠT' : 'CÓ LỖI CHẨN ĐOÁN'}
+                    {oscDiag.conclusionType === 'success' ? 'TẤT CẢ A & B ĐẠT' : 'CÓ LỖI CHẨN ĐOÁN'}
                   </span>
                 )}
               </div>
@@ -331,9 +331,9 @@ export const SolverTestView: React.FC = () => {
                 onClick={handleCopyOscResults}
                 icon={oscCopied ? <Check size={13} strokeWidth={3} className="text-[#2DB84D]" /> : <Copy size={13} strokeWidth={3} />}
                 className="!h-[28px] !px-2.5 font-black text-[11px] bg-white text-black hover:bg-[#FFD84D]"
-                title="Sao chép toàn bộ bảng số liệu D1-D6 ra clipboard"
+                title="Sao chép toàn bộ kết quả phân tích quá độ ra clipboard"
               >
-                {oscCopied ? 'ĐÃ SAO CHÉP D1–D6!' : 'SAO CHÉP KẾT QUẢ D1–D6'}
+                {oscCopied ? 'ĐÃ SAO CHÉP KẾT QUẢ!' : 'SAO CHÉP KẾT QUẢ'}
               </NeoButton>
               <NeoButton
                 variant="primary"
@@ -375,259 +375,181 @@ export const SolverTestView: React.FC = () => {
                 </div>
               </div>
 
-              {/* Grid of tests */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {/* D1: Snapshot Bộ giải RC */}
-                <div className="bg-white border-2 border-black p-3 shadow-[2px_2px_0_#000]">
-                  <div className="flex items-center justify-between pb-2 border-b-2 border-black mb-2">
-                    <span className="font-black text-xs uppercase text-black">
-                      D1. Nạp tụ RC (Mẫu v) — Snapshot Bộ giải (1.0 s)
-                    </span>
-                    <span
-                      className={`text-[10px] font-black px-1.5 py-0.5 border border-black ${
-                        oscDiag.d1Passed ? 'bg-[#2DB84D] text-white' : 'bg-[#E5322D] text-white'
-                      }`}
-                    >
-                      {oscDiag.d1Passed ? 'ĐẠT (±3%)' : 'KHÔNG ĐẠT'}
-                    </span>
-                  </div>
-                  <table className="w-full text-xs font-mono border-collapse">
-                    <thead>
-                      <tr className="bg-[#F1F5F9] border-b border-black text-left">
-                        <th className="p-1 font-bold">t (s)</th>
-                        <th className="p-1 font-bold">Kì vọng (V)</th>
-                        <th className="p-1 font-bold">Thực tế (V)</th>
-                        <th className="p-1 font-bold text-center">KQ</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {oscDiag.d1.map((pt, i) => (
-                        <tr key={i} className="border-b border-gray-200 hover:bg-[#F8FAFC]">
-                          <td className="p-1">{pt.t.toFixed(2)}</td>
-                          <td className="p-1">{pt.expected.toFixed(2)}</td>
-                          <td className="p-1 font-bold">{pt.actual.toFixed(3)}</td>
-                          <td className="p-1 text-center font-bold">
-                            {pt.passed ? (
-                              <span className="text-[#059669]">✓</span>
-                            ) : (
-                              <span className="text-[#DC2626]">✗</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+              {/* SECTION A: Direct runTransient Calls */}
+              <div className="border-2 border-black bg-white p-3 shadow-[2px_2px_0_#000]">
+                <div className="text-xs font-black uppercase text-black border-b-2 border-black pb-1.5 mb-3 flex items-center justify-between">
+                  <span>A. GỌI TRỰC TIẾP runTransient (Không qua giao diện)</span>
+                  <span className={`text-[10px] font-black px-1.5 py-0.5 border border-black ${
+                    oscDiag.a1Passed && oscDiag.a2Passed && oscDiag.a3Passed && oscDiag.a4Passed
+                      ? 'bg-[#2DB84D] text-white' : 'bg-[#E5322D] text-white'
+                  }`}>
+                    {oscDiag.a1Passed && oscDiag.a2Passed && oscDiag.a3Passed && oscDiag.a4Passed ? 'ĐẠT (A1 - A4)' : 'CÓ LỖI'}
+                  </span>
                 </div>
 
-                {/* D2: Bộ đệm dao động kí tương ứng D1 */}
-                <div className="bg-white border-2 border-black p-3 shadow-[2px_2px_0_#000]">
-                  <div className="flex items-center justify-between pb-2 border-b-2 border-black mb-2">
-                    <span className="font-black text-xs uppercase text-black">
-                      D2. Bộ đệm dao động kí (CH1) tại các mốc D1
-                    </span>
-                    <span
-                      className={`text-[10px] font-black px-1.5 py-0.5 border border-black ${
-                        oscDiag.d2Passed ? 'bg-[#2DB84D] text-white' : 'bg-[#E5322D] text-white'
-                      }`}
-                    >
-                      {oscDiag.d2Passed ? 'ĐẠT (±0.15V)' : 'KHÔNG ĐẠT'}
-                    </span>
-                  </div>
-                  <table className="w-full text-xs font-mono border-collapse">
-                    <thead>
-                      <tr className="bg-[#F1F5F9] border-b border-black text-left">
-                        <th className="p-1 font-bold">t mốc (s)</th>
-                        <th className="p-1 font-bold">t mẫu (s)</th>
-                        <th className="p-1 font-bold">V_CH1 (V)</th>
-                        <th className="p-1 font-bold text-center">KQ</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {oscDiag.d2.map((pt, i) => (
-                        <tr key={i} className="border-b border-gray-200 hover:bg-[#F8FAFC]">
-                          <td className="p-1">{pt.targetT.toFixed(2)}</td>
-                          <td className="p-1">{pt.sampleT.toFixed(3)}</td>
-                          <td className="p-1 font-bold">{pt.v1.toFixed(3)}</td>
-                          <td className="p-1 text-center font-bold">
-                            {pt.passed ? (
-                              <span className="text-[#059669]">✓</span>
-                            ) : (
-                              <span className="text-[#DC2626]">✗</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* D3: Thông tin bộ đệm dao động kí */}
-                <div className="bg-white border-2 border-black p-3 shadow-[2px_2px_0_#000]">
-                  <div className="flex items-center justify-between pb-2 border-b-2 border-black mb-2">
-                    <span className="font-black text-xs uppercase text-black">
-                      D3. Thông tin bộ đệm dao động kí & Net chân nối
-                    </span>
-                    <span
-                      className={`text-[10px] font-black px-1.5 py-0.5 border border-black ${
-                        oscDiag.d3.netsMatch ? 'bg-[#2DB84D] text-white' : 'bg-[#E5322D] text-white'
-                      }`}
-                    >
-                      {oscDiag.d3.netsMatch ? 'NET TRÙNG KHỚP' : 'SAI NET'}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="bg-[#F8FAFC] p-2 border border-gray-300">
-                      <div className="text-gray-600 font-medium">Số mẫu ghi:</div>
-                      <div className="font-bold">
-                        {oscDiag.d3.sampleCount} mẫu
-                      </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {/* A1: RC */}
+                  <div className="border border-black p-2 bg-[#F8FAFC]">
+                    <div className="flex items-center justify-between pb-1 border-b border-black text-xs font-bold">
+                      <span>A1. Nạp tụ RC (5V + 1kΩ + 100µF, 1s)</span>
+                      <span className={oscDiag.a1Passed ? 'text-[#059669]' : 'text-[#DC2626]'}>
+                        {oscDiag.a1Passed ? '✓ ĐẠT' : '✗ KHÔNG ĐẠT'}
+                      </span>
                     </div>
-                    <div className="bg-[#F8FAFC] p-2 border border-gray-300">
-                      <div className="text-gray-600 font-medium">Bao phủ thời gian:</div>
-                      <div className="font-bold">
-                        {oscDiag.d3.timeSpanCovered} (t: {oscDiag.d3.firstT.toFixed(2)} → {oscDiag.d3.lastT.toFixed(2)}s)
-                      </div>
-                    </div>
-                    <div className="bg-[#F8FAFC] p-2 border border-gray-300">
-                      <div className="text-gray-600 font-medium">Khoảng lấy mẫu TB:</div>
-                      <div className="font-bold">
-                        {oscDiag.d3.sampleIntervalMs.toFixed(2)} ms / mẫu
-                      </div>
-                    </div>
-                    <div className="bg-[#F8FAFC] p-2 border border-gray-300">
-                      <div className="text-gray-600 font-medium">Net CH1 vs Chân (+):</div>
-                      <div className="font-bold">
-                        {oscDiag.d3.netCh1} ↔ {oscDiag.d3.netCapPos} ({oscDiag.d3.netsMatch ? 'TRÙNG' : 'LỆCH'})
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* D4: Khâu vẽ (Pixel x, y trên Canvas) */}
-                <div className="bg-white border-2 border-black p-3 shadow-[2px_2px_0_#000]">
-                  <div className="flex items-center justify-between pb-2 border-b-2 border-black mb-2">
-                    <span className="font-black text-xs uppercase text-black">
-                      D4. Khâu vẽ (100 ms/ô × 10 ô = 1.0 s, 500×320 px)
-                    </span>
-                    <span
-                      className={`text-[10px] font-black px-1.5 py-0.5 border border-black ${
-                        oscDiag.d4.passed ? 'bg-[#2DB84D] text-white' : 'bg-[#E5322D] text-white'
-                      }`}
-                    >
-                      {oscDiag.d4.passed ? 'ĐẠT (ĐƯỜNG CONG RÕ)' : 'BỊ THẲNG HÀNG'}
-                    </span>
-                  </div>
-                  <div className="text-[11px] font-mono text-gray-700 mb-1">
-                    minY: <strong>{oscDiag.d4.minY.toFixed(1)} px</strong>, maxY: <strong>{oscDiag.d4.maxY.toFixed(1)} px</strong> (Độ lệch ΔY: <strong>{(oscDiag.d4.maxY - oscDiag.d4.minY).toFixed(1)} px</strong>)
-                  </div>
-                  <div className="max-h-28 overflow-y-auto border border-gray-200">
-                    <table className="w-full text-[11px] font-mono border-collapse">
+                    <table className="w-full text-xs font-mono mt-1 border-collapse">
                       <thead>
-                        <tr className="bg-[#F1F5F9] border-b border-black text-left sticky top-0">
-                          <th className="p-0.5">#</th>
+                        <tr className="bg-[#E2E8F0] text-left text-[10px]">
                           <th className="p-0.5">t (s)</th>
-                          <th className="p-0.5">V (V)</th>
-                          <th className="p-0.5">x (px)</th>
-                          <th className="p-0.5">y (px)</th>
+                          <th className="p-0.5">Kì vọng</th>
+                          <th className="p-0.5">Thực tế</th>
+                          <th className="p-0.5 text-center">KQ</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {oscDiag.d4.points.slice(0, 10).map((pt, i) => (
-                          <tr key={i} className="border-b border-gray-100 hover:bg-[#F8FAFC]">
-                            <td className="p-0.5">{i + 1}</td>
-                            <td className="p-0.5">{pt.t.toFixed(3)}</td>
-                            <td className="p-0.5 font-bold">{pt.v.toFixed(3)}</td>
-                            <td className="p-0.5">{pt.x.toFixed(1)}</td>
-                            <td className="p-0.5 font-bold">{pt.y.toFixed(1)}</td>
+                        {oscDiag.a1.map((item, i) => (
+                          <tr key={i} className="border-b border-gray-200">
+                            <td className="p-0.5">{item.t}</td>
+                            <td className="p-0.5">{item.expected.toFixed(2)} V</td>
+                            <td className="p-0.5 font-bold">{item.actual.toFixed(2)} V</td>
+                            <td className="p-0.5 text-center font-bold">
+                              {item.passed ? <span className="text-[#059669]">✓</span> : <span className="text-[#DC2626]">✗</span>}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
+
+                  {/* A2: SIN */}
+                  <div className="border border-black p-2 bg-[#F8FAFC]">
+                    <div className="flex items-center justify-between pb-1 border-b border-black text-xs font-bold">
+                      <span>A2. Nguồn xoay chiều sin (5V đỉnh, 50Hz, 20ms)</span>
+                      <span className={oscDiag.a2Passed ? 'text-[#059669]' : 'text-[#DC2626]'}>
+                        {oscDiag.a2Passed ? '✓ ĐẠT' : '✗ KHÔNG ĐẠT'}
+                      </span>
+                    </div>
+                    <table className="w-full text-xs font-mono mt-1 border-collapse">
+                      <thead>
+                        <tr className="bg-[#E2E8F0] text-left text-[10px]">
+                          <th className="p-0.5">t (ms)</th>
+                          <th className="p-0.5">Kì vọng</th>
+                          <th className="p-0.5">Thực tế</th>
+                          <th className="p-0.5 text-center">KQ</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {oscDiag.a2.map((item, i) => (
+                          <tr key={i} className="border-b border-gray-200">
+                            <td className="p-0.5">{item.tMs}</td>
+                            <td className="p-0.5">{item.expected.toFixed(1)} V</td>
+                            <td className="p-0.5 font-bold">{item.actual.toFixed(2)} V</td>
+                            <td className="p-0.5 text-center font-bold">
+                              {item.passed ? <span className="text-[#059669]">✓</span> : <span className="text-[#DC2626]">✗</span>}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* A3: Rectifier */}
+                  <div className="border border-black p-2 bg-[#F8FAFC]">
+                    <div className="flex items-center justify-between pb-1 border-b border-black text-xs font-bold">
+                      <span>A3. Chỉnh lưu nửa chu kì (40ms)</span>
+                      <span className={oscDiag.a3Passed ? 'text-[#059669]' : 'text-[#DC2626]'}>
+                        {oscDiag.a3Passed ? '✓ ĐẠT' : '✗ KHÔNG ĐẠT'}
+                      </span>
+                    </div>
+                    <div className="mt-1 space-y-1 text-xs font-mono">
+                      <div className="flex justify-between">
+                        <span>V_max tải:</span>
+                        <span className="font-bold">{oscDiag.a3.maxV} V (kì vọng ≈ 4.3 V)</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>V_min tải:</span>
+                        <span className="font-bold">{oscDiag.a3.minV} V (kì vọng ≥ -0.05 V)</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* A4: Time steps */}
+                  <div className="border border-black p-2 bg-[#F8FAFC]">
+                    <div className="flex items-center justify-between pb-1 border-b border-black text-xs font-bold">
+                      <span>A4. Bước thời gian t và dt</span>
+                      <span className={oscDiag.a4Passed ? 'text-[#059669]' : 'text-[#DC2626]'}>
+                        {oscDiag.a4Passed ? '✓ ĐẠT' : '✗ KHÔNG ĐẠT'}
+                      </span>
+                    </div>
+                    <div className="mt-1 space-y-1 text-xs font-mono">
+                      <div>dt = <strong>{(oscDiag.a4.dt * 1e6).toFixed(1)} µs</strong></div>
+                      <div>t[0] = <strong>{oscDiag.a4.samples[0]?.t} s</strong> (bắt đầu từ 0)</div>
+                      <div>5 mẫu đầu: [{oscDiag.a4.samples.map(s => (s.t * 1000).toFixed(2) + 'ms').join(', ')}]</div>
+                      <div>Tăng đơn điệu: <strong>{oscDiag.a4.isMonotonic ? 'CÓ (t_{k+1} > t_k)' : 'KHÔNG'}</strong></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION B: Through UI Pipeline on Presets */}
+              <div className="border-2 border-black bg-white p-3 shadow-[2px_2px_0_#000]">
+                <div className="text-xs font-black uppercase text-black border-b-2 border-black pb-1.5 mb-3 flex items-center justify-between">
+                  <span>B. QUA ĐƯỜNG ỐNG GIAO DIỆN CỦA MẪU MẠCH (v), (x), (y)</span>
+                  <span className={`text-[10px] font-black px-1.5 py-0.5 border border-black ${
+                    oscDiag.bPassed ? 'bg-[#2DB84D] text-white' : 'bg-[#E5322D] text-white'
+                  }`}>
+                    {oscDiag.bPassed ? 'ĐẠT (B1 - B3)' : 'CÓ LỖI'}
+                  </span>
                 </div>
 
-                {/* D5: Nguồn xoay chiều 5V đỉnh 50 Hz */}
-                <div className="bg-white border-2 border-black p-3 shadow-[2px_2px_0_#000]">
-                  <div className="flex items-center justify-between pb-2 border-b-2 border-black mb-2">
-                    <span className="font-black text-xs uppercase text-black">
-                      D5. Nguồn xoay chiều AC (5 V đỉnh, 50 Hz, 60 ms)
-                    </span>
-                    <span
-                      className={`text-[10px] font-black px-1.5 py-0.5 border border-black ${
-                        oscDiag.d5Passed ? 'bg-[#2DB84D] text-white' : 'bg-[#E5322D] text-white'
-                      }`}
-                    >
-                      {oscDiag.d5Passed ? 'SÓNG SIN CHUẨN' : 'KHÔNG RA SÓNG SIN'}
-                    </span>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {/* B1: Preset v */}
+                  <div className="border border-black p-2 bg-[#F8FAFC] text-xs font-mono space-y-1">
+                    <div className="font-bold border-b border-black pb-1 flex justify-between">
+                      <span>B1. Mẫu (v) nạp RC</span>
+                      <span className={oscDiag.b1.passed ? 'text-[#059669]' : 'text-[#DC2626]'}>
+                        {oscDiag.b1.passed ? '✓ ĐẠT' : '✗'}
+                      </span>
+                    </div>
+                    <div>V(0.1s): <strong>{oscDiag.b1.vAt01} V</strong> (exp 3.16V)</div>
+                    <div>Nút CH1: <strong>{oscDiag.b1.netCh1}</strong></div>
+                    <div>Nút Tụ(+): <strong>{oscDiag.b1.netCapPos}</strong></div>
+                    <div>Khớp nút: <strong className={oscDiag.b1.netsMatch ? 'text-[#059669]' : 'text-[#DC2626]'}>
+                      {oscDiag.b1.netsMatch ? 'TRÙNG' : 'LỆCH'}
+                    </strong></div>
                   </div>
-                  <table className="w-full text-xs font-mono border-collapse">
-                    <thead>
-                      <tr className="bg-[#F1F5F9] border-b border-black text-left">
-                        <th className="p-1 font-bold">t (ms)</th>
-                        <th className="p-1 font-bold">Kì vọng (V)</th>
-                        <th className="p-1 font-bold">Thực tế (V)</th>
-                        <th className="p-1 font-bold text-center">KQ</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {oscDiag.d5.map((pt, i) => (
-                        <tr key={i} className="border-b border-gray-200 hover:bg-[#F8FAFC]">
-                          <td className="p-1">{pt.tMs.toFixed(0)}</td>
-                          <td className="p-1">{pt.expected.toFixed(2)}</td>
-                          <td className="p-1 font-bold">{pt.actual.toFixed(3)}</td>
-                          <td className="p-1 text-center font-bold">
-                            {pt.passed ? (
-                              <span className="text-[#059669]">✓</span>
-                            ) : (
-                              <span className="text-[#DC2626]">✗</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
 
-                {/* D6: Thời gian mô phỏng tăng đơn điệu */}
-                <div className="bg-white border-2 border-black p-3 shadow-[2px_2px_0_#000]">
-                  <div className="flex items-center justify-between pb-2 border-b-2 border-black mb-2">
-                    <span className="font-black text-xs uppercase text-black">
-                      D6. Kiểm tra thời gian t tăng đơn điệu
-                    </span>
-                    <span
-                      className={`text-[10px] font-black px-1.5 py-0.5 border border-black ${
-                        oscDiag.d6Passed ? 'bg-[#2DB84D] text-white' : 'bg-[#E5322D] text-white'
-                      }`}
-                    >
-                      {oscDiag.d6Passed ? 'ĐƠN ĐIỆU (KHÔNG RESET)' : 'BỊ LÙI HOẶC ĐỨNG'}
-                    </span>
+                  {/* B2: Preset x */}
+                  <div className="border border-black p-2 bg-[#F8FAFC] text-xs font-mono space-y-1">
+                    <div className="font-bold border-b border-black pb-1 flex justify-between">
+                      <span>B2. Mẫu (x) Nguồn sin</span>
+                      <span className={oscDiag.b2.passed ? 'text-[#059669]' : 'text-[#DC2626]'}>
+                        {oscDiag.b2.passed ? '✓ ĐẠT' : '✗'}
+                      </span>
+                    </div>
+                    <div>V(5ms): <strong>{oscDiag.b2.vAt5ms} V</strong> (exp 5.0V)</div>
+                    <div>Nút CH1: <strong>{oscDiag.b2.netCh1}</strong></div>
+                    <div>Nút Nguồn(+): <strong>{oscDiag.b2.netSrcPos}</strong></div>
+                    <div>Khớp nút: <strong className={oscDiag.b2.netsMatch ? 'text-[#059669]' : 'text-[#DC2626]'}>
+                      {oscDiag.b2.netsMatch ? 'TRÙNG' : 'LỆCH'}
+                    </strong></div>
                   </div>
-                  <table className="w-full text-xs font-mono border-collapse">
-                    <thead>
-                      <tr className="bg-[#F1F5F9] border-b border-black text-left">
-                        <th className="p-1 font-bold">Bước #</th>
-                        <th className="p-1 font-bold">t mô phỏng (s)</th>
-                        <th className="p-1 font-bold">dt (s)</th>
-                        <th className="p-1 font-bold text-center">KQ</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {oscDiag.d6.map((st, i) => (
-                        <tr key={i} className="border-b border-gray-200 hover:bg-[#F8FAFC]">
-                          <td className="p-1">{st.step}</td>
-                          <td className="p-1 font-bold">{st.t.toFixed(4)}</td>
-                          <td className="p-1">{st.dt.toFixed(4)}</td>
-                          <td className="p-1 text-center font-bold">
-                            {st.isMonotonic ? (
-                              <span className="text-[#059669]">✓</span>
-                            ) : (
-                              <span className="text-[#DC2626]">✗</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+
+                  {/* B3: Preset y */}
+                  <div className="border border-black p-2 bg-[#F8FAFC] text-xs font-mono space-y-1">
+                    <div className="font-bold border-b border-black pb-1 flex justify-between">
+                      <span>B3. Mẫu (y) Chỉnh lưu</span>
+                      <span className={oscDiag.b3.passed ? 'text-[#059669]' : 'text-[#DC2626]'}>
+                        {oscDiag.b3.passed ? '✓ ĐẠT' : '✗'}
+                      </span>
+                    </div>
+                    <div>V_max CH2: <strong>{oscDiag.b3.maxV} V</strong> (exp ~4.3V)</div>
+                    <div>V_min CH2: <strong>{oscDiag.b3.minV} V</strong> (exp ≥ -0.05V)</div>
+                    <div>Nút CH2: <strong>{oscDiag.b3.netCh2}</strong></div>
+                    <div>Nút Tải(+): <strong>{oscDiag.b3.netLoadPos}</strong></div>
+                    <div>Khớp nút: <strong className={oscDiag.b3.netsMatch ? 'text-[#059669]' : 'text-[#DC2626]'}>
+                      {oscDiag.b3.netsMatch ? 'TRÙNG' : 'LỆCH'}
+                    </strong></div>
+                  </div>
                 </div>
               </div>
             </div>

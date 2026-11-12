@@ -145,6 +145,24 @@ const CURRICULUM_DATA: Record<string, WorkspaceCurriculumInfo> = {
       'Chưa hỗ trợ: bộ nhớ, thanh ghi vào song song, mạch dãy phức tạp.',
     ],
   },
+  'dien-tu-tuong-tu': {
+    title: 'Điện tử tương tự',
+    grades: 'Lớp 12',
+    coveredPoints: [
+      {
+        gradeTag: 'Lớp 12',
+        topic: 'Điện tử tương tự & Mạch khuếch đại thuật toán',
+        items: [
+          'Trình bày nội dung cơ bản về tín hiệu và một số mạch xử lí tín hiệu (khuếch đại, điều chế, giải điều chế).',
+          'Trình bày kí hiệu, nguyên lí làm việc và ứng dụng cơ bản của mạch khuếch đại thuật toán (Op-amp).',
+          'Lắp ráp và kiểm tra một mạch điện tử ứng dụng khuếch đại thuật toán (mạch khuếch đại đảo, khuếch đại không đảo, mạch so sánh).',
+        ],
+      },
+    ],
+    unsupportedPoints: [
+      'Chưa hỗ trợ: điều chế, giải điều chế, mạch dao động, dao động kí đang sửa.',
+    ],
+  },
   'do-dung-dien-gia-dinh': {
     title: 'Đồ dùng điện trong gia đình',
     grades: 'Lớp 6',

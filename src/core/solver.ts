@@ -75,6 +75,7 @@ export interface SolverStepResult {
   meterMeasurements: Record<string, MeterMeasurement>;
   statusMessages: string[];
   openCircuit?: OpenCircuitInfo;
+  converged?: boolean;
 }
 
 // Gaussian elimination with partial pivoting
@@ -605,7 +606,17 @@ export function solveCircuit(
       sensorPowered?: Record<string, boolean>;
       sensorDoHigh?: Record<string, boolean>;
       relayEnergized?: Record<string, boolean>;
-    }
+    },
+    opampStates?: Record<
+      string,
+      {
+        vd: number;
+        vTarget: number;
+        aEff: number;
+        isPowered: boolean;
+        status: 'Tuyến tính' | 'Bão hòa dương' | 'Bão hòa âm' | 'Chưa cấp nguồn';
+      }
+    >
   ) => {
     const totalMatrixSize = numNodes + vSources.length;
     const G: number[][] = Array.from({ length: totalMatrixSize }, () =>
@@ -971,6 +982,47 @@ export function solveCircuit(
         if (uCom >= 0 && uNc >= 0) {
           addResistor(uCom, uNc, isEnergized ? 1e7 : 0.001);
         }
+      } else if (c.type === 'opamp') {
+        const netInPos = pinToNetId.get(`${c.id}:in_pos`) || pinToNetId.get(`${c.id}:in+`) || pinToNetId.get(`${c.id}:IN+`) || pinToNetId.get(`${c.id}:inp`);
+        const netInNeg = pinToNetId.get(`${c.id}:in_neg`) || pinToNetId.get(`${c.id}:in-`) || pinToNetId.get(`${c.id}:IN-`) || pinToNetId.get(`${c.id}:inm`);
+        const netOut = pinToNetId.get(`${c.id}:out`) || pinToNetId.get(`${c.id}:OUT`);
+        const netVpos = pinToNetId.get(`${c.id}:v_pos`) || pinToNetId.get(`${c.id}:v+`) || pinToNetId.get(`${c.id}:V+`) || pinToNetId.get(`${c.id}:vcc`);
+        const netVneg = pinToNetId.get(`${c.id}:v_neg`) || pinToNetId.get(`${c.id}:v-`) || pinToNetId.get(`${c.id}:V-`) || pinToNetId.get(`${c.id}:vee`);
+
+        const uInPos = netInPos ? (nodeMap.get(netInPos) ?? -1) : -1;
+        const uInNeg = netInNeg ? (nodeMap.get(netInNeg) ?? -1) : -1;
+        const uOut = netOut ? (nodeMap.get(netOut) ?? -1) : -1;
+        const uVpos = netVpos ? (nodeMap.get(netVpos) ?? -1) : -1;
+        const uVneg = netVneg ? (nodeMap.get(netVneg) ?? -1) : -1;
+
+        // Input resistance: 1 MΩ between IN+ and IN-
+        if (uInPos >= 0 || uInNeg >= 0) {
+          addResistor(uInPos, uInNeg, 1e6);
+        }
+
+        const opState = opampStates?.[c.id];
+        const isPowered = opState ? opState.isPowered : Boolean(netVpos && netVneg);
+
+        if (isPowered) {
+          // Quiescent supply current: 1 mA from V+ to V-
+          if (uVpos >= 0) I[uVpos] -= 0.001;
+          if (uVneg >= 0) I[uVneg] += 0.001;
+
+          // Output stage with Newton-Raphson linearization through Rout = 50 Ω
+          if (uOut >= 0 && opState) {
+            const Rout = 50;
+            const Gout = 1 / Rout;
+            const Aeff = opState.aEff;
+            const Vtarget = opState.vTarget;
+            const vd0 = opState.vd;
+            const constTerm = Vtarget - Aeff * vd0;
+
+            G[uOut][uOut] += Gout;
+            if (uInPos >= 0) G[uOut][uInPos] -= Gout * Aeff;
+            if (uInNeg >= 0) G[uOut][uInNeg] += Gout * Aeff;
+            I[uOut] += Gout * constTerm;
+          }
+        }
       }
     }
 
@@ -1033,97 +1085,208 @@ export function solveCircuit(
     }
   }
 
-  let solveOutput = buildAndSolve(initialConduction, initialControlStates);
+  const opamps = components.filter((c) => c.type === 'opamp');
+  const opampStates: Record<
+    string,
+    {
+      vd: number;
+      vTarget: number;
+      aEff: number;
+      isPowered: boolean;
+      status: 'Tuyến tính' | 'Bão hòa dương' | 'Bão hòa âm' | 'Chưa cấp nguồn';
+    }
+  > = {};
+
+  for (const c of opamps) {
+    const netVpos = pinToNetId.get(`${c.id}:v_pos`) || pinToNetId.get(`${c.id}:v+`) || pinToNetId.get(`${c.id}:V+`) || pinToNetId.get(`${c.id}:vcc`);
+    const netVneg = pinToNetId.get(`${c.id}:v_neg`) || pinToNetId.get(`${c.id}:v-`) || pinToNetId.get(`${c.id}:V-`) || pinToNetId.get(`${c.id}:vee`);
+    const hasPins = Boolean(netVpos && netVneg);
+    opampStates[c.id] = {
+      vd: 0,
+      vTarget: 0,
+      aEff: 1e5,
+      isPowered: hasPins,
+      status: hasPins ? 'Tuyến tính' : 'Chưa cấp nguồn',
+    };
+  }
+
+  let solveOutput = buildAndSolve(initialConduction, initialControlStates, opampStates);
   let nodeVoltages = solveOutput.nodeVoltages;
   let sourceCurrents = solveOutput.sourceCurrents;
 
-  // Check diode bias direction and re-solve if needed
-  let needsResolve = false;
   const refinedConduction = { ...initialConduction };
-  for (const c of components) {
-    if (c.type === 'diode') {
-      const netA = pinToNetId.get(`${c.id}:A`) || pinToNetId.get(`${c.id}:1`) || pinToNetId.get(`${c.id}:pos`);
-      const netK = pinToNetId.get(`${c.id}:K`) || pinToNetId.get(`${c.id}:2`) || pinToNetId.get(`${c.id}:neg`);
-      const vA = netA ? (nodeVoltages[netA] ?? 0) : 0;
-      const vK = netK ? (nodeVoltages[netK] ?? 0) : 0;
-      const iDiode = (vA - vK - 0.7) / 5.0;
-      const shouldConduct = (vA - vK >= 0.70) && (iDiode > 0);
-      if (refinedConduction[c.id] !== shouldConduct) {
-        refinedConduction[c.id] = shouldConduct;
-        needsResolve = true;
-      }
-    } else if (c.type === 'led') {
-      const netA = pinToNetId.get(`${c.id}:A`) || pinToNetId.get(`${c.id}:1`) || pinToNetId.get(`${c.id}:pos`);
-      const netK = pinToNetId.get(`${c.id}:K`) || pinToNetId.get(`${c.id}:2`) || pinToNetId.get(`${c.id}:neg`);
-      const vA = netA ? (nodeVoltages[netA] ?? 0) : 0;
-      const vK = netK ? (nodeVoltages[netK] ?? 0) : 0;
-      if (vA - vK < 1.5) {
-        refinedConduction[c.id] = false;
-        needsResolve = true;
-      }
-    }
-  }
-
   const refinedControlStates = {
     sensorPowered: { ...initialControlStates.sensorPowered },
     sensorDoHigh: { ...initialControlStates.sensorDoHigh },
     relayEnergized: { ...initialControlStates.relayEnergized },
   };
 
-  for (const c of components) {
-    if (c.type === 'sensor_module') {
-      const netVcc = pinToNetId.get(`${c.id}:vcc`) || pinToNetId.get(`${c.id}:VCC`);
-      const netGnd = pinToNetId.get(`${c.id}:gnd`) || pinToNetId.get(`${c.id}:GND`);
-      const vVcc = netVcc ? (nodeVoltages[netVcc] ?? 0) : 0;
-      const vGnd = netGnd ? (nodeVoltages[netGnd] ?? 0) : 0;
-      const vSup = vVcc - vGnd;
-      const isPowered = vSup >= 3.0;
-      const doHigh = computeSensorDoHigh(c, isPowered, c.props._doHigh);
+  let opampConverged = true;
+  const maxIterations = opamps.length > 0 ? 30 : 5;
 
-      if (refinedControlStates.sensorPowered[c.id] !== isPowered || refinedControlStates.sensorDoHigh[c.id] !== doHigh) {
-        refinedControlStates.sensorPowered[c.id] = isPowered;
-        refinedControlStates.sensorDoHigh[c.id] = doHigh;
-        needsResolve = true;
+  for (let iter = 0; iter < maxIterations; iter++) {
+    let changed = false;
+
+    // 1. Check diode / LED bias
+    for (const c of components) {
+      if (c.type === 'diode') {
+        const netA = pinToNetId.get(`${c.id}:A`) || pinToNetId.get(`${c.id}:1`) || pinToNetId.get(`${c.id}:pos`);
+        const netK = pinToNetId.get(`${c.id}:K`) || pinToNetId.get(`${c.id}:2`) || pinToNetId.get(`${c.id}:neg`);
+        const vA = netA ? (nodeVoltages[netA] ?? 0) : 0;
+        const vK = netK ? (nodeVoltages[netK] ?? 0) : 0;
+        const iDiode = (vA - vK - 0.7) / 5.0;
+        const shouldConduct = (vA - vK >= 0.70) && (iDiode > 0);
+        if (refinedConduction[c.id] !== shouldConduct) {
+          refinedConduction[c.id] = shouldConduct;
+          changed = true;
+        }
+      } else if (c.type === 'led') {
+        const netA = pinToNetId.get(`${c.id}:A`) || pinToNetId.get(`${c.id}:1`) || pinToNetId.get(`${c.id}:pos`);
+        const netK = pinToNetId.get(`${c.id}:K`) || pinToNetId.get(`${c.id}:2`) || pinToNetId.get(`${c.id}:neg`);
+        const vA = netA ? (nodeVoltages[netA] ?? 0) : 0;
+        const vK = netK ? (nodeVoltages[netK] ?? 0) : 0;
+        const vf = c.props.color === 'blue' || c.props.color === 'white' ? 3.0 : 2.0;
+        const rEq = (vf / 0.0146) + 10;
+        const isCurrentlyConducting = refinedConduction[c.id] ?? true;
+        const shouldConduct = isCurrentlyConducting
+          ? ((vA - vK) / rEq >= 0.001 && (vA - vK) > 0.15)
+          : (vA - vK >= 1.5);
+        if (refinedConduction[c.id] !== shouldConduct) {
+          refinedConduction[c.id] = shouldConduct;
+          changed = true;
+        }
       }
     }
-  }
 
-  for (const c of components) {
-    if (c.type === 'relay_module_1ch') {
-      const netVcc = pinToNetId.get(`${c.id}:vcc`) || pinToNetId.get(`${c.id}:VCC`);
-      const netGnd = pinToNetId.get(`${c.id}:gnd`) || pinToNetId.get(`${c.id}:GND`);
-      const netIn = pinToNetId.get(`${c.id}:in`) || pinToNetId.get(`${c.id}:IN`);
-      const vVcc = netVcc ? (nodeVoltages[netVcc] ?? 0) : 0;
-      const vGnd = netGnd ? (nodeVoltages[netGnd] ?? 0) : 0;
-      const vIn = netIn ? (nodeVoltages[netIn] ?? 0) : 0;
-      const vSup = vVcc - vGnd;
-      const vInRel = vIn - vGnd;
-      const isEnergized = computeRelayEnergized(vSup, vInRel, c.props._isEnergized);
+    // 2. Sensor module states
+    for (const c of components) {
+      if (c.type === 'sensor_module') {
+        const netVcc = pinToNetId.get(`${c.id}:vcc`) || pinToNetId.get(`${c.id}:VCC`);
+        const netGnd = pinToNetId.get(`${c.id}:gnd`) || pinToNetId.get(`${c.id}:GND`);
+        const vVcc = netVcc ? (nodeVoltages[netVcc] ?? 0) : 0;
+        const vGnd = netGnd ? (nodeVoltages[netGnd] ?? 0) : 0;
+        const vSup = vVcc - vGnd;
+        const isPowered = vSup >= 3.0;
+        const doHigh = computeSensorDoHigh(c, isPowered, c.props._doHigh);
 
-      if (refinedControlStates.relayEnergized[c.id] !== isEnergized) {
-        refinedControlStates.relayEnergized[c.id] = isEnergized;
-        needsResolve = true;
-      }
-    } else if (c.type === 'time_relay') {
-      const netVcc = pinToNetId.get(`${c.id}:vcc`) || pinToNetId.get(`${c.id}:VCC`);
-      const netGnd = pinToNetId.get(`${c.id}:gnd`) || pinToNetId.get(`${c.id}:GND`);
-      const netIn = pinToNetId.get(`${c.id}:in`) || pinToNetId.get(`${c.id}:IN`);
-      const vVcc = netVcc ? (nodeVoltages[netVcc] ?? 0) : 0;
-      const vGnd = netGnd ? (nodeVoltages[netGnd] ?? 0) : 0;
-      const vIn = netIn ? (nodeVoltages[netIn] ?? 0) : 0;
-      const vSup = vVcc - vGnd;
-      const vInRel = vIn - vGnd;
-      const trRes = computeTimeRelay(c, vSup, vInRel, dtSeconds);
-
-      if (refinedControlStates.relayEnergized[c.id] !== trRes.isEnergized) {
-        refinedControlStates.relayEnergized[c.id] = trRes.isEnergized;
-        needsResolve = true;
+        if (refinedControlStates.sensorPowered[c.id] !== isPowered || refinedControlStates.sensorDoHigh[c.id] !== doHigh) {
+          refinedControlStates.sensorPowered[c.id] = isPowered;
+          refinedControlStates.sensorDoHigh[c.id] = doHigh;
+          changed = true;
+        }
       }
     }
-  }
 
-  if (needsResolve) {
-    solveOutput = buildAndSolve(refinedConduction, refinedControlStates);
+    // 3. Relays
+    for (const c of components) {
+      if (c.type === 'relay_module_1ch') {
+        const netVcc = pinToNetId.get(`${c.id}:vcc`) || pinToNetId.get(`${c.id}:VCC`);
+        const netGnd = pinToNetId.get(`${c.id}:gnd`) || pinToNetId.get(`${c.id}:GND`);
+        const netIn = pinToNetId.get(`${c.id}:in`) || pinToNetId.get(`${c.id}:IN`);
+        const vVcc = netVcc ? (nodeVoltages[netVcc] ?? 0) : 0;
+        const vGnd = netGnd ? (nodeVoltages[netGnd] ?? 0) : 0;
+        const vIn = netIn ? (nodeVoltages[netIn] ?? 0) : 0;
+        const vSup = vVcc - vGnd;
+        const vInRel = vIn - vGnd;
+        const isEnergized = computeRelayEnergized(vSup, vInRel, c.props._isEnergized);
+
+        if (refinedControlStates.relayEnergized[c.id] !== isEnergized) {
+          refinedControlStates.relayEnergized[c.id] = isEnergized;
+          changed = true;
+        }
+      } else if (c.type === 'time_relay') {
+        const netVcc = pinToNetId.get(`${c.id}:vcc`) || pinToNetId.get(`${c.id}:VCC`);
+        const netGnd = pinToNetId.get(`${c.id}:gnd`) || pinToNetId.get(`${c.id}:GND`);
+        const netIn = pinToNetId.get(`${c.id}:in`) || pinToNetId.get(`${c.id}:IN`);
+        const vVcc = netVcc ? (nodeVoltages[netVcc] ?? 0) : 0;
+        const vGnd = netGnd ? (nodeVoltages[netGnd] ?? 0) : 0;
+        const vIn = netIn ? (nodeVoltages[netIn] ?? 0) : 0;
+        const vSup = vVcc - vGnd;
+        const vInRel = vIn - vGnd;
+        const trRes = computeTimeRelay(c, vSup, vInRel, dtSeconds);
+
+        if (refinedControlStates.relayEnergized[c.id] !== trRes.isEnergized) {
+          refinedControlStates.relayEnergized[c.id] = trRes.isEnergized;
+          changed = true;
+        }
+      }
+    }
+
+    // 4. Op-amps (Newton-Raphson update)
+    for (const c of opamps) {
+      const netInPos = pinToNetId.get(`${c.id}:in_pos`) || pinToNetId.get(`${c.id}:in+`) || pinToNetId.get(`${c.id}:IN+`) || pinToNetId.get(`${c.id}:inp`);
+      const netInNeg = pinToNetId.get(`${c.id}:in_neg`) || pinToNetId.get(`${c.id}:in-`) || pinToNetId.get(`${c.id}:IN-`) || pinToNetId.get(`${c.id}:inm`);
+      const netVpos = pinToNetId.get(`${c.id}:v_pos`) || pinToNetId.get(`${c.id}:v+`) || pinToNetId.get(`${c.id}:V+`) || pinToNetId.get(`${c.id}:vcc`);
+      const netVneg = pinToNetId.get(`${c.id}:v_neg`) || pinToNetId.get(`${c.id}:v-`) || pinToNetId.get(`${c.id}:V-`) || pinToNetId.get(`${c.id}:vee`);
+
+      const vPos = netVpos ? (nodeVoltages[netVpos] ?? 0) : 0;
+      const vNeg = netVneg ? (nodeVoltages[netVneg] ?? 0) : 0;
+      const s = Number(c.props.drop_voltage ?? 1.0);
+      const isPowered = Boolean(netVpos && netVneg && (vPos - vNeg >= 2 * s));
+
+      const oldState = opampStates[c.id];
+      if (!isPowered) {
+        if (oldState.isPowered !== false || oldState.status !== 'Chưa cấp nguồn') {
+          oldState.isPowered = false;
+          oldState.status = 'Chưa cấp nguồn';
+          oldState.vTarget = 0;
+          oldState.aEff = 1e-6;
+          changed = true;
+        }
+        continue;
+      }
+
+      const vInPos = netInPos ? (nodeVoltages[netInPos] ?? 0) : 0;
+      const vInNeg = netInNeg ? (nodeVoltages[netInNeg] ?? 0) : 0;
+      const vdActual = vInPos - vInNeg;
+      const Vmax = vPos - s;
+      const Vmin = vNeg + s;
+      const A = 1e5;
+      const rawTarget = A * vdActual;
+
+      let vTargetNew = 0;
+      let aEffNew = A;
+      let statusNew: 'Tuyến tính' | 'Bão hòa dương' | 'Bão hòa âm' = 'Tuyến tính';
+
+      if (rawTarget > Vmax) {
+        vTargetNew = Vmax;
+        aEffNew = 1e-6;
+        statusNew = 'Bão hòa dương';
+      } else if (rawTarget < Vmin) {
+        vTargetNew = Vmin;
+        aEffNew = 1e-6;
+        statusNew = 'Bão hòa âm';
+      } else {
+        vTargetNew = rawTarget;
+        aEffNew = A;
+        statusNew = 'Tuyến tính';
+      }
+
+      const vTargetDiff = Math.abs(vTargetNew - oldState.vTarget);
+      const vdDiff = Math.abs(vdActual - oldState.vd);
+
+      if (vTargetDiff > 1e-4 || vdDiff > 1e-5 || oldState.status !== statusNew || oldState.isPowered !== true) {
+        changed = true;
+        const deltaVd = vdActual - oldState.vd;
+        const stepLimit = iter < 5 ? 1.0 : 0.2;
+        const clampedDelta = Math.sign(deltaVd) * Math.min(Math.abs(deltaVd), stepLimit);
+        oldState.vd += clampedDelta;
+        oldState.vTarget = vTargetNew;
+        oldState.aEff = aEffNew;
+        oldState.isPowered = true;
+        oldState.status = statusNew;
+      }
+    }
+
+    if (!changed) {
+      break;
+    }
+
+    if (iter === maxIterations - 1) {
+      opampConverged = false;
+    }
+
+    solveOutput = buildAndSolve(refinedConduction, refinedControlStates, opampStates);
     nodeVoltages = solveOutput.nodeVoltages;
     sourceCurrents = solveOutput.sourceCurrents;
   }
@@ -1440,7 +1603,46 @@ export function solveCircuit(
         componentCurrents[c.id] = 0;
         componentPowers[c.id] = 0;
         operatingStates[c.id] = true;
+      } else if (c.type === 'opamp') {
+        const netInPos = pinToNetId.get(`${c.id}:in_pos`) || pinToNetId.get(`${c.id}:in+`) || pinToNetId.get(`${c.id}:IN+`) || pinToNetId.get(`${c.id}:inp`);
+        const netInNeg = pinToNetId.get(`${c.id}:in_neg`) || pinToNetId.get(`${c.id}:in-`) || pinToNetId.get(`${c.id}:IN-`) || pinToNetId.get(`${c.id}:inm`);
+        const netOut = pinToNetId.get(`${c.id}:out`) || pinToNetId.get(`${c.id}:OUT`);
+        const netVpos = pinToNetId.get(`${c.id}:v_pos`) || pinToNetId.get(`${c.id}:v+`) || pinToNetId.get(`${c.id}:V+`) || pinToNetId.get(`${c.id}:vcc`);
+        const netVneg = pinToNetId.get(`${c.id}:v_neg`) || pinToNetId.get(`${c.id}:v-`) || pinToNetId.get(`${c.id}:V-`) || pinToNetId.get(`${c.id}:vee`);
+
+        const vInPos = netInPos ? (nodeVoltages[netInPos] ?? 0) : 0;
+        const vInNeg = netInNeg ? (nodeVoltages[netInNeg] ?? 0) : 0;
+        const vOut = netOut ? (nodeVoltages[netOut] ?? 0) : 0;
+        const vPos = netVpos ? (nodeVoltages[netVpos] ?? 0) : 0;
+        const vNeg = netVneg ? (nodeVoltages[netVneg] ?? 0) : 0;
+
+        const opState = opampStates[c.id];
+        const isPowered = opState ? opState.isPowered : false;
+        const status = opState ? opState.status : 'Chưa cấp nguồn';
+        const vTarget = opState ? opState.vTarget : 0;
+        const iOut = isPowered ? (vTarget - vOut) / 50 : 0;
+
+        componentVoltages[c.id] = Math.round(Math.abs(vOut) * 1000) / 1000;
+        componentCurrents[c.id] = Math.round(Math.abs(iOut) * 10000) / 10000;
+        const pSupply = isPowered ? Math.max(0, vPos - vNeg) * 0.001 : 0;
+        componentPowers[c.id] = Math.round((pSupply + Math.abs(iOut * (vTarget - vOut))) * 100) / 100;
+        operatingStates[c.id] = isPowered;
+
+        c.props._diffVoltage = vInPos - vInNeg;
+        c.props._vOut = vOut;
+        c.props._iOut = iOut;
+        c.props._opampStatus = status;
+        c.props._isOperating = isPowered;
       }
+    }
+
+    for (const c of opamps) {
+      if (!opampStates[c.id]?.isPowered) {
+        statusMessages.push(`Op-amp ${c.label || c.id} chưa cấp nguồn.`);
+      }
+    }
+    if (!opampConverged && opamps.length > 0) {
+      statusMessages.push('Mạch khuếch đại thuật toán chưa hội tụ điểm làm việc.');
     }
 
     // Check Chassis Devices
@@ -1861,5 +2063,6 @@ export function solveCircuit(
     meterMeasurements,
     statusMessages,
     openCircuit,
+    converged: opampConverged,
   };
 }

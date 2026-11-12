@@ -33,13 +33,17 @@ import {
   createPresetLogicE3,
   createPresetLogicE4,
   createPresetLogicE5,
+  createPresetOpampInverting,
+  createPresetOpampNonInverting,
+  createPresetOpampComparator,
   HOUSEHOLD_PRESETS,
   ELECTRONICS_PRESETS,
   SENSOR_PRESETS,
   DIGITAL_LOGIC_PRESETS,
+  ANALOG_PRESETS,
 } from './presets';
 import { runLogicSimulation, evaluateGate } from './logicSimulator';
-import { oscilloscopeService } from './oscilloscopeService';
+import { runTransient } from './solver/transient';
 import {
   NOI_COM_DIEN,
   QUAT_DIEN,
@@ -1783,65 +1787,45 @@ export const ALL_SOLVER_TEST_CASES: SolverTestCase[] = [
       return createPresetElectronicsV();
     },
     evaluate: (circ) => {
-      const sim = new SimulationService();
-      sim.compile(circ, 'dc');
-      oscilloscopeService.clear();
-
-      // Step simulation by dt = 0.005s (5ms) up to 0.1s (20 steps)
-      const dt = 0.005;
-      const targetTime = 0.1;
-      const totalSteps = Math.round(targetTime / dt);
-      for (let i = 0; i < totalSteps; i++) {
-        sim.step(dt);
-      }
-      const samples = oscilloscopeService.getSamples();
-      const lastSample = samples[samples.length - 1];
-      const vCh1 = lastSample ? lastSample.v1 : 0;
-      // Exact theoretical: 5 * (1 - e^(-1)) = 3.1606 V
-      const target = 5.0 * (1 - Math.exp(-1.0));
-      const errorPct = (Math.abs(vCh1 - target) / target) * 100;
-      const passed = errorPct <= 2.0;
+      const res = runTransient(circ, { tStop: 0.1, probes: ['osc1:ch1'] });
+      const lastV = res.v[0][res.v[0].length - 1];
+      const target = 5.0 * (1 - Math.exp(-1.0)); // 3.1606 V
+      const errorPct = (Math.abs(lastV - target) / target) * 100;
+      const passed = errorPct <= 2.0 && res.converged;
       return {
-        actualStr: `t = ${sim.getSimTime().toFixed(3)} s: V_CH1 = ${vCh1.toFixed(3)} V (lí thuyết = ${target.toFixed(3)} V, sai lệch = ${errorPct.toFixed(2)}%)`,
+        actualStr: `t = 0.100 s: V_CH1 = ${lastV.toFixed(3)} V (lí thuyết = ${target.toFixed(3)} V, sai lệch = ${errorPct.toFixed(2)}%)`,
         passed,
       };
     },
   }),
   defineTestCase({
-    id: 'osc2_ring_buffer_4000_chronological',
+    id: 'osc2_transient_time_grid',
     stt: 54,
     group: 'Dụng cụ đo – công tơ',
-    name: 'Ca 54: Bộ đệm dao động kí ảo: Giới hạn 4000 mẫu/kênh và luôn theo thứ tự thời gian tăng dần',
-    expectedStr: 'Số mẫu không vượt quá 4000; thứ tự thời gian t[i] <= t[i+1]',
-    toleranceStr: 'Chính xác',
+    name: 'Ca 54: Lưới thời gian phân tích quá độ: t[0] = 0, t[k] = k·dt đơn điệu tăng, không trôi tích lũy',
+    expectedStr: 't[0] = 0, t[k] = k * dt, thứ tự t[i] < t[i+1], số mẫu >= 1000',
+    toleranceStr: 'Chính xác số học',
     createCircuit: () => {
       return createPresetElectronicsV();
     },
-    evaluate: () => {
-      oscilloscopeService.clear();
-      // Push 5000 samples
-      for (let i = 0; i < 5000; i++) {
-        const t = i * 0.0001; // 0.1 ms each
-        const v1 = 5 * Math.sin(2 * Math.PI * 50 * t);
-        const v2 = 2.5 * Math.cos(2 * Math.PI * 50 * t);
-        oscilloscopeService.recordSample(t, v1, v2);
-      }
-      const samples = oscilloscopeService.getSamples();
-      const countOk = samples.length === 4000;
-      let chronological = true;
-      for (let i = 1; i < samples.length; i++) {
-        if (samples[i].t < samples[i - 1].t) {
-          chronological = false;
-          break;
+    evaluate: (circ) => {
+      const tStop = 0.2;
+      const res = runTransient(circ, { tStop, probes: ['osc1:ch1'] });
+      const count = res.t.length;
+      const dt = tStop / (count - 1);
+      let monotonic = true;
+      let maxError = 0;
+      for (let i = 0; i < count; i++) {
+        if (i > 0 && res.t[i] <= res.t[i - 1]) {
+          monotonic = false;
         }
+        const expectedT = i * dt;
+        const err = Math.abs(res.t[i] - expectedT);
+        if (err > maxError) maxError = err;
       }
-      const firstT = samples[0]?.t ?? 0;
-      const lastT = samples[samples.length - 1]?.t ?? 0;
-      const timeOrderOk = Math.abs(firstT - 0.1) < 1e-4 && Math.abs(lastT - 0.4999) < 1e-4;
-
-      const passed = countOk && chronological && timeOrderOk;
+      const passed = count >= 1000 && monotonic && maxError < 1e-9 && res.t[0] === 0;
       return {
-        actualStr: `Số mẫu: ${samples.length}/4000; Thời gian từ ${firstT.toFixed(4)} s đến ${lastT.toFixed(4)} s; Thứ tự thời gian: ${chronological ? 'ĐÚNG (t_i <= t_{i+1})' : 'SAI'}`,
+        actualStr: `Số mẫu: ${count}; t[0]=${res.t[0]}; t_cuối=${res.t[count - 1].toFixed(4)} s; Đơn điệu: ${monotonic ? 'ĐÚNG' : 'SAI'}; Sai lệch dt: ${maxError.toExponential(2)}`,
         passed,
       };
     },
@@ -1893,36 +1877,31 @@ export const ALL_SOLVER_TEST_CASES: SolverTestCase[] = [
     id: 'osc4_rc_single_shot_1s',
     stt: 56,
     group: 'Dụng cụ đo – công tơ',
-    name: 'Ca 56: Mạch RC (v) chụp 1 s mô phỏng: V(0,1 s) ≈ 3,16 V (±2%), V(1,0 s) ≈ 4,9–5,0 V',
+    name: 'Ca 56: Mạch RC (v) phân tích 1 s quá độ: V(0,1 s) ≈ 3,16 V (±2%), V(1,0 s) ≈ 4,9–5,0 V',
     expectedStr: 'V(0,1 s) ≈ 3,16 V (±2%), V(1,0 s) ≈ 4,9–5,0 V',
     toleranceStr: 'V(0,1 s) sai lệch ±2%, V(1,0 s) trong khoảng 4,9–5,0 V',
     createCircuit: () => {
       return createPresetElectronicsV();
     },
     evaluate: (circuit) => {
-      oscilloscopeService.clear();
-      const sim = new SimulationService();
-      sim.compile(circuit, 'dc');
-      sim.runSingleShotSync(1.0);
-      const samples = oscilloscopeService.getSamples();
-      let sampleAt01 = samples[0];
-      let dist01 = Math.abs((sampleAt01?.t ?? 0) - 0.1);
-      for (const s of samples) {
-        const d = Math.abs(s.t - 0.1);
-        if (d < dist01) {
-          dist01 = d;
-          sampleAt01 = s;
+      const res = runTransient(circuit, { tStop: 1.0, probes: ['osc1:ch1'] });
+      let idx01 = 0;
+      let minDiff = Infinity;
+      for (let i = 0; i < res.t.length; i++) {
+        const diff = Math.abs(res.t[i] - 0.1);
+        if (diff < minDiff) {
+          minDiff = diff;
+          idx01 = i;
         }
       }
-      const lastSample = samples[samples.length - 1];
-      const vAt01 = sampleAt01?.v1 ?? 0;
-      const vEnd = lastSample?.v1 ?? 0;
+      const vAt01 = res.v[0][idx01];
+      const vEnd = res.v[0][res.v[0].length - 1];
 
       const v01Ok = Math.abs(vAt01 - 3.16) <= 3.16 * 0.02 + 0.01;
       const vEndOk = vEnd >= 4.9 && vEnd <= 5.01;
-      const passed = v01Ok && vEndOk;
+      const passed = v01Ok && vEndOk && res.converged;
       return {
-        actualStr: `V(t=0,1s) = ${vAt01.toFixed(3)} V (kì vọng 3,16 V ± 2%); V(t=${lastSample?.t.toFixed(3)}s) = ${vEnd.toFixed(3)} V (kì vọng 4,9–5,0 V)`,
+        actualStr: `V(t=0,1s) = ${vAt01.toFixed(3)} V (kì vọng 3,16 V ± 2%); V(t=1,0s) = ${vEnd.toFixed(3)} V (kì vọng 4,9–5,0 V)`,
         passed,
       };
     },
@@ -1931,31 +1910,29 @@ export const ALL_SOLVER_TEST_CASES: SolverTestCase[] = [
     id: 'osc5_ac_source_100ms',
     stt: 57,
     group: 'Dụng cụ đo – công tơ',
-    name: 'Ca 57: Nguồn xoay chiều 5 V đỉnh 50 Hz chụp 100 ms: Đỉnh ±5 V (±2%), Chu kì 20 ms (±2%)',
+    name: 'Ca 57: Nguồn xoay chiều 5 V đỉnh 50 Hz phân tích 100 ms: Đỉnh ±5 V (±2%), Chu kì 20 ms (±2%)',
     expectedStr: 'max ≈ +5 V (±2%), min ≈ -5 V (±2%), chu kì giữa 2 lần cắt lên 0 V = 20 ms (±2%)',
     toleranceStr: 'Biên độ ±2%, chu kì ±2%',
     createCircuit: () => {
       return createPresetElectronicsX();
     },
     evaluate: (circuit) => {
-      oscilloscopeService.clear();
-      const sim = new SimulationService();
-      sim.compile(circuit, 'dc');
-      sim.runSingleShotSync(0.1);
-      const samples = oscilloscopeService.getSamples();
+      const res = runTransient(circuit, { tStop: 0.1, probes: ['osc1:ch1'] });
+      const v1Arr = res.v[0];
       let maxV = -Infinity;
       let minV = Infinity;
-      for (const s of samples) {
-        if (s.v1 > maxV) maxV = s.v1;
-        if (s.v1 < minV) minV = s.v1;
+      for (let i = 0; i < v1Arr.length; i++) {
+        const val = v1Arr[i];
+        if (val > maxV) maxV = val;
+        if (val < minV) minV = val;
       }
       const zeroCrossings: number[] = [];
-      for (let i = 1; i < samples.length; i++) {
-        if (samples[i - 1].v1 <= 0 && samples[i].v1 > 0) {
-          const t0 = samples[i - 1].t;
-          const t1 = samples[i].t;
-          const v0 = samples[i - 1].v1;
-          const v1 = samples[i].v1;
+      for (let i = 1; i < res.t.length; i++) {
+        if (v1Arr[i - 1] <= 0 && v1Arr[i] > 0) {
+          const t0 = res.t[i - 1];
+          const t1 = res.t[i];
+          const v0 = v1Arr[i - 1];
+          const v1 = v1Arr[i];
           const tCross = t0 + (-v0 / (v1 - v0)) * (t1 - t0);
           zeroCrossings.push(tCross);
         }
@@ -1971,7 +1948,7 @@ export const ALL_SOLVER_TEST_CASES: SolverTestCase[] = [
       const maxOk = Math.abs(maxV - 5.0) <= 5.0 * 0.02;
       const minOk = Math.abs(minV - (-5.0)) <= 5.0 * 0.02;
       const periodOk = Math.abs(avgPeriod - 0.020) <= 0.020 * 0.02;
-      const passed = maxOk && minOk && periodOk;
+      const passed = maxOk && minOk && periodOk && res.converged;
       return {
         actualStr: `V_max = ${maxV.toFixed(3)} V (kì vọng +5 V ± 2%); V_min = ${minV.toFixed(3)} V (kì vọng -5 V ± 2%); Chu kì T = ${(avgPeriod * 1000).toFixed(2)} ms (kì vọng 20 ms ± 2%)`,
         passed,
@@ -1989,20 +1966,18 @@ export const ALL_SOLVER_TEST_CASES: SolverTestCase[] = [
       return createPresetElectronicsY();
     },
     evaluate: (circuit) => {
-      oscilloscopeService.clear();
-      const sim = new SimulationService();
-      sim.compile(circuit, 'dc');
-      sim.runSingleShotSync(0.1);
-      const samples = oscilloscopeService.getSamples();
+      const res = runTransient(circuit, { tStop: 0.1, probes: ['osc1:ch1', 'osc1:ch2'] });
+      const v2Arr = res.v[1];
       let maxV2 = -Infinity;
       let minV2 = Infinity;
-      for (const s of samples) {
-        if (s.v2 > maxV2) maxV2 = s.v2;
-        if (s.v2 < minV2) minV2 = s.v2;
+      for (let i = 0; i < v2Arr.length; i++) {
+        const val = v2Arr[i];
+        if (val > maxV2) maxV2 = val;
+        if (val < minV2) minV2 = val;
       }
       const peakOk = Math.abs(maxV2 - 4.3) <= 0.15;
       const minOk = minV2 >= -0.05;
-      const passed = peakOk && minOk;
+      const passed = peakOk && minOk && res.converged;
       return {
         actualStr: `V_đỉnh(CH2) = ${maxV2.toFixed(3)} V (kì vọng 4,3 V ± 0,15 V); V_min(CH2) = ${minV2.toFixed(3)} V (kì vọng ≥ -0,05 V)`,
         passed,
@@ -3330,6 +3305,117 @@ export const ALL_SOLVER_TEST_CASES: SolverTestCase[] = [
       };
     },
   }),
+  defineTestCase({
+    id: 'case81_opamp_inverting_amplifier',
+    stt: 81,
+    group: 'Mạch mẫu',
+    name: 'Ca 81: Mạch khuếch đại đảo: Rin = 1 kΩ, Rf = 10 kΩ, nguồn đối xứng ±12 V (Vvào = 0,5 V → Vra = −5 V; Vvào = 2 V → bão hòa −11 V)',
+    expectedStr: 'Vvào = 0,5 V → Vra = −5,0 V (±2%); Vvào = 2,0 V → Vra = −11,0 V (±0,1 V)',
+    toleranceStr: 'Tuyến tính: ±2%; Bão hòa: ±0,1 V',
+    createCircuit: () => createPresetOpampInverting(),
+    evaluate: () => {
+      const c1 = createPresetOpampInverting();
+      solveCircuit(c1.components, c1.wires, c1.junctions);
+      const vOut1 = c1.components.find((c) => c.id === 'op1')?.props._vOut ?? 0;
+      const okLinear = Math.abs(vOut1 - (-5.0)) <= 0.1;
+
+      const c2 = createPresetOpampInverting();
+      const vinComp = c2.components.find((c) => c.id === 'vin');
+      if (vinComp) vinComp.props.voltage = 2.0;
+      solveCircuit(c2.components, c2.wires, c2.junctions);
+      const vOut2 = c2.components.find((c) => c.id === 'op1')?.props._vOut ?? 0;
+      const status2 = c2.components.find((c) => c.id === 'op1')?.props._opampStatus;
+      const okSaturation = Math.abs(vOut2 - (-11.0)) <= 0.1 && status2 === 'Bão hòa âm';
+
+      const passed = okLinear && okSaturation;
+      return {
+        actualStr: `Vin=0,5V: Vra=${vOut1.toFixed(2)}V (${okLinear ? 'ĐẠT' : 'LỖI'}); Vin=2,0V: Vra=${vOut2.toFixed(2)}V, Trạng thái=${status2} (${okSaturation ? 'ĐẠT' : 'LỖI'})`,
+        passed,
+      };
+    },
+  }),
+  defineTestCase({
+    id: 'case82_opamp_non_inverting_amplifier',
+    stt: 82,
+    group: 'Mạch mẫu',
+    name: 'Ca 82: Mạch khuếch đại không đảo: R1 = 1 kΩ, Rf = 10 kΩ, nguồn đối xứng ±12 V (Vvào = 0,5 V → Vra = 5,5 V)',
+    expectedStr: 'Vvào = 0,5 V → Vra = 5,5 V (±2%)',
+    toleranceStr: '±2% (5,39 V – 5,61 V)',
+    createCircuit: () => createPresetOpampNonInverting(),
+    evaluate: () => {
+      const c = createPresetOpampNonInverting();
+      solveCircuit(c.components, c.wires, c.junctions);
+      const vOut = c.components.find((comp) => comp.id === 'op1')?.props._vOut ?? 0;
+      const status = c.components.find((comp) => comp.id === 'op1')?.props._opampStatus;
+      const passed = Math.abs(vOut - 5.5) <= 0.11 && status === 'Tuyến tính';
+      return {
+        actualStr: `Vra=${vOut.toFixed(2)} V, Trạng thái=${status} (${passed ? 'ĐẠT' : 'LỖI'})`,
+        passed,
+      };
+    },
+  }),
+  defineTestCase({
+    id: 'case83_opamp_comparator',
+    stt: 83,
+    group: 'Mạch mẫu',
+    name: 'Ca 83: Mạch so sánh điện áp: ngõ vào phân áp biến trở, chuẩn 2 V, ngõ ra điều khiển LED (IN+ > 2 V sáng, < 2 V tắt)',
+    expectedStr: 'IN+ = 2,5 V > 2 V → Vra ≈ 4 V, LED sáng; IN+ = 1,5 V < 2 V → Vra ≈ 1 V, LED tắt',
+    toleranceStr: 'Đúng trạng thái LED sáng/tắt',
+    createCircuit: () => createPresetOpampComparator(),
+    evaluate: () => {
+      const c1 = createPresetOpampComparator();
+      const res1 = solveCircuit(c1.components, c1.wires, c1.junctions);
+      const ledLit1 = res1.operatingStates['led1'] === true;
+      const vOut1 = c1.components.find((comp) => comp.id === 'op1')?.props._vOut ?? 0;
+      const status1 = c1.components.find((comp) => comp.id === 'op1')?.props._opampStatus;
+
+      const c2 = createPresetOpampComparator();
+      const potComp = c2.components.find((comp) => comp.id === 'pot1');
+      if (potComp) potComp.props.ratio = 30;
+      const res2 = solveCircuit(c2.components, c2.wires, c2.junctions);
+      const ledLit2 = res2.operatingStates['led1'] === true;
+      const vOut2 = c2.components.find((comp) => comp.id === 'op1')?.props._vOut ?? 0;
+      const status2 = c2.components.find((comp) => comp.id === 'op1')?.props._opampStatus;
+
+      const okHigh = ledLit1 && vOut1 >= 3.5 && status1 === 'Bão hòa dương';
+      const okLow = !ledLit2 && vOut2 <= 1.2 && status2 === 'Bão hòa âm';
+      const passed = okHigh && okLow;
+      return {
+        actualStr: `IN+=2,5V: Vra=${vOut1.toFixed(2)}V, LED=${ledLit1 ? 'SÁNG' : 'TẮT'} (${okHigh ? 'ĐẠT' : 'LỖI'}); IN+=1,5V: Vra=${vOut2.toFixed(2)}V, LED=${ledLit2 ? 'SÁNG' : 'TẮT'} (${okLow ? 'ĐẠT' : 'LỖI'})`,
+        passed,
+      };
+    },
+  }),
+  defineTestCase({
+    id: 'case84_opamp_unpowered',
+    stt: 84,
+    group: 'Mạch mẫu',
+    name: 'Ca 84: Op-amp chưa cấp nguồn: ngõ ra hở, bộ giải hội tụ không treo, cảnh báo "Op-amp chưa cấp nguồn"',
+    expectedStr: 'Bộ giải hội tụ (converged = true), ngõ ra hở, có cảnh báo "Op-amp chưa cấp nguồn"',
+    toleranceStr: 'Không treo, cảnh báo xuất hiện',
+    createCircuit: () => {
+      const op: ComponentInstance = { id: 'op1', type: 'opamp', x: 200, y: 140, rot: 0, flip: false, label: 'OP1', props: {} };
+      const vm: ComponentInstance = { id: 'vm1', type: 'voltmeter', x: 340, y: 140, rot: 0, flip: false, label: 'VM1', props: {} };
+      const w1 = makeWire('w1', 'op1', 'out', 'vm1', 'pos', [{ x: 260, y: 140 }, { x: 300, y: 140 }], 'phase');
+      return { components: [op, vm], wires: [w1], junctions: [], viewport: { x: 40, y: 40, zoom: 1 } };
+    },
+    evaluate: () => {
+      const op: ComponentInstance = { id: 'op1', type: 'opamp', x: 200, y: 140, rot: 0, flip: false, label: 'OP1', props: {} };
+      const vm: ComponentInstance = { id: 'vm1', type: 'voltmeter', x: 340, y: 140, rot: 0, flip: false, label: 'VM1', props: {} };
+      const w1 = makeWire('w1', 'op1', 'out', 'vm1', 'pos', [{ x: 260, y: 140 }, { x: 300, y: 140 }], 'phase');
+      const res = solveCircuit([op, vm], [w1], []);
+
+      const hasWarning = res.statusMessages.some((m) => m.includes('chưa cấp nguồn') || m.includes('Op-amp'));
+      const opStatus = op.props._opampStatus;
+      const converged = res.converged !== false;
+      const passed = converged && hasWarning && opStatus === 'Chưa cấp nguồn';
+      return {
+        actualStr: `Hội tụ: ${converged ? 'ĐẠT' : 'KHÔNG'}; Cảnh báo: ${hasWarning ? 'CÓ' : 'THIẾU'}; Trạng thái: ${opStatus}`,
+        passed,
+      };
+    },
+  }),
 ];
 
-export { HOUSEHOLD_PRESETS, ELECTRONICS_PRESETS, SENSOR_PRESETS, DIGITAL_LOGIC_PRESETS } from './presets';
+export { HOUSEHOLD_PRESETS, ELECTRONICS_PRESETS, SENSOR_PRESETS, DIGITAL_LOGIC_PRESETS, ANALOG_PRESETS } from './presets';
+

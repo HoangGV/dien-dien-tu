@@ -114,6 +114,19 @@ export const COMPONENT_THERMAL_SPECS: Record<string, ComponentThermalSpec> = {
       };
     },
   },
+  opamp: {
+    tauHeatSec: 1.0,
+    tauCoolSec: DEFAULT_TAU_COOL,
+    calculateStress: ({ current }) => {
+      const s = Math.abs(current) / 0.025; // 25 mA
+      const overloadRate = s > 1 ? s - 1 : 0;
+      return {
+        stress: s,
+        damageType: 'burn',
+        overloadRate,
+      };
+    },
+  },
 
   // Electrolytic Capacitor: |V| > 1.2*Vđm or reverse voltage > 1V -> rapid explode (tau = 0.1s)
   capacitor_electrolytic: {

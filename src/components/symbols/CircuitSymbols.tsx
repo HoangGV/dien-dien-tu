@@ -2165,6 +2165,101 @@ export const LampDCSymbol: React.FC<SymbolProps> = ({ comp, onPinPointerDown, on
   );
 };
 
+export const OpAmpSymbol: React.FC<SymbolProps> = ({
+  comp,
+  isSelected,
+  isHovered,
+  highlightNet,
+  damaged,
+  onPinPointerDown,
+  onPinHover,
+  hoveredPinId,
+}) => {
+  const pins: PinDef[] = [
+    { id: 'in_neg', label: 'IN−', dx: -3, dy: -1 },
+    { id: 'in_pos', label: 'IN+', dx: -3, dy: 1 },
+    { id: 'out', label: 'OUT', dx: 3, dy: 0 },
+    { id: 'v_pos', label: 'V+', dx: 0, dy: -2, polarity: '+' },
+    { id: 'v_neg', label: 'V−', dx: 0, dy: 2, polarity: '-' },
+  ];
+
+  return (
+    <g className="cursor-pointer select-none">
+      {/* Selection / Hover highlight */}
+      {(isSelected || isHovered || highlightNet) && (
+        <path
+          d="M -44 -34 L 46 0 L -44 34 Z"
+          fill={isSelected ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255, 216, 77, 0.2)'}
+          stroke={isSelected ? '#2563EB' : '#EAB308'}
+          strokeWidth="2"
+          strokeDasharray="4 2"
+        />
+      )}
+
+      {/* Connecting leads to grid pins */}
+      <line x1={-60} y1={-20} x2={-40} y2={-20} stroke="#000000" strokeWidth={2} strokeLinecap="round" />
+      <line x1={-60} y1={20} x2={-40} y2={20} stroke="#000000" strokeWidth={2} strokeLinecap="round" />
+      <line x1={40} y1={0} x2={60} y2={0} stroke="#000000" strokeWidth={2} strokeLinecap="round" />
+      <line x1={0} y1={-40} x2={0} y2={-15} stroke="#000000" strokeWidth={2} strokeLinecap="round" />
+      <line x1={0} y1={40} x2={0} y2={15} stroke="#000000" strokeWidth={2} strokeLinecap="round" />
+
+      {/* Triangle Body */}
+      <polygon
+        points="-40,-30 40,0 -40,30"
+        fill={damaged ? '#4B5563' : '#FFFFFF'}
+        stroke="#000000"
+        strokeWidth={2}
+        strokeLinejoin="round"
+      />
+
+      {/* Minus sign for IN- */}
+      <line x1={-33} y1={-14} x2={-25} y2={-14} stroke={damaged ? '#FFFFFF' : '#000000'} strokeWidth={2} strokeLinecap="round" />
+
+      {/* Plus sign for IN+ */}
+      <line x1={-33} y1={14} x2={-25} y2={14} stroke={damaged ? '#FFFFFF' : '#000000'} strokeWidth={2} strokeLinecap="round" />
+      <line x1={-29} y1={10} x2={-29} y2={18} stroke={damaged ? '#FFFFFF' : '#000000'} strokeWidth={2} strokeLinecap="round" />
+
+      {/* Label/Designator */}
+      <UprightText
+        x={-8}
+        y={0}
+        rot={comp.rot}
+        flip={comp.flip}
+        flipY={comp.flipY}
+        fontSize={10}
+        fontWeight={800}
+        fill={damaged ? '#FFFFFF' : '#1E293B'}
+      >
+        {comp.label || 'OP'}
+      </UprightText>
+
+      {/* Burned/Damage crack line */}
+      {damaged && (
+        <path
+          d="M -15 -10 L 0 5 L -5 12 L 15 20"
+          stroke="#EF4444"
+          strokeWidth={2.5}
+          fill="none"
+        />
+      )}
+
+      {/* Render pin connection dots */}
+      {pins.map((p) => (
+        <PinDot
+          key={p.id}
+          pin={p}
+          rot={comp.rot}
+          flip={comp.flip}
+          flipY={comp.flipY}
+          onPointerDown={onPinPointerDown}
+          onHover={onPinHover}
+          isHovered={hoveredPinId === p.id}
+        />
+      ))}
+    </g>
+  );
+};
+
 export {
   PotentiometerSymbol,
   CapacitorCeramicSymbol,

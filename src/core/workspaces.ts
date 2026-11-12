@@ -3,7 +3,7 @@
  */
 
 import { WorkspaceConfig } from './model';
-import { HOUSEHOLD_PRESETS, ELECTRONICS_PRESETS, SENSOR_PRESETS, DIGITAL_LOGIC_PRESETS } from './presets';
+import { HOUSEHOLD_PRESETS, ELECTRONICS_PRESETS, SENSOR_PRESETS, DIGITAL_LOGIC_PRESETS, ANALOG_PRESETS } from './presets';
 
 export const WORKSPACE_HOUSEHOLD: WorkspaceConfig = {
   slug: 'mang-dien-trong-nha',
@@ -199,6 +199,42 @@ export const WORKSPACE_DIGITAL_LOGIC: WorkspaceConfig = {
 • Bảng chân trị tự sinh: Bấm nút [BẢNG CHÂN TRỊ] trên thanh trên.`,
 };
 
+export const WORKSPACE_ANALOG: WorkspaceConfig = {
+  slug: 'dien-tu-tuong-tu',
+  title: 'Điện tử tương tự',
+  grades: 'Lớp 12',
+  description: 'Mạch khuếch đại thuật toán (Op-Amp): khuếch đại đảo, không đảo, so sánh điện áp, khảo sát vùng tuyến tính và bão hòa theo chương trình Công nghệ 12.',
+  mode: 'dc',
+  paletteIds: [
+    'dc_source',
+    'gnd',
+    'resistor',
+    'potentiometer',
+    'capacitor_ceramic',
+    'diode',
+    'led',
+    'opamp',
+    'switch_2p',
+    'push_button',
+    'ammeter',
+    'voltmeter',
+    'ohmmeter',
+    'boundary',
+    'textbox',
+  ],
+  presets: ANALOG_PRESETS,
+  helpText: `HƯỚNG DẪN ĐIỆN TỬ TƯƠNG TỰ - KHUẾCH ĐẠI THUẬT TOÁN (LỚP 12):
+• Yêu cầu cần đạt:
+  - Trình bày nội dung cơ bản về tín hiệu và một số mạch xử lí tín hiệu (khuếch đại, điều chế, giải điều chế).
+  - Trình bày kí hiệu, nguyên lí làm việc và ứng dụng cơ bản của mạch khuếch đại thuật toán.
+  - Lắp ráp và kiểm tra một mạch điện tử ứng dụng khuếch đại thuật toán.
+  - Chưa hỗ trợ: điều chế, giải điều chế, mạch dao động, dao động kí đang sửa.
+• Linh kiện Khuếch đại thuật toán (Op-amp):
+  - Chân: IN+ (ngõ vào không đảo), IN− (ngõ vào đảo), OUT (ngõ ra), V+ (dương nguồn), V− (âm nguồn).
+  - Nguồn nuôi: có thể dùng nguồn đối xứng (±12 V) hoặc nguồn đơn (V+ = 5 V, V− = 0 V/GND).
+  - Chế độ làm việc: Tuyến tính (có hồi tiếp âm) hoặc Bão hòa (mạch so sánh hoặc khi tín hiệu vượt dải).`,
+};
+
 export const WORKSPACE_EXPLAINER: WorkspaceConfig = {
   slug: 'do-dung-dien-gia-dinh',
   title: 'Đồ dùng điện trong gia đình',
@@ -238,6 +274,7 @@ export const WORKSPACE_REGISTRY: WorkspaceConfig[] = [
   WORKSPACE_ELECTRONICS,
   WORKSPACE_SENSOR_CONTROL,
   WORKSPACE_DIGITAL_LOGIC,
+  WORKSPACE_ANALOG,
   WORKSPACE_EXPLAINER,
   WORKSPACE_SAFETY,
   WORKSPACE_TEST,

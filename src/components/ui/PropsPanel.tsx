@@ -22,6 +22,7 @@ import { WireType } from '../../core/model';
 import { formatMeasure } from '../../core/measureFormat';
 import { solveOhmmeterResistance } from '../../core/solver';
 import { getWireInstallPoints, calculatePolylineLengthMeters } from '../../core/installWiring';
+import { useTransientStore } from '../../store/transientStore';
 
 export interface PropsPanelProps {
   isBottomSheet?: boolean;
@@ -396,8 +397,43 @@ export const PropsPanel: React.FC<PropsPanelProps> = ({ isBottomSheet = false })
                 )}
               </div>
 
-              {/* 1. ĐO ĐẠC DỤNG CỤ ĐO & MẠCH SỐ */}
-              {selectedComp.type === 'logic_flip_flop' ? (
+              {/* 1. ĐO ĐẠC DỤNG CỤ ĐO & MẠCH SỐ & OP-AMP */}
+              {selectedComp.type === 'opamp' ? (
+                <div className="space-y-2">
+                  <div className="bg-white border-2 border-black p-2 rounded space-y-1.5 shadow-[1px_1px_0_#000]">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-600 font-bold">Điện áp vào vi sai:</span>
+                      <span className="font-mono font-black text-xs text-black">
+                        {isSimulating ? formatMeasure(selectedComp.props._diffVoltage ?? 0, 'voltage') : '—'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-600 font-bold">Điện áp ra:</span>
+                      <span className="font-mono font-black text-xs text-black">
+                        {isSimulating ? formatMeasure(selectedComp.props._vOut ?? 0, 'voltage') : '—'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-600 font-bold">Dòng ra:</span>
+                      <span className="font-mono font-black text-xs text-black">
+                        {isSimulating ? formatMeasure(selectedComp.props._iOut ?? 0, 'current') : '—'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs pt-1 border-t border-black/10">
+                      <span className="text-gray-600 font-bold">Trạng thái:</span>
+                      <span className={`px-2 py-0.5 font-bold text-[10px] border border-black ${
+                        selectedComp.props._opampStatus === 'Tuyến tính'
+                          ? 'bg-[#2DB84D] text-white'
+                          : selectedComp.props._opampStatus === 'Bão hòa dương' || selectedComp.props._opampStatus === 'Bão hòa âm'
+                          ? 'bg-[#FFD84D] text-black'
+                          : 'bg-gray-200 text-black'
+                      }`}>
+                        {isSimulating ? (selectedComp.props._opampStatus ?? 'Chưa cấp nguồn') : 'Chờ mô phỏng'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ) : selectedComp.type === 'logic_flip_flop' ? (
                 <div className="space-y-2">
                   <div className="bg-white border-2 border-black p-2 rounded space-y-1.5 shadow-[1px_1px_0_#000]">
                     <div className="flex items-center justify-between text-xs">
@@ -428,42 +464,31 @@ export const PropsPanel: React.FC<PropsPanelProps> = ({ isBottomSheet = false })
                 <div className="space-y-2">
                   {/* DAO ĐỘNG KÍ ẢO */}
                   {selectedComp.type === 'oscilloscope' && (() => {
-                    const v1 = Number(selectedComp.props._vCh1 ?? 0);
-                    const v2 = Number(selectedComp.props._vCh2 ?? 0);
+                    const scanTimeMs = useTransientStore.getState().scanTimeMs;
                     return (
                       <div className="space-y-1.5">
-                        <div className="bg-white border-2 border-black p-2 rounded space-y-1">
+                        <div className="bg-white border-2 border-black p-2 rounded space-y-1.5 shadow-[1px_1px_0_#000]">
                           <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider text-center">
-                            Điện áp tức thời
+                            Phân tích quá độ
                           </div>
-                          <div className="grid grid-cols-2 gap-1.5 text-center pt-0.5">
-                            <div className="p-1 bg-[#EEF2FF] border border-[#38BDF8] rounded">
-                              <span className="text-[9px] font-black text-[#0284C7] block uppercase">CH1</span>
-                              <span className="text-[13px] font-mono font-black text-[#0284C7]">
-                                {isSimulating ? formatMeasure(v1, 'voltage') : '0,00 V'}
-                              </span>
-                            </div>
-                            <div className="p-1 bg-[#FEF2F2] border border-[#F87171] rounded">
-                              <span className="text-[9px] font-black text-[#DC2626] block uppercase">CH2</span>
-                              <span className="text-[13px] font-mono font-black text-[#DC2626]">
-                                {isSimulating ? formatMeasure(v2, 'voltage') : '0,00 V'}
-                              </span>
-                            </div>
+                          <div className="flex items-center justify-between text-xs py-1 border-t border-b border-black/10">
+                            <span className="text-gray-600 font-bold">Thời gian quét:</span>
+                            <span className="font-mono font-black text-xs text-black">
+                              {scanTimeMs} ms
+                            </span>
                           </div>
-                          {!isSimulating && (
-                            <p className="text-[9px] text-gray-500 italic text-center mt-0.5">Bấm CHẠY để đo dạng sóng</p>
-                          )}
                         </div>
 
                         <button
                           onClick={() => setOscilloscopePanelOpen(true)}
-                          className="w-full h-7 bg-[#FFD84D] hover:bg-black hover:text-white text-black border-2 border-black font-black text-[10px] uppercase shadow-[1px_1px_0_#000] cursor-pointer"
+                          className="w-full h-7 bg-[#FFD84D] hover:bg-black hover:text-white text-black border-2 border-black font-black text-[10px] uppercase shadow-[1px_1px_0_#000] cursor-pointer flex items-center justify-center gap-1.5"
                         >
-                          📈 MỞ BẢNG ĐỒ THỊ
+                          <Activity size={13} strokeWidth={2.5} />
+                          <span>MỞ PHÂN TÍCH QUÁ ĐỘ</span>
                         </button>
 
                         <div className="p-1 bg-[#EEF2FF] border border-[#C7D2FE] text-[#3730A3] text-[9px] rounded italic">
-                          ℹ️ CH1 (xanh dương), CH2 (đỏ), GND (chuẩn đất). Trở kháng mỗi kênh: 10 MΩ.
+                          ℹ️ Kênh CH1 (xanh dương), CH2 (đỏ), GND (mass). Trở kháng mỗi kênh: 10 MΩ.
                         </div>
                       </div>
                     );

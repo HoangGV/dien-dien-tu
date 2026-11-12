@@ -1,674 +1,518 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { X, Play, Pause, Trash2, Sliders, Activity, ChevronUp, ChevronDown } from 'lucide-react';
-import { oscilloscopeService, OscilloscopeSample } from '../../core/oscilloscopeService';
-import { formatMeasure } from '../../core/measureFormat';
+import { X, Play, Sliders, Activity, Sparkles, AlertCircle } from 'lucide-react';
 import { useWorkspaceStore } from '../../store/workspaceStore';
-
-import { simulationService } from '../../core/simulationService';
-
-export const TIME_DIV_OPTIONS = [
-  { label: '1 ms', value: 0.001 },
-  { label: '2 ms', value: 0.002 },
-  { label: '5 ms', value: 0.005 },
-  { label: '10 ms', value: 0.01 },
-  { label: '20 ms', value: 0.02 },
-  { label: '50 ms', value: 0.05 },
-  { label: '100 ms', value: 0.1 },
-  { label: '200 ms', value: 0.2 },
-  { label: '500 ms', value: 0.5 },
-  { label: '1 s', value: 1.0 },
-];
-
-export const VOLT_DIV_OPTIONS = [
-  { label: '0.1 V', value: 0.1 },
-  { label: '0.2 V', value: 0.2 },
-  { label: '0.5 V', value: 0.5 },
-  { label: '1 V', value: 1.0 },
-  { label: '2 V', value: 2.0 },
-  { label: '5 V', value: 5.0 },
-  { label: '10 V', value: 10.0 },
-];
+import { useTransientStore, STANDARD_VOLT_DIVS } from '../../store/transientStore';
+import { formatMeasure } from '../../core/measureFormat';
+import { NeoButton } from '../common/NeoButton';
 
 export const OscilloscopePanel: React.FC = () => {
-  const { setOscilloscopePanelOpen, circuit, timeSpeed } = useWorkspaceStore();
+  const { setOscilloscopePanelOpen, circuit } = useWorkspaceStore();
+  const {
+    scanTimeMs,
+    vPerDiv1,
+    vPerDiv2,
+    ch1Enabled,
+    ch2Enabled,
+    result,
+    isCalculating,
+    progressPct,
+    setScanTimeMs,
+    setVPerDiv1,
+    setVPerDiv2,
+    setCh1Enabled,
+    setCh2Enabled,
+    autoSetScanTime,
+    autoScaleVolts,
+    calculateAndDraw,
+  } = useTransientStore();
+
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [hoverData, setHoverData] = useState<{
+    t: number;
+    v1: number;
+    v2: number;
+    canvasX: number;
+    canvasY: number;
+  } | null>(null);
 
-  // Local control state for UI button display
-  const [isHeld, setIsHeld] = useState<boolean>(oscilloscopeService.isHeld);
-  const [timeDiv, setTimeDiv] = useState<number>(oscilloscopeService.timePerDiv);
-  const [vDiv1, setVDiv1] = useState<number>(oscilloscopeService.vPerDiv1);
-  const [vDiv2, setVDiv2] = useState<number>(oscilloscopeService.vPerDiv2);
-  const [offset1, setOffset1] = useState<number>(oscilloscopeService.offset1);
-  const [offset2, setOffset2] = useState<number>(oscilloscopeService.offset2);
-  const [ch1On, setCh1On] = useState<boolean>(oscilloscopeService.ch1Enabled);
-  const [ch2On, setCh2On] = useState<boolean>(oscilloscopeService.ch2Enabled);
-  const [trigMode, setTrigMode] = useState<'auto' | 'rising'>(oscilloscopeService.triggerMode);
-  const [trigLevel, setTrigLevel] = useState<number>(oscilloscopeService.triggerLevel);
-
-  // Single-shot state
-  const [isCapturing, setIsCapturing] = useState<boolean>(false);
-  const [captureProgress, setCaptureProgress] = useState<number>(0);
-
-  // Stats line below canvas
-  const [statusText, setStatusText] = useState<{ windowMs: number; sampleCount: number; isFlat: boolean }>({
-    windowMs: 200,
-    sampleCount: 0,
-    isFlat: false,
-  });
-
-  // Cursor readout
-  const [cursorReadout, setCursorReadout] = useState<string | null>(null);
-  const cursorPointRef = useRef<{ x: number; y: number } | null>(null);
-
-  const toggleHold = () => {
-    const next = !isHeld;
-    oscilloscopeService.setHeld(next);
-    setIsHeld(next);
-  };
-
-  const handleClear = () => {
-    oscilloscopeService.clear();
-  };
-
-  const handleAutoSet = () => {
-    oscilloscopeService.autoScale(circuit.components);
-    setTimeDiv(oscilloscopeService.timePerDiv);
-    setVDiv1(oscilloscopeService.vPerDiv1);
-    setVDiv2(oscilloscopeService.vPerDiv2);
-    setOffset1(oscilloscopeService.offset1);
-    setOffset2(oscilloscopeService.offset2);
-  };
-
-  const handleSingleShot = () => {
-    if (isCapturing) return;
-    setIsCapturing(true);
-    setCaptureProgress(0);
-    const duration = 10 * timeDiv;
-    simulationService.runSingleShotAsync(
-      duration,
-      (pct) => setCaptureProgress(pct),
-      () => {
-        setIsCapturing(false);
-        oscilloscopeService.setHeld(true);
-        setIsHeld(true);
-      }
-    );
-  };
-
-  const handleTimeDivChange = (val: number) => {
-    oscilloscopeService.setTimePerDiv(val);
-    setTimeDiv(val);
-  };
-
-  const handleVDiv1Change = (val: number) => {
-    oscilloscopeService.setVPerDiv1(val);
-    setVDiv1(val);
-  };
-
-  const handleVDiv2Change = (val: number) => {
-    oscilloscopeService.setVPerDiv2(val);
-    setVDiv2(val);
-  };
-
-  const adjustOffset1 = (delta: number) => {
-    const next = Math.round((offset1 + delta) * 2) / 2;
-    oscilloscopeService.setOffset1(next);
-    setOffset1(next);
-  };
-
-  const adjustOffset2 = (delta: number) => {
-    const next = Math.round((offset2 + delta) * 2) / 2;
-    oscilloscopeService.setOffset2(next);
-    setOffset2(next);
-  };
-
-  const toggleCh1 = () => {
-    const next = !ch1On;
-    oscilloscopeService.setCh1Enabled(next);
-    setCh1On(next);
-  };
-
-  const toggleCh2 = () => {
-    const next = !ch2On;
-    oscilloscopeService.setCh2Enabled(next);
-    setCh2On(next);
-  };
-
-  const handleTrigModeChange = (mode: 'auto' | 'rising') => {
-    oscilloscopeService.setTriggerMode(mode);
-    setTrigMode(mode);
-  };
-
-  const handleTrigLevelChange = (val: number) => {
-    oscilloscopeService.setTriggerLevel(val);
-    setTrigLevel(val);
-  };
-
-  // Canvas drawing loop (throttled to <= 20 FPS, paused when tab hidden)
+  // Auto-run transient analysis once when panel opens if no result yet
   useEffect(() => {
+    if (!result && circuit.components.some((c) => c.type === 'oscilloscope')) {
+      autoSetScanTime(circuit);
+      calculateAndDraw(circuit);
+    }
+  }, []);
+
+  const handleTimeStepMultiply = (factor: number) => {
+    const next = Math.max(1, Math.min(60000, Math.round(scanTimeMs * factor)));
+    setScanTimeMs(next);
+  };
+
+  const handleAutoTime = () => {
+    autoSetScanTime(circuit);
+  };
+
+  const handleCalculate = () => {
+    calculateAndDraw(circuit);
+  };
+
+  // Render Canvas
+  const renderCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-
-    let animId: number;
-    let lastDrawTime = 0;
-
-    const draw = (now: number) => {
-      // Limit to <= 20 FPS (at least 50 ms between frames)
-      if (now - lastDrawTime >= 50 && !document.hidden) {
-        lastDrawTime = now;
-        renderCanvas(canvas);
-      }
-      animId = requestAnimationFrame(draw);
-    };
-
-    animId = requestAnimationFrame(draw);
-    return () => cancelAnimationFrame(animId);
-  }, [timeDiv, vDiv1, vDiv2, offset1, offset2, ch1On, ch2On, trigMode, trigLevel]);
-
-  const renderCanvas = (canvas: HTMLCanvasElement) => {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const width = canvas.width;
-    const height = canvas.height;
+    const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+    const width = 520;
+    const height = 300;
+
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+
+    ctx.save();
+    ctx.scale(dpr, dpr);
+
+    const padLeft = 45;
+    const padRight = 15;
+    const padTop = 15;
+    const padBottom = 25;
+    const plotW = width - padLeft - padRight;
+    const plotH = height - padTop - padBottom;
 
     // 1. Background
-    ctx.fillStyle = '#090D16';
+    ctx.fillStyle = '#0B1120'; // Deep dark navy
     ctx.fillRect(0, 0, width, height);
 
-    // 2. Grid: 10 horizontal divisions, 8 vertical divisions
-    const cols = 10;
-    const rows = 8;
-    const dx = width / cols;
-    const dy = height / rows;
-    const yMid = height / 2;
-    const xMid = width / 2;
+    // Plot area background
+    ctx.fillStyle = '#0F172A';
+    ctx.fillRect(padLeft, padTop, plotW, plotH);
 
-    // Draw main grid
-    ctx.lineWidth = 1;
+    // 2. 10x8 Grid
+    const numXDivs = 10;
+    const numYDivs = 8;
+    const cellW = plotW / numXDivs;
+    const cellH = plotH / numYDivs;
+
+    // Grid lines
     ctx.strokeStyle = '#1E293B';
-    for (let c = 0; c <= cols; c++) {
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= numXDivs; i++) {
+      const x = padLeft + i * cellW;
       ctx.beginPath();
-      ctx.moveTo(c * dx, 0);
-      ctx.lineTo(c * dx, height);
+      ctx.moveTo(x, padTop);
+      ctx.lineTo(x, padTop + plotH);
       ctx.stroke();
     }
-    for (let r = 0; r <= rows; r++) {
+    for (let j = 0; j <= numYDivs; j++) {
+      const y = padTop + j * cellH;
       ctx.beginPath();
-      ctx.moveTo(0, r * dy);
-      ctx.lineTo(width, r * dy);
+      ctx.moveTo(padLeft, y);
+      ctx.lineTo(padLeft + plotW, y);
       ctx.stroke();
     }
 
-    // Center axes (slightly brighter with sub-ticks)
+    // Center axes (x-axis at j=4, y-axis at i=0)
     ctx.strokeStyle = '#334155';
     ctx.lineWidth = 1.5;
+    const yCenter = padTop + 4 * cellH;
     ctx.beginPath();
-    ctx.moveTo(0, yMid);
-    ctx.lineTo(width, yMid);
-    ctx.moveTo(xMid, 0);
-    ctx.lineTo(xMid, height);
+    ctx.moveTo(padLeft, yCenter);
+    ctx.lineTo(padLeft + plotW, yCenter);
     ctx.stroke();
 
-    // Sub-division ticks on center axes
+    // Minor ticks on center axes
+    ctx.strokeStyle = '#475569';
     ctx.lineWidth = 1;
-    for (let i = 0; i <= cols * 5; i++) {
-      const tx = (i * dx) / 5;
+    for (let i = 0; i < numXDivs * 5; i++) {
+      const x = padLeft + (i * cellW) / 5;
       ctx.beginPath();
-      ctx.moveTo(tx, yMid - 3);
-      ctx.lineTo(tx, yMid + 3);
+      ctx.moveTo(x, yCenter - 2);
+      ctx.lineTo(x, yCenter + 2);
       ctx.stroke();
     }
-    for (let j = 0; j <= rows * 5; j++) {
-      const ty = (j * dy) / 5;
+    for (let j = 0; j < numYDivs * 5; j++) {
+      const y = padTop + (j * cellH) / 5;
       ctx.beginPath();
-      ctx.moveTo(xMid - 3, ty);
-      ctx.lineTo(xMid + 3, ty);
+      ctx.moveTo(padLeft + 5 * cellW - 2, y);
+      ctx.lineTo(padLeft + 5 * cellW + 2, y);
       ctx.stroke();
     }
 
-    // 3. Ground reference level markers on left edge
-    if (ch1On) {
-      const yZero1 = yMid - offset1 * dy;
-      ctx.fillStyle = '#38BDF8';
-      ctx.beginPath();
-      ctx.moveTo(0, yZero1);
-      ctx.lineTo(8, yZero1 - 4);
-      ctx.lineTo(8, yZero1 + 4);
-      ctx.closePath();
-      ctx.fill();
-      ctx.font = 'bold 8px monospace';
-      ctx.fillText('1', 10, yZero1 + 3);
-    }
-    if (ch2On) {
-      const yZero2 = yMid - offset2 * dy;
-      ctx.fillStyle = '#F87171';
-      ctx.beginPath();
-      ctx.moveTo(0, yZero2);
-      ctx.lineTo(8, yZero2 - 4);
-      ctx.lineTo(8, yZero2 + 4);
-      ctx.closePath();
-      ctx.fill();
-      ctx.font = 'bold 8px monospace';
-      ctx.fillText('2', 10, yZero2 + 3);
+    // Border around plot area
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(padLeft, padTop, plotW, plotH);
+
+    // 3. Grid Axis Labels
+    ctx.font = 'bold 9px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = '#94A3B8';
+
+    // Horizontal Time Labels (0, tStop/2, tStop)
+    const tSpanSec = scanTimeMs / 1000;
+    for (let i = 0; i <= numXDivs; i += 2) {
+      const x = padLeft + i * cellW;
+      const tVal = (i / numXDivs) * tSpanSec;
+      const tLabel =
+        tSpanSec >= 1.0
+          ? `${tVal.toFixed(1)}s`
+          : `${(tVal * 1000).toFixed(tSpanSec < 0.05 ? 1 : 0)}ms`;
+      ctx.fillText(tLabel, x, padTop + plotH + 5);
     }
 
-    // 4. Fetch samples from buffer & compute window
-    const allSamples = oscilloscopeService.getSamples();
-    if (allSamples.length === 0) {
-      // Empty buffer notice
-      ctx.fillStyle = '#64748B';
-      ctx.font = 'bold 12px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('CHƯA CÓ TÍN HIỆU — BẤM [CHẠY] MÔ PHỎNG ĐỂ THU SÓNG', width / 2, height / 2);
-      return;
+    // Vertical Voltage Labels on Left Axis (for active channel 1)
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    for (let j = 0; j <= numYDivs; j += 2) {
+      const y = padTop + j * cellH;
+      const divFromCenter = 4 - j;
+      const vVal1 = divFromCenter * vPerDiv1;
+      const vLabel = `${vVal1 >= 0 ? '+' : ''}${vVal1.toFixed(vPerDiv1 < 0.1 ? 2 : 1)}V`;
+      ctx.fillStyle = ch1Enabled ? '#38BDF8' : '#94A3B8';
+      ctx.fillText(vLabel, padLeft - 6, y);
     }
 
-    const tSpan = 10 * timeDiv;
-    const tLatest = allSamples[allSamples.length - 1].t;
-    let tStart = Math.max(0, tLatest - tSpan);
+    // 4. Draw Waveform Traces
+    if (result && result.t && result.t.length > 1) {
+      const n = result.t.length;
+      const tMax = result.t[n - 1] || tSpanSec;
 
-    // Rising edge trigger on CH1
-    if (trigMode === 'rising' && ch1On && allSamples.length > 1) {
-      let edgeIdx = -1;
-      for (let i = allSamples.length - 1; i >= 1; i--) {
-        if (allSamples[i - 1].v1 < trigLevel && allSamples[i].v1 >= trigLevel) {
-          edgeIdx = i;
-          break;
-        }
-      }
-      if (edgeIdx >= 0) {
-        const tEdge = allSamples[edgeIdx].t;
-        tStart = tEdge - 5 * timeDiv;
-      }
-    }
-
-    const windowSamples = oscilloscopeService.getSamplesForWindow(tStart, tSpan);
-
-    // Flatness detection on CH1
-    let minV1 = Infinity;
-    let maxV1 = -Infinity;
-    for (let i = 0; i < windowSamples.length; i++) {
-      const v = windowSamples[i].v1;
-      if (v < minV1) minV1 = v;
-      if (v > maxV1) maxV1 = v;
-    }
-    const fullScale1 = 8 * vDiv1;
-    const isFlat = ch1On && windowSamples.length > 5 && maxV1 - minV1 < 0.02 * fullScale1;
-
-    setStatusText({
-      windowMs: Math.round(tSpan * 1000),
-      sampleCount: windowSamples.length,
-      isFlat,
-    });
-
-    const drawWaveform = (
-      valGetter: (s: OscilloscopeSample) => number,
-      color: string,
-      vDiv: number,
-      offset: number
-    ) => {
-      if (windowSamples.length === 0) return;
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-
-      if (windowSamples.length <= width) {
+      // Draw CH2 first (Red) so CH1 sits cleanly on top
+      if (ch2Enabled && result.v[1] && result.v[1].length === n) {
+        ctx.strokeStyle = '#EF4444';
+        ctx.lineWidth = 2.2;
+        ctx.beginPath();
         let started = false;
-        for (let i = 0; i < windowSamples.length; i++) {
-          const s = windowSamples[i];
-          if (s.t < tStart || s.t > tStart + tSpan) continue;
-          const x = ((s.t - tStart) / tSpan) * width;
-          const y = yMid - offset * dy - (valGetter(s) / vDiv) * dy;
+        for (let i = 0; i < n; i++) {
+          const tVal = result.t[i];
+          const vVal = result.v[1][i];
+          const x = padLeft + (tVal / tMax) * plotW;
+          const y = yCenter - (vVal / vPerDiv2) * cellH;
+          const clampedY = Math.max(padTop - 5, Math.min(padTop + plotH + 5, y));
           if (!started) {
-            ctx.moveTo(x, y);
+            ctx.moveTo(x, clampedY);
             started = true;
           } else {
-            ctx.lineTo(x, y);
+            ctx.lineTo(x, clampedY);
           }
         }
         ctx.stroke();
-      } else {
-        // Peak detect (column min-max)
-        const colMin = new Float64Array(width).fill(Infinity);
-        const colMax = new Float64Array(width).fill(-Infinity);
-        const colHas = new Uint8Array(width);
+      }
 
-        for (let i = 0; i < windowSamples.length; i++) {
-          const s = windowSamples[i];
-          if (s.t < tStart || s.t > tStart + tSpan) continue;
-          let col = Math.floor(((s.t - tStart) / tSpan) * width);
-          if (col < 0) col = 0;
-          if (col >= width) col = width - 1;
-          const v = valGetter(s);
-          if (v < colMin[col]) colMin[col] = v;
-          if (v > colMax[col]) colMax[col] = v;
-          colHas[col] = 1;
-        }
-
+      // Draw CH1 (Blue)
+      if (ch1Enabled && result.v[0] && result.v[0].length === n) {
+        ctx.strokeStyle = '#38BDF8';
+        ctx.lineWidth = 2.2;
+        ctx.beginPath();
         let started = false;
-        let prevY = yMid;
-        for (let c = 0; c < width; c++) {
-          if (!colHas[c]) continue;
-          const yTop = yMid - offset * dy - (colMax[c] / vDiv) * dy;
-          const yBot = yMid - offset * dy - (colMin[c] / vDiv) * dy;
+        for (let i = 0; i < n; i++) {
+          const tVal = result.t[i];
+          const vVal = result.v[0][i];
+          const x = padLeft + (tVal / tMax) * plotW;
+          const y = yCenter - (vVal / vPerDiv1) * cellH;
+          const clampedY = Math.max(padTop - 5, Math.min(padTop + plotH + 5, y));
           if (!started) {
-            ctx.moveTo(c, yTop);
-            ctx.lineTo(c, yBot);
+            ctx.moveTo(x, clampedY);
             started = true;
           } else {
-            ctx.lineTo(c, prevY);
-            ctx.lineTo(c, yTop);
-            ctx.lineTo(c, yBot);
+            ctx.lineTo(x, clampedY);
           }
-          prevY = yBot;
         }
         ctx.stroke();
       }
-    };
+    }
 
-    if (ch1On) drawWaveform((s) => s.v1, '#38BDF8', vDiv1, offset1);
-    if (ch2On) drawWaveform((s) => s.v2, '#F87171', vDiv2, offset2);
-
-    // 5. Cursor line & Readout
-    if (cursorPointRef.current) {
-      const { x, y } = cursorPointRef.current;
-      ctx.strokeStyle = '#FDE047';
+    // 5. Crosshair on hover
+    if (hoverData) {
+      ctx.save();
+      ctx.strokeStyle = '#FCD34D';
       ctx.lineWidth = 1;
       ctx.setLineDash([3, 3]);
-
-      // Vertical cursor line
       ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, height);
+      ctx.moveTo(hoverData.canvasX, padTop);
+      ctx.lineTo(hoverData.canvasX, padTop + plotH);
       ctx.stroke();
-
-      // Horizontal cursor line
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(width, y);
-      ctx.stroke();
-      ctx.setLineDash([]);
+      ctx.restore();
     }
-  };
 
-  // Cursor mouse move handler
+    ctx.restore();
+  }, [result, scanTimeMs, vPerDiv1, vPerDiv2, ch1Enabled, ch2Enabled, hoverData]);
+
+  useEffect(() => {
+    renderCanvas();
+  }, [renderCanvas]);
+
+  // Handle canvas mouse move
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!result || !result.t || result.t.length === 0) {
+      setHoverData(null);
+      return;
+    }
     const canvas = canvasRef.current;
     if (!canvas) return;
-
     const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    const x = (e.clientX - rect.left) * scaleX;
-    const y = (e.clientY - rect.top) * scaleY;
+    const clientX = e.clientX - rect.left;
+    const clientY = e.clientY - rect.top;
 
-    cursorPointRef.current = { x, y };
+    const padLeft = 45;
+    const padRight = 15;
+    const plotW = 520 - padLeft - padRight;
 
-    const samples = oscilloscopeService.getSamples();
-    if (samples.length === 0) {
-      setCursorReadout(null);
+    if (clientX < padLeft || clientX > padLeft + plotW) {
+      setHoverData(null);
       return;
     }
 
-    const tSpan = 10 * timeDiv;
-    const tLatest = samples[samples.length - 1].t;
-    const tStart = Math.max(0, tLatest - tSpan);
-    const cursorTime = tStart + (x / canvas.width) * tSpan;
+    const frac = Math.max(0, Math.min(1, (clientX - padLeft) / plotW));
+    const n = result.t.length;
+    const idx = Math.min(n - 1, Math.max(0, Math.round(frac * (n - 1))));
 
-    // Find closest sample
-    let best = samples[0];
-    let bestDist = Math.abs(best.t - cursorTime);
-    for (let i = 1; i < samples.length; i++) {
-      const d = Math.abs(samples[i].t - cursorTime);
-      if (d < bestDist) {
-        bestDist = d;
-        best = samples[i];
-      }
-    }
+    const t = result.t[idx];
+    const v1 = result.v[0]?.[idx] ?? 0;
+    const v2 = result.v[1]?.[idx] ?? 0;
 
-    const tStr = `${(best.t * 1000).toFixed(1)} ms`;
-    const v1Str = `${best.v1.toFixed(2)} V`;
-    const v2Str = `${best.v2.toFixed(2)} V`;
-    setCursorReadout(`t = ${tStr}, V1 = ${v1Str}, V2 = ${v2Str}`);
+    setHoverData({
+      t,
+      v1,
+      v2,
+      canvasX: clientX,
+      canvasY: clientY,
+    });
   };
 
   const handleMouseLeave = () => {
-    cursorPointRef.current = null;
-    setCursorReadout(null);
+    setHoverData(null);
   };
 
+  // Check if trace is flat (max - min < 2% of full 8-div scale)
+  let isFlatWarning = false;
+  if (result && result.v) {
+    if (ch1Enabled && result.v[0] && result.v[0].length > 0) {
+      let min1 = Infinity, max1 = -Infinity;
+      for (let i = 0; i < result.v[0].length; i++) {
+        const val = result.v[0][i];
+        if (val < min1) min1 = val;
+        if (val > max1) max1 = val;
+      }
+      const scale1 = 8 * vPerDiv1;
+      if (max1 - min1 < 0.02 * scale1) isFlatWarning = true;
+    }
+  }
+
   return (
-    <div className="bg-white border-[3px] border-black shadow-[4px_4px_0_#000] p-3 space-y-2 max-w-2xl w-full">
-      {/* 1. Header Bar */}
-      <div className="flex items-center justify-between pb-2 border-b-2 border-black">
+    <div className="w-[540px] bg-white border-3 border-black shadow-[4px_4px_0_#000] text-black select-none overflow-hidden flex flex-col font-sans">
+      {/* 1. Header (Neo-brutal style) */}
+      <div className="bg-[#FFD84D] border-b-3 border-black px-3 py-1.5 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Activity size={18} strokeWidth={3} className="text-[#2563EB]" />
-          <h3 className="font-black text-xs uppercase tracking-wider text-black">
-            ĐỒ THỊ DAO ĐỘNG KÍ ẢO (OSCILLOSCOPE)
-          </h3>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <button
-            onClick={handleAutoSet}
-            className="px-2 py-0.5 border-2 border-black bg-[#A7F3D0] hover:bg-[#6EE7B7] text-black text-[10px] font-black uppercase flex items-center gap-1 cursor-pointer transition-transform active:translate-x-0.5 active:translate-y-0.5"
-            title="Tự động căn chỉnh thang đo"
-          >
-            TỰ ĐẶT
-          </button>
-          <button
-            onClick={handleSingleShot}
-            disabled={isCapturing}
-            className="px-2 py-0.5 border-2 border-black bg-[#C7D2FE] hover:bg-[#A5B4FC] text-black text-[10px] font-black uppercase flex items-center gap-1 cursor-pointer disabled:opacity-50 transition-transform active:translate-x-0.5 active:translate-y-0.5"
-            title="Chụp dữ liệu một màn hình theo ngân sách khung"
-          >
-            {isCapturing ? `Đang chụp… ${captureProgress}%` : 'CHỤP 1 LẦN'}
-          </button>
-          <button
-            onClick={toggleHold}
-            className={`px-2 py-0.5 border-2 border-black text-[10px] font-black uppercase flex items-center gap-1 cursor-pointer transition-transform active:translate-x-0.5 active:translate-y-0.5 ${
-              isHeld ? 'bg-[#EF4444] text-white' : 'bg-[#FFD84D] text-black hover:bg-[#FFE37A]'
-            }`}
-          >
-            {isHeld ? <Play size={10} strokeWidth={3} /> : <Pause size={10} strokeWidth={3} />}
-            {isHeld ? 'TIẾP TỤC' : 'DỪNG HÌNH'}
-          </button>
-          <button
-            onClick={handleClear}
-            className="px-2 py-0.5 border-2 border-black bg-white hover:bg-gray-100 text-black text-[10px] font-black uppercase flex items-center gap-1 cursor-pointer transition-transform active:translate-x-0.5 active:translate-y-0.5"
-          >
-            <Trash2 size={10} strokeWidth={3} />
-            XÓA
-          </button>
-          <button
-            onClick={() => setOscilloscopePanelOpen(false)}
-            className="p-1 border-2 border-black bg-white hover:bg-red-50 text-black cursor-pointer transition-transform active:translate-x-0.5 active:translate-y-0.5"
-            title="Đóng panel đồ thị"
-          >
-            <X size={14} strokeWidth={3} />
-          </button>
-        </div>
-      </div>
-
-      {/* Progress Bar when Single-Shot Capturing */}
-      {isCapturing && (
-        <div className="w-full bg-[#E0E7FF] border-2 border-black p-1 flex items-center gap-2">
-          <span className="text-[10px] font-black uppercase text-[#1E1B4B]">Đang chụp… {captureProgress}%</span>
-          <div className="flex-1 bg-white border border-black h-3 overflow-hidden">
-            <div className="bg-[#4F46E5] h-full transition-all duration-75" style={{ width: `${captureProgress}%` }} />
-          </div>
-        </div>
-      )}
-
-      {/* 2. Cursor Readout Banner */}
-      <div className="h-6 bg-[#0F172A] border-2 border-black px-2 flex items-center justify-between text-[11px] font-mono font-bold text-white">
-        <div className="flex items-center gap-4">
-          <span className="text-yellow-400">
-            {cursorReadout || 'Rê chuột trên đồ thị để đo điểm'}
+          <Activity size={18} strokeWidth={3} className="text-black" />
+          <span className="font-black text-sm uppercase tracking-wide">
+            PHÂN TÍCH QUÁ ĐỘ (DAO ĐỘNG KÍ)
           </span>
         </div>
-        <div className="flex items-center gap-3 text-[10px]">
-          <span className="text-[#38BDF8]">CH1: {vDiv1} V/ô</span>
-          <span className="text-[#F87171]">CH2: {vDiv2} V/ô</span>
-          <span className="text-gray-300">TIME: {timeDiv * 1000} ms/ô</span>
-        </div>
+        <button
+          onClick={() => setOscilloscopePanelOpen(false)}
+          className="w-6 h-6 bg-white hover:bg-black hover:text-white border-2 border-black flex items-center justify-center font-black cursor-pointer transition-colors"
+          title="Đóng bảng"
+        >
+          <X size={15} strokeWidth={3} />
+        </button>
       </div>
 
-      {/* 3. Main Screen Canvas (10 cols x 8 rows) */}
-      <div className="border-[3px] border-black bg-black overflow-hidden flex justify-center">
+      {/* 2. Top Controls: Time window & Calculate Button */}
+      <div className="p-2.5 bg-[#F8FAFC] border-b-2 border-black flex flex-wrap items-center justify-between gap-2 text-xs">
+        {/* Scan time input */}
+        <div className="flex items-center gap-1.5">
+          <span className="font-extrabold text-[11px] uppercase text-gray-700">
+            Thời gian quét:
+          </span>
+          <div className="flex items-center border-2 border-black bg-white shadow-[1px_1px_0_#000]">
+            <input
+              type="number"
+              min={1}
+              max={60000}
+              value={scanTimeMs}
+              onChange={(e) => setScanTimeMs(Number(e.target.value) || 10)}
+              className="w-16 px-1.5 py-0.5 text-center font-mono font-bold text-xs focus:outline-none"
+            />
+            <span className="px-1 text-[10px] font-bold text-gray-500 bg-gray-100 border-l border-black">
+              ms
+            </span>
+          </div>
+          <button
+            onClick={() => handleTimeStepMultiply(0.5)}
+            className="px-1.5 py-0.5 bg-white hover:bg-[#EEF2FF] border border-black font-black text-[10px] cursor-pointer shadow-[1px_1px_0_#000]"
+            title="Giảm nửa thời gian quét"
+          >
+            ÷2
+          </button>
+          <button
+            onClick={() => handleTimeStepMultiply(2)}
+            className="px-1.5 py-0.5 bg-white hover:bg-[#EEF2FF] border border-black font-black text-[10px] cursor-pointer shadow-[1px_1px_0_#000]"
+            title="Nhân đôi thời gian quét"
+          >
+            ×2
+          </button>
+          <button
+            onClick={handleAutoTime}
+            className="px-2 py-0.5 bg-[#EEF2FF] hover:bg-[#C7D2FE] text-[#3730A3] border border-black font-black text-[10px] uppercase cursor-pointer shadow-[1px_1px_0_#000] flex items-center gap-1"
+            title="Tự động ước lượng thời gian quét phù hợp nhất"
+          >
+            <Sparkles size={11} strokeWidth={2.5} />
+            <span>TỰ ĐẶT</span>
+          </button>
+        </div>
+
+        {/* Big Calculate & Draw Button */}
+        <button
+          onClick={handleCalculate}
+          disabled={isCalculating}
+          className={`px-3 py-1 border-2 border-black font-black text-xs uppercase flex items-center gap-1.5 shadow-[2px_2px_0_#000] transition-transform active:translate-x-0.5 active:translate-y-0.5 cursor-pointer ${
+            isCalculating ? 'bg-gray-300 text-gray-600' : 'bg-[#2DB84D] hover:bg-[#259b40] text-white'
+          }`}
+        >
+          <Play size={13} strokeWidth={3} />
+          <span>{isCalculating ? `Đang tính… ${progressPct}%` : 'TÍNH VÀ VẼ'}</span>
+        </button>
+      </div>
+
+      {/* 3. Main Graphic Canvas */}
+      <div className="relative bg-[#0B1120] p-1.5 flex flex-col items-center justify-center">
         <canvas
           ref={canvasRef}
-          width={500}
-          height={320}
           onMouseMove={handleMouseMove}
           onMouseLeave={handleMouseLeave}
-          className="w-full h-auto cursor-crosshair block"
+          className="cursor-crosshair rounded border border-[#334155]"
         />
-      </div>
 
-      {/* 3.1 Status Line under Canvas */}
-      <div className="flex items-center justify-between text-[10px] font-mono font-bold bg-[#F1F5F9] border-2 border-black px-2 py-1">
-        <div className="flex items-center gap-2 text-black">
-          <span>Cửa sổ: {statusText.windowMs} ms</span>
-          <span>|</span>
-          <span>Mẫu: {statusText.sampleCount}</span>
-          <span>|</span>
-          <span>Tốc độ: ×{timeSpeed === 0.01 ? '0,01' : timeSpeed === 0.1 ? '0,1' : timeSpeed}</span>
-        </div>
-        {statusText.isFlat && (
-          <div className="text-[#DC2626] font-sans font-black flex items-center gap-1 animate-pulse">
-            <span>⚠️ Đường gần phẳng: thử tăng thời gian/ô hoặc bấm TỰ ĐẶT</span>
+        {/* Crosshair readout pill */}
+        {hoverData && (
+          <div className="absolute top-3 right-4 bg-white/95 text-black border-2 border-black px-2 py-1 text-[11px] font-mono font-bold shadow-[2px_2px_0_#000] flex items-center gap-2 pointer-events-none">
+            <span>
+              t = {hoverData.t < 1 ? `${(hoverData.t * 1000).toFixed(2).replace('.', ',')} ms` : `${hoverData.t.toFixed(3).replace('.', ',')} s`}
+            </span>
+            <span className="text-[#0284C7] border-l border-gray-300 pl-2">
+              V1 = {formatMeasure(hoverData.v1, 'voltage')}
+            </span>
+            <span className="text-[#DC2626] border-l border-gray-300 pl-2">
+              V2 = {formatMeasure(hoverData.v2, 'voltage')}
+            </span>
           </div>
         )}
       </div>
 
-      {/* 4. Controls Deck (Time/div, CH1, CH2, Trigger) */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 pt-1 text-[10px]">
-        {/* TIME / DIV */}
-        <div className="border-2 border-black p-2 bg-[#F8FAFC] space-y-1">
-          <span className="font-black uppercase text-black block">Thời gian / ô:</span>
-          <select
-            value={timeDiv}
-            onChange={(e) => handleTimeDivChange(parseFloat(e.target.value))}
-            className="w-full h-6 border border-black bg-white font-bold px-1 text-[11px] cursor-pointer"
-          >
-            {TIME_DIV_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* CH1 (Blue) */}
-        <div className="border-2 border-black p-2 bg-[#EFF6FF] space-y-1">
-          <div className="flex items-center justify-between">
-            <label className="flex items-center gap-1 font-black uppercase text-[#1D4ED8] cursor-pointer">
-              <input
-                type="checkbox"
-                checked={ch1On}
-                onChange={toggleCh1}
-                className="w-3 h-3 accent-[#2563EB]"
-              />
-              Kênh 1 (CH1)
+      {/* 4. Channel V/div & Display Controls */}
+      <div className="p-2 bg-white border-t-2 border-black grid grid-cols-2 gap-2 text-xs">
+        {/* Channel 1 (Blue) */}
+        <div className="p-1.5 border-2 border-[#38BDF8] bg-[#F0F9FF] rounded flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <input
+              type="checkbox"
+              id="ch1Toggle"
+              checked={ch1Enabled}
+              onChange={(e) => setCh1Enabled(e.target.checked)}
+              className="accent-[#0284C7] cursor-pointer"
+            />
+            <label htmlFor="ch1Toggle" className="font-black text-[#0284C7] text-[11px] cursor-pointer">
+              KÊNH 1 (CH1)
             </label>
-            <div className="flex items-center gap-0.5">
-              <button
-                onClick={() => adjustOffset1(0.5)}
-                className="px-1 border border-black bg-white hover:bg-gray-100 font-black"
-                title="Dịch lên"
-              >
-                ▲
-              </button>
-              <button
-                onClick={() => adjustOffset1(-0.5)}
-                className="px-1 border border-black bg-white hover:bg-gray-100 font-black"
-                title="Dịch xuống"
-              >
-                ▼
-              </button>
-            </div>
           </div>
-          <select
-            value={vDiv1}
-            onChange={(e) => handleVDiv1Change(parseFloat(e.target.value))}
-            disabled={!ch1On}
-            className="w-full h-6 border border-black bg-white font-bold px-1 text-[11px] cursor-pointer disabled:opacity-50"
-          >
-            {VOLT_DIV_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label} / ô
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* CH2 (Red) */}
-        <div className="border-2 border-black p-2 bg-[#FEF2F2] space-y-1">
-          <div className="flex items-center justify-between">
-            <label className="flex items-center gap-1 font-black uppercase text-[#B91C1C] cursor-pointer">
-              <input
-                type="checkbox"
-                checked={ch2On}
-                onChange={toggleCh2}
-                className="w-3 h-3 accent-[#DC2626]"
-              />
-              Kênh 2 (CH2)
-            </label>
-            <div className="flex items-center gap-0.5">
-              <button
-                onClick={() => adjustOffset2(0.5)}
-                className="px-1 border border-black bg-white hover:bg-gray-100 font-black"
-                title="Dịch lên"
-              >
-                ▲
-              </button>
-              <button
-                onClick={() => adjustOffset2(-0.5)}
-                className="px-1 border border-black bg-white hover:bg-gray-100 font-black"
-                title="Dịch xuống"
-              >
-                ▼
-              </button>
-            </div>
-          </div>
-          <select
-            value={vDiv2}
-            onChange={(e) => handleVDiv2Change(parseFloat(e.target.value))}
-            disabled={!ch2On}
-            className="w-full h-6 border border-black bg-white font-bold px-1 text-[11px] cursor-pointer disabled:opacity-50"
-          >
-            {VOLT_DIV_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label} / ô
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* TRIGGER */}
-        <div className="border-2 border-black p-2 bg-[#F8FAFC] space-y-1">
-          <span className="font-black uppercase text-black block">Trigger (Kích):</span>
           <div className="flex items-center gap-1">
             <select
-              value={trigMode}
-              onChange={(e) => handleTrigModeChange(e.target.value as 'auto' | 'rising')}
-              className="flex-1 h-6 border border-black bg-white font-bold px-1 text-[10px] cursor-pointer"
+              value={vPerDiv1}
+              onChange={(e) => setVPerDiv1(Number(e.target.value))}
+              className="border border-black bg-white px-1 py-0.5 text-[10px] font-mono font-bold focus:outline-none"
             >
-              <option value="auto">Tự động</option>
-              <option value="rising">Cạnh lên CH1</option>
+              {STANDARD_VOLT_DIVS.map((v) => (
+                <option key={v} value={v}>
+                  {v < 1 ? `${v * 1000} mV` : `${v} V`}/ô
+                </option>
+              ))}
             </select>
-            {trigMode === 'rising' && (
-              <input
-                type="number"
-                step={0.5}
-                value={trigLevel}
-                onChange={(e) => handleTrigLevelChange(parseFloat(e.target.value) || 0)}
-                className="w-12 h-6 border border-black bg-white font-bold px-1 text-right text-[10px]"
-                title="Mức điện áp kích (V)"
-              />
-            )}
+            <button
+              onClick={() => autoScaleVolts(1)}
+              className="px-1.5 py-0.5 bg-white hover:bg-[#E0F2FE] border border-black font-bold text-[9px] uppercase cursor-pointer"
+              title="Tự đặt Volt/ô sao cho sóng gọn trong 6 ô"
+            >
+              TỰ ĐẶT
+            </button>
           </div>
+        </div>
+
+        {/* Channel 2 (Red) */}
+        <div className="p-1.5 border-2 border-[#F87171] bg-[#FEF2F2] rounded flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <input
+              type="checkbox"
+              id="ch2Toggle"
+              checked={ch2Enabled}
+              onChange={(e) => setCh2Enabled(e.target.checked)}
+              className="accent-[#DC2626] cursor-pointer"
+            />
+            <label htmlFor="ch2Toggle" className="font-black text-[#DC2626] text-[11px] cursor-pointer">
+              KÊNH 2 (CH2)
+            </label>
+          </div>
+          <div className="flex items-center gap-1">
+            <select
+              value={vPerDiv2}
+              onChange={(e) => setVPerDiv2(Number(e.target.value))}
+              className="border border-black bg-white px-1 py-0.5 text-[10px] font-mono font-bold focus:outline-none"
+            >
+              {STANDARD_VOLT_DIVS.map((v) => (
+                <option key={v} value={v}>
+                  {v < 1 ? `${v * 1000} mV` : `${v} V`}/ô
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={() => autoScaleVolts(2)}
+              className="px-1.5 py-0.5 bg-white hover:bg-[#FEE2E2] border border-black font-bold text-[9px] uppercase cursor-pointer"
+              title="Tự đặt Volt/ô sao cho sóng gọn trong 6 ô"
+            >
+              TỰ ĐẶT
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* 5. Flat waveform warning if applicable */}
+      {isFlatWarning && (
+        <div className="px-3 py-1 bg-[#FEF3C7] text-[#92400E] border-t border-black text-[11px] font-bold flex items-center gap-1.5">
+          <AlertCircle size={13} className="shrink-0" />
+          <span>Đường gần phẳng: thử đổi thời gian quét hoặc bấm TỰ ĐẶT.</span>
+        </div>
+      )}
+
+      {/* 6. Footer Stats Row */}
+      <div className="px-3 py-1 bg-[#EEF2FF] border-t-2 border-black flex items-center justify-between text-[10px] font-mono text-gray-700">
+        <div>
+          <span>Cửa sổ: </span>
+          <span className="font-bold text-black">{scanTimeMs} ms</span>
+          <span className="mx-1 text-gray-400">|</span>
+          <span>Số mẫu: </span>
+          <span className="font-bold text-black">{result ? result.t.length : 0}</span>
+          <span className="mx-1 text-gray-400">|</span>
+          <span>dt: </span>
+          <span className="font-bold text-black">
+            {result
+              ? result.dt * 1e6 < 1000
+                ? `${(result.dt * 1e6).toFixed(1)} µs`
+                : `${(result.dt * 1000).toFixed(3)} ms`
+              : '---'}
+          </span>
+          <span className="mx-1 text-gray-400">|</span>
+          <span>Hội tụ: </span>
+          <span className={`font-bold ${result?.converged ? 'text-[#16A34A]' : 'text-[#DC2626]'}`}>
+            {result ? (result.converged ? 'Có' : 'Không') : '---'}
+          </span>
+        </div>
+
+        <div className="text-gray-500 text-[9px] italic">
+          10 MΩ/kênh • Thuần quá độ
         </div>
       </div>
     </div>

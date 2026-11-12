@@ -33,7 +33,6 @@ import { extractNetlist, lintCircuit, getComponentPins } from '../core/netlist';
 import { migrateCircuitState } from '../core/migration';
 import { solveCircuit } from '../core/solver';
 import { simulationService, SimulationSnapshot } from '../core/simulationService';
-import { oscilloscopeService } from '../core/oscilloscopeService';
 import { runLogicSimulation, LogicSimulationResult } from '../core/logicSimulator';
 
 const storage = StorageService.getInstance();
@@ -448,10 +447,6 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     if (hasAc && isDcMode) {
       get().setTimeSpeed(0.1);
     }
-    const hasOsc = state.components.some(c => c.type === 'oscilloscope');
-    if (hasOsc) {
-      oscilloscopeService.autoScale(state.components);
-    }
     get().evaluateLogic();
 
     // Sửa mạch khi đang chạy: tự biên dịch lại sau 100 ms debounce, giữ trạng thái động học
@@ -638,19 +633,10 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   },
 
   toggleOscilloscopePanel: () => {
-    set(s => {
-      const next = !s.oscilloscopePanelOpen;
-      if (next) {
-        oscilloscopeService.autoScale(s.circuit.components);
-      }
-      return { oscilloscopePanelOpen: next };
-    });
+    set(s => ({ oscilloscopePanelOpen: !s.oscilloscopePanelOpen }));
   },
 
   setOscilloscopePanelOpen: (open: boolean) => {
-    if (open) {
-      oscilloscopeService.autoScale(get().circuit.components);
-    }
     set({ oscilloscopePanelOpen: open });
   },
 
@@ -1018,9 +1004,6 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     set(s => {
       const comp = s.circuit.components.find(c => c.id === id);
       const isOsc = comp?.type === 'oscilloscope';
-      if (isOsc && !s.oscilloscopePanelOpen) {
-        oscilloscopeService.autoScale(s.circuit.components);
-      }
       if (isShift) {
         const exists = s.selectedComponentIds.includes(id);
         const nextIds = exists

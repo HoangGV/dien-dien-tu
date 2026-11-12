@@ -40,6 +40,7 @@ import {
   RelayModuleSymbol,
   TimeRelaySymbol,
   LampDCSymbol,
+  OpAmpSymbol,
 } from '../components/symbols/CircuitSymbols';
 import {
   LogicSwitchSymbol,
@@ -581,7 +582,7 @@ export const COMPONENT_DEFINITIONS: ComponentDef[] = [
     ],
     symbol: DCSourceSymbol,
     propsSchema: [
-      { key: 'voltage', label: 'Điện áp DC', kind: 'number', min: 1.5, max: 24, step: 0.5, unit: 'V', default: 9 },
+      { key: 'voltage', label: 'Điện áp DC', kind: 'number', min: 0, max: 100, step: 0.1, unit: 'V', default: 9 },
     ],
     defaultProps: { voltage: 9 },
   },
@@ -767,6 +768,37 @@ export const COMPONENT_DEFINITIONS: ComponentDef[] = [
       { key: 'beta', label: 'Hệ số khuếch đại (β/hFE)', kind: 'number', min: 20, max: 500, step: 10, default: 100 },
     ],
     defaultProps: { beta: 100, maxCurrent: 150 },
+  },
+  {
+    type: 'opamp',
+    nameVi: 'Khuếch đại thuật toán',
+    category: 'semiconductor',
+    refPrefix: 'OP',
+    width: 120,
+    height: 80,
+    pins: [
+      { id: 'in_neg', label: 'IN−', dx: -3, dy: -1 },
+      { id: 'in_pos', label: 'IN+', dx: -3, dy: 1 },
+      { id: 'out', label: 'OUT', dx: 3, dy: 0 },
+      { id: 'v_pos', label: 'V+', dx: 0, dy: -2, polarity: '+' },
+      { id: 'v_neg', label: 'V−', dx: 0, dy: 2, polarity: '-' },
+    ],
+    symbol: OpAmpSymbol,
+    propsSchema: [
+      {
+        key: 'drop_voltage',
+        label: 'Độ sụt so với nguồn (V)',
+        kind: 'number',
+        min: 0,
+        max: 5,
+        step: 0.1,
+        unit: 'V',
+        default: 1.0,
+      },
+    ],
+    defaultProps: {
+      drop_voltage: 1.0,
+    },
   },
   {
     type: 'push_button',
