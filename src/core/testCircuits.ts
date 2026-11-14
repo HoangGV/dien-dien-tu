@@ -5,7 +5,8 @@
 
 import { CircuitState, ComponentInstance, Wire, Preset } from './model';
 import { solveCircuit, SolverStepResult } from './solver';
-import { COMPONENT_MAP } from './registry';
+import { COMPONENT_MAP, getWorkspacePaletteItems, COMPONENT_DEFINITIONS } from './registry';
+import { WORKSPACE_DIGITAL_LOGIC } from './workspaces';
 import { HistoryManager } from './history';
 import { getComponentPins, extractNetlist } from './netlist';
 import { createWorkspaceExportPackage, validateCircuitJson } from './io';
@@ -42,7 +43,7 @@ import {
   DIGITAL_LOGIC_PRESETS,
   ANALOG_PRESETS,
 } from './presets';
-import { runLogicSimulation, evaluateGate } from './logicSimulator';
+import { runLogicSimulation, evaluateGate, applyLogicGateTypeChange } from './logicSimulator';
 import { runTransient } from './solver/transient';
 import {
   NOI_COM_DIEN,
@@ -3411,6 +3412,184 @@ export const ALL_SOLVER_TEST_CASES: SolverTestCase[] = [
       const passed = converged && hasWarning && opStatus === 'Chưa cấp nguồn';
       return {
         actualStr: `Hội tụ: ${converged ? 'ĐẠT' : 'KHÔNG'}; Cảnh báo: ${hasWarning ? 'CÓ' : 'THIẾU'}; Trạng thái: ${opStatus}`,
+        passed,
+      };
+    },
+  }),
+  defineTestCase({
+    id: 'case85_logic_palette_7_variants',
+    stt: 85,
+    group: 'Mạch mẫu',
+    name: 'Ca 85: Palette "dien-tu-so" có đủ 7 thẻ cổng logic (AND, OR, NOT, NAND, NOR, XOR, XNOR), tìm kiếm đúng và đặt đúng chân theo loại',
+    expectedStr: 'Đủ 7 thẻ thuộc nhóm "Cổng logic", các linh kiện khác giữ 1 thẻ; tìm "xor"/"not"/"and" khớp; đặt mỗi thẻ tạo logic_gate đúng gateType & số chân (NOT: 1 vào; AND/OR/NAND/NOR: 2..4 vào; XOR/XNOR: 2 vào)',
+    toleranceStr: 'Chính xác 100%',
+    createCircuit: () => createPresetLogicD1(),
+    evaluate: () => {
+      const expectedGates = ['AND', 'OR', 'NOT', 'NAND', 'NOR', 'XOR', 'XNOR'];
+      const items = getWorkspacePaletteItems(WORKSPACE_DIGITAL_LOGIC.paletteIds, '');
+      const gateItems = items.filter((item) => item.type === 'logic_gate');
+
+      const hasAll7Cards =
+        gateItems.length === 7 &&
+        expectedGates.every((g) =>
+          gateItems.some(
+            (it) =>
+              it.label === g &&
+              it.presetProps?.gateType === g &&
+              it.groupTitle === 'Cổng logic'
+          )
+        );
+
+      const onlyLogicGateHasVariants = COMPONENT_DEFINITIONS.every((def) =>
+        def.type === 'logic_gate'
+          ? (def.paletteVariants?.length ?? 0) === 7
+          : !def.paletteVariants || def.paletteVariants.length === 0
+      );
+
+      // Search checks
+      const searchXor = getWorkspacePaletteItems(WORKSPACE_DIGITAL_LOGIC.paletteIds, 'xor')
+        .filter((it) => it.type === 'logic_gate')
+        .map((it) => it.label);
+      const searchNot = getWorkspacePaletteItems(WORKSPACE_DIGITAL_LOGIC.paletteIds, 'not')
+        .filter((it) => it.type === 'logic_gate')
+        .map((it) => it.label);
+      const searchAnd = getWorkspacePaletteItems(WORKSPACE_DIGITAL_LOGIC.paletteIds, 'and')
+        .filter((it) => it.type === 'logic_gate')
+        .map((it) => it.label);
+      const searchOk =
+        searchXor.includes('XOR') &&
+        !searchXor.includes('AND') &&
+        searchNot.includes('NOT') &&
+        !searchNot.includes('OR') &&
+        searchAnd.includes('AND') &&
+        searchAnd.includes('NAND');
+
+      // Pin checks when placing each variant card
+      const def = COMPONENT_MAP.get('logic_gate');
+      let pinsOk = true;
+      for (const item of gateItems) {
+        const gType = String(item.presetProps?.gateType || 'AND');
+        const inst: ComponentInstance = {
+          id: `g_${gType}`,
+          type: item.type,
+          x: 200,
+          y: 160,
+          rot: 0,
+          flip: false,
+          label: gType,
+          props: { ...(def?.defaultProps || {}), ...(item.presetProps || {}) },
+        };
+        const pins = getComponentPins(inst, def);
+        if (gType === 'NOT') {
+          if (pins.map((p) => p.id).join(',') !== 'A,Y') pinsOk = false;
+        } else if (gType === 'XOR' || gType === 'XNOR') {
+          if (pins.map((p) => p.id).join(',') !== 'A,B,Y') pinsOk = false;
+          // Attempt invalid inputsCount=3 -> XOR/XNOR still enforce 2 inputs via change check
+          const dummyCirc: CircuitState = { components: [inst], wires: [], junctions: [], viewport: { x: 0, y: 0, zoom: 1 } };
+          const check = applyLogicGateTypeChange(dummyCirc, inst.id, gType, def);
+          if (check.nextState.components[0].props.inputsCount !== 2) pinsOk = false;
+        } else {
+          // AND, OR, NAND, NOR: default 2 inputs, supports 2..4 inputs
+          if (pins.map((p) => p.id).join(',') !== 'A,B,Y') pinsOk = false;
+          for (const n of [2, 3, 4]) {
+            const multiInst: ComponentInstance = { ...inst, props: { ...inst.props, inputsCount: n } };
+            const multiPins = getComponentPins(multiInst, def);
+            if (multiPins.length !== n + 1) pinsOk = false;
+          }
+        }
+      }
+
+      const passed = hasAll7Cards && onlyLogicGateHasVariants && searchOk && pinsOk;
+      return {
+        actualStr: `7 thẻ cổng: ${hasAll7Cards ? 'ĐẠT' : 'LỖI'} (${gateItems.map((i) => i.label).join(',')}); Chỉ logic_gate tách thẻ: ${onlyLogicGateHasVariants ? 'ĐẠT' : 'LỖI'}; Tìm kiếm: ${searchOk ? 'ĐẠT' : 'LỖI'}; Chân theo loại: ${pinsOk ? 'ĐẠT' : 'LỖI'}`,
+        passed,
+      };
+    },
+  }),
+  defineTestCase({
+    id: 'case86_logic_gate_switch_wires_undo',
+    stt: 86,
+    group: 'Mạch mẫu',
+    name: 'Ca 86: Đổi cổng AND 2 ngõ vào → OR → NOT: giữ dây A và LED, xóa dây B có cảnh báo, Ctrl+Z khôi phục nguyên trạng',
+    expectedStr: 'AND → OR giữ nguyên 3 dây; OR → NOT giữ dây A & LED, xóa dây B và phát cảnh báo; Undo khôi phục đúng mạch trước đó',
+    toleranceStr: 'Chính xác 100%',
+    createCircuit: () => {
+      const swA: ComponentInstance = { id: 'swA', type: 'logic_switch', x: 80, y: 100, rot: 0, flip: false, label: 'A', props: { state: true } };
+      const swB: ComponentInstance = { id: 'swB', type: 'logic_switch', x: 80, y: 200, rot: 0, flip: false, label: 'B', props: { state: false } };
+      const g1: ComponentInstance = { id: 'g1', type: 'logic_gate', x: 240, y: 150, rot: 0, flip: false, label: 'G1', props: { gateType: 'AND', inputsCount: 2 } };
+      const led1: ComponentInstance = { id: 'led1', type: 'logic_led', x: 400, y: 150, rot: 0, flip: false, label: 'LED1', props: { color: 'red' } };
+      const wA = makeWire('wA', 'swA', 'Q', 'g1', 'A', []);
+      const wB = makeWire('wB', 'swB', 'Q', 'g1', 'B', []);
+      const wY = makeWire('wY', 'g1', 'Y', 'led1', 'in', []);
+      return { components: [swA, swB, g1, led1], wires: [wA, wB, wY], junctions: [], viewport: { x: 0, y: 0, zoom: 1 } };
+    },
+    evaluate: () => {
+      const def = COMPONENT_MAP.get('logic_gate');
+      const swA: ComponentInstance = { id: 'swA', type: 'logic_switch', x: 80, y: 100, rot: 0, flip: false, label: 'A', props: { state: true } };
+      const swB: ComponentInstance = { id: 'swB', type: 'logic_switch', x: 80, y: 200, rot: 0, flip: false, label: 'B', props: { state: false } };
+      const g1: ComponentInstance = { id: 'g1', type: 'logic_gate', x: 240, y: 150, rot: 0, flip: false, label: 'G1', props: { gateType: 'AND', inputsCount: 2 } };
+      const led1: ComponentInstance = { id: 'led1', type: 'logic_led', x: 400, y: 150, rot: 0, flip: false, label: 'LED1', props: { color: 'red' } };
+      const wA = makeWire('wA', 'swA', 'Q', 'g1', 'A', []);
+      const wB = makeWire('wB', 'swB', 'Q', 'g1', 'B', []);
+      const wY = makeWire('wY', 'g1', 'Y', 'led1', 'in', []);
+
+      const stateAnd: CircuitState = {
+        components: [swA, swB, g1, led1],
+        wires: [wA, wB, wY],
+        junctions: [],
+        viewport: { x: 0, y: 0, zoom: 1 },
+      };
+
+      const hist = new HistoryManager(10);
+
+      // 1. Switch AND -> OR
+      hist.push(stateAnd);
+      const resOr = applyLogicGateTypeChange(stateAnd, 'g1', 'OR', def);
+      const stateOr = resOr.nextState;
+      const simOr = runLogicSimulation(stateOr);
+      const orOk =
+        resOr.changed &&
+        resOr.removedWiresCount === 0 &&
+        stateOr.wires.length === 3 &&
+        stateOr.components.find((c) => c.id === 'g1')?.props.gateType === 'OR' &&
+        simOr.pinValues['led1:in'] === 1; // A=1 OR B=0 -> 1
+
+      // 2. Switch OR -> NOT
+      hist.push(stateOr);
+      const resNot = applyLogicGateTypeChange(stateOr, 'g1', 'NOT', def);
+      const stateNot = resNot.nextState;
+      const simNot = runLogicSimulation(stateNot);
+      const remainingWireIds = new Set(stateNot.wires.map((w) => w.id));
+      const notComp = stateNot.components.find((c) => c.id === 'g1');
+      const notOk =
+        resNot.changed &&
+        resNot.removedWiresCount === 1 &&
+        Boolean(resNot.statusMessage && resNot.statusMessage.includes('NOT') && resNot.statusMessage.includes('xóa 1 dây')) &&
+        stateNot.wires.length === 2 &&
+        remainingWireIds.has('wA') &&
+        remainingWireIds.has('wY') &&
+        !remainingWireIds.has('wB') &&
+        notComp?.props.gateType === 'NOT' &&
+        notComp?.props.inputsCount === 1 &&
+        simNot.pinValues['led1:in'] === 0; // NOT(A=1) -> 0
+
+      // 3. Ctrl+Z restores previous states
+      const afterUndo1 = hist.undo(stateNot);
+      const undo1Ok =
+        Boolean(afterUndo1) &&
+        afterUndo1!.wires.length === 3 &&
+        afterUndo1!.wires.some((w) => w.id === 'wB') &&
+        afterUndo1!.components.find((c) => c.id === 'g1')?.props.gateType === 'OR';
+
+      const afterUndo2 = afterUndo1 ? hist.undo(afterUndo1) : null;
+      const undo2Ok =
+        Boolean(afterUndo2) &&
+        afterUndo2!.wires.length === 3 &&
+        afterUndo2!.components.find((c) => c.id === 'g1')?.props.gateType === 'AND';
+
+      const passed = orOk && notOk && undo1Ok && undo2Ok;
+      return {
+        actualStr: `AND→OR giữ 3 dây: ${orOk ? 'ĐẠT' : 'LỖI'}; OR→NOT xóa B & giữ A/LED + cảnh báo: ${notOk ? 'ĐẠT' : 'LỖI'}; Undo 1 (→OR): ${undo1Ok ? 'ĐẠT' : 'LỖI'}; Undo 2 (→AND): ${undo2Ok ? 'ĐẠT' : 'LỖI'}`,
         passed,
       };
     },

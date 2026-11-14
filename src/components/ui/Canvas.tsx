@@ -21,6 +21,7 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
     activeTool,
     editorMode,
     placingType,
+    placingPresetProps,
     wiringDraft,
     draggedSegment,
     rotatingComponent,
@@ -44,6 +45,7 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
     setPlacingType,
     moveComponents,
     updateComponentProp,
+    cycleLogicGateType,
     startWiring,
     updateWiringPointer,
     addWiringWaypoint,
@@ -425,8 +427,17 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
     }
     const compType = e.dataTransfer.getData('text/plain');
     if (compType) {
+      let presetProps: Record<string, any> | undefined = placingPresetProps || undefined;
+      const presetJson = e.dataTransfer.getData('application/x-preset-props');
+      if (presetJson) {
+        try {
+          presetProps = JSON.parse(presetJson);
+        } catch {
+          // fallback to placingPresetProps
+        }
+      }
       const worldPt = screenToWorld(e.clientX, e.clientY);
-      placeComponent(compType, snapPointToGrid(worldPt));
+      placeComponent(compType, snapPointToGrid(worldPt), presetProps);
       setPlacingType(null);
     }
   };
@@ -595,6 +606,8 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
             }
           } else if (targetComp.type === 'switch_2p' || targetComp.type === 'switch_3p') {
             updateComponentProp(targetComp.id, 'state', !targetComp.props.state);
+          } else if (targetComp.type === 'logic_gate') {
+            cycleLogicGateType(targetComp.id);
           }
         }}
         className="cursor-move"
@@ -1230,7 +1243,10 @@ export const Canvas: React.FC<CanvasProps> = ({ svgRef }) => {
                   rot: 0,
                   flip: false,
                   label: currentPlacingDef.refPrefix,
-                  props: currentPlacingDef.defaultProps || {},
+                  props: {
+                    ...(currentPlacingDef.defaultProps || {}),
+                    ...(placingPresetProps || {}),
+                  },
                 }}
               />
             </g>

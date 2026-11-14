@@ -59,6 +59,14 @@ export interface SymbolProps {
   hoveredPinId?: string | null;
 }
 
+export interface PaletteVariant {
+  label: string;
+  presetProps: Record<string, any>;
+  searchTags?: string[];
+  nameVi?: string;
+  description?: string;
+}
+
 export interface ComponentDef {
   type: string;
   nameVi: string;
@@ -70,6 +78,7 @@ export interface ComponentDef {
   width: number;
   height: number;
   defaultProps?: Record<string, any>;
+  paletteVariants?: PaletteVariant[];
 }
 
 export interface ComponentInstance {

@@ -1207,7 +1207,7 @@ export const COMPONENT_DEFINITIONS: ComponentDef[] = [
         key: 'inputsCount',
         label: 'Số ngõ vào (2–4)',
         kind: 'number',
-        min: 2,
+        min: 1,
         max: 4,
         step: 1,
         default: 2,
@@ -1217,6 +1217,15 @@ export const COMPONENT_DEFINITIONS: ComponentDef[] = [
       gateType: 'AND',
       inputsCount: 2,
     },
+    paletteVariants: [
+      { label: 'AND', presetProps: { gateType: 'AND', inputsCount: 2 }, searchTags: ['and', 'va', 'nhan'] },
+      { label: 'OR', presetProps: { gateType: 'OR', inputsCount: 2 }, searchTags: ['or', 'hoac', 'cong'] },
+      { label: 'NOT', presetProps: { gateType: 'NOT', inputsCount: 1 }, searchTags: ['not', 'dao'] },
+      { label: 'NAND', presetProps: { gateType: 'NAND', inputsCount: 2 }, searchTags: ['nand', 'va dao'] },
+      { label: 'NOR', presetProps: { gateType: 'NOR', inputsCount: 2 }, searchTags: ['nor', 'hoac dao'] },
+      { label: 'XOR', presetProps: { gateType: 'XOR', inputsCount: 2 }, searchTags: ['xor', 'loai tru'] },
+      { label: 'XNOR', presetProps: { gateType: 'XNOR', inputsCount: 2 }, searchTags: ['xnor', 'dong muc'] },
+    ],
   },
   {
     type: 'logic_led',
@@ -1407,3 +1416,67 @@ export const COMPONENT_MAP = new Map<string, ComponentDef>(
 export function getComponentDef(type: string): ComponentDef | undefined {
   return COMPONENT_MAP.get(type);
 }
+
+export interface PaletteCardItem {
+  key: string;
+  type: string;
+  def: ComponentDef;
+  label: string;
+  presetProps?: Record<string, any>;
+  groupTitle?: string;
+}
+
+export function getWorkspacePaletteItems(
+  paletteIds: string[],
+  searchTerm = ''
+): PaletteCardItem[] {
+  const q = searchTerm.trim().toLowerCase();
+  const workspaceDefs = COMPONENT_DEFINITIONS.filter((def) =>
+    paletteIds.includes(def.type)
+  ).sort((a, b) => {
+    const isAnnotationA = a.type === 'boundary' || a.type === 'textbox' || a.category === 'annotation';
+    const isAnnotationB = b.type === 'boundary' || b.type === 'textbox' || b.category === 'annotation';
+    if (isAnnotationA && !isAnnotationB) return 1;
+    if (!isAnnotationA && isAnnotationB) return -1;
+    return 0;
+  });
+
+  const items: PaletteCardItem[] = [];
+  for (const def of workspaceDefs) {
+    if (def.paletteVariants && def.paletteVariants.length > 0) {
+      for (const variant of def.paletteVariants) {
+        const matches =
+          !q ||
+          variant.label.toLowerCase().includes(q) ||
+          (variant.nameVi ? variant.nameVi.toLowerCase().includes(q) : false) ||
+          (variant.searchTags ? variant.searchTags.some((t) => t.toLowerCase().includes(q)) : false) ||
+          def.nameVi.toLowerCase().includes(q);
+        if (matches) {
+          items.push({
+            key: `${def.type}__${variant.label}`,
+            type: def.type,
+            def,
+            label: variant.label,
+            presetProps: variant.presetProps,
+            groupTitle: def.nameVi,
+          });
+        }
+      }
+    } else {
+      const matches =
+        !q ||
+        def.nameVi.toLowerCase().includes(q) ||
+        def.type.toLowerCase().includes(q);
+      if (matches) {
+        items.push({
+          key: def.type,
+          type: def.type,
+          def,
+          label: def.nameVi,
+        });
+      }
+    }
+  }
+  return items;
+}
+

@@ -33,7 +33,12 @@ import { extractNetlist, lintCircuit, getComponentPins } from '../core/netlist';
 import { migrateCircuitState } from '../core/migration';
 import { solveCircuit } from '../core/solver';
 import { simulationService, SimulationSnapshot } from '../core/simulationService';
-import { runLogicSimulation, LogicSimulationResult } from '../core/logicSimulator';
+import {
+  runLogicSimulation,
+  LogicSimulationResult,
+  applyLogicGateTypeChange,
+  LOGIC_GATE_ORDER,
+} from '../core/logicSimulator';
 
 const storage = StorageService.getInstance();
 const history = new HistoryManager(DEFAULT_HISTORY_LIMIT);
@@ -112,6 +117,7 @@ interface WorkspaceStore {
   selectedComponentIds: string[];
   selectedWireIds: string[];
   placingType: string | null;
+  placingPresetProps: Record<string, any> | null;
   wiringDraft: WiringDraft | null;
   draggedSegment: { wireId: string; segIndex: number; initialPoints: Point[] } | null;
   rotatingComponent: { compId: string; initialRot: number; startAngle: number; currentAngle: number } | null;
@@ -192,8 +198,10 @@ interface WorkspaceStore {
   openPresetInWorkspace: (workspaceSlug: string, presetId: string, returnSlug?: string) => Promise<void>;
 
   // Component Actions
-  setPlacingType: (type: string | null) => void;
-  placeComponent: (type: string, pos: Point) => void;
+  setPlacingType: (type: string | null, presetProps?: Record<string, any>) => void;
+  placeComponent: (type: string, pos: Point, presetProps?: Record<string, any>) => void;
+  changeLogicGateType: (compId: string, newGateType: string) => void;
+  cycleLogicGateType: (compId: string) => void;
   selectComponent: (id: string, isShift?: boolean) => void;
   selectWire: (id: string, isShift?: boolean) => void;
   selectBox: (compIds: string[], wireIds: string[]) => void;
@@ -340,6 +348,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   selectedComponentIds: [],
   selectedWireIds: [],
   placingType: null,
+  placingPresetProps: null,
   wiringDraft: null,
   draggedSegment: null,
   rotatingComponent: null,
@@ -411,6 +420,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       selectedWireIds: [],
       wiringDraft: null,
       placingType: null,
+      placingPresetProps: null,
       editorMode: 'idle',
       canUndo: false,
       canRedo: false,
@@ -492,6 +502,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     set({
       activeTool: tool,
       placingType: null,
+      placingPresetProps: null,
       wiringDraft: null,
       editorMode: tool === 'pan' ? 'panning' : 'idle',
     });
@@ -918,23 +929,24 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   },
 
   // ---------------- COMPONENT OPERATIONS ----------------
-  setPlacingType: (type: string | null) => {
+  setPlacingType: (type: string | null, presetProps?: Record<string, any>) => {
     if (get().viewMode === 'installation' && type !== null) {
       get().setStatusMessage('Thêm linh kiện và đi dây ở chế độ NGUYÊN LÍ');
       return;
     }
     set({
       placingType: type,
+      placingPresetProps: type ? (presetProps || null) : null,
       editorMode: type ? 'placing' : 'idle',
     });
   },
 
-  placeComponent: (type: string, pos: Point) => {
+  placeComponent: (type: string, pos: Point, presetProps?: Record<string, any>) => {
     if (get().viewMode === 'installation') {
       get().setStatusMessage('Thêm linh kiện và đi dây ở chế độ NGUYÊN LÍ');
       return;
     }
-    const { circuit } = get();
+    const { circuit, placingPresetProps } = get();
     const def = getComponentDef(type);
     if (!def) return;
 
@@ -947,8 +959,9 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       label = String.fromCharCode(65 + (switchCount % 26));
     }
 
+    const effectivePresetProps = presetProps ?? placingPresetProps ?? {};
     const currentMode = get().config?.mode || 'rms';
-    const initialProps = { ...(def.defaultProps || {}) };
+    const initialProps = { ...(def.defaultProps || {}), ...effectivePresetProps };
     if (type === 'ac_source' && currentMode === 'dc') {
       initialProps.peakVoltage = 5;
       initialProps.frequency = 50;
@@ -1476,26 +1489,83 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     get().moveComponents(selectedComponentIds, dx * 20, dy * 20, true);
   },
 
+  changeLogicGateType: (compId: string, newGateType: string) => {
+    const { circuit } = get();
+    const def = COMPONENT_MAP.get('logic_gate');
+    const res = applyLogicGateTypeChange(circuit, compId, newGateType, def);
+    if (!res.changed) return;
+
+    history.push(circuit);
+
+    if (res.statusMessage) {
+      get().setStatusMessage(res.statusMessage);
+    }
+
+    set({
+      circuit: res.nextState,
+      canUndo: history.canUndo(),
+      canRedo: history.canRedo(),
+    });
+
+    autoSaver.schedule(get().activeSlug, res.nextState);
+    get().runLint();
+    get().evaluateLogic();
+  },
+
+  cycleLogicGateType: (compId: string) => {
+    const { circuit } = get();
+    const targetComp = circuit.components.find(c => c.id === compId);
+    if (!targetComp || targetComp.type !== 'logic_gate') return;
+    const cur = String(targetComp.props.gateType || 'AND').toUpperCase();
+    const idx = (LOGIC_GATE_ORDER as readonly string[]).indexOf(cur);
+    const next = LOGIC_GATE_ORDER[(idx + 1) % LOGIC_GATE_ORDER.length];
+    get().changeLogicGateType(compId, next);
+  },
+
   updateComponentProp: (compId: string, key: string, value: any) => {
     const { circuit } = get();
     const targetComp = circuit.components.find(c => c.id === compId);
     if (!targetComp) return;
 
+    if (targetComp.type === 'logic_gate' && key === 'gateType') {
+      get().changeLogicGateType(compId, String(value));
+      return;
+    }
+
+    let finalValue = value;
+    if (targetComp.type === 'logic_gate' && key === 'inputsCount') {
+      const gType = String(targetComp.props.gateType || 'AND').toUpperCase();
+      if (gType === 'NOT') {
+        finalValue = 1;
+        if (Number(value) !== 1) {
+          get().setStatusMessage('Cổng NOT chỉ có 1 ngõ vào.');
+        }
+      } else if (gType === 'XOR' || gType === 'XNOR') {
+        finalValue = 2;
+        if (Number(value) !== 2) {
+          get().setStatusMessage(`Cổng ${gType} chỉ có 2 ngõ vào.`);
+        }
+      } else {
+        finalValue = Math.min(4, Math.max(2, Number(value) || 2));
+      }
+    }
+
     history.push(circuit);
 
     const oldProps = { ...targetComp.props };
-    const nextProps = { ...oldProps, [key]: value };
+    const nextProps = { ...oldProps, [key]: finalValue };
 
     const def = COMPONENT_MAP.get(targetComp.type);
+    const updatedComp: ComponentInstance = { ...targetComp, props: nextProps };
     const oldPins = getComponentPins(targetComp, def);
-    const newPins = getComponentPins({ ...targetComp, props: nextProps }, def);
+    const newPins = getComponentPins(updatedComp, def);
 
     // Check if pins were removed (e.g. reducing poles from 3 to 1)
     const newPinIdSet = new Set(newPins.map(p => p.id));
     const removedPinIds = oldPins.filter(p => !newPinIdSet.has(p.id)).map(p => p.id);
 
     let removedWiresCount = 0;
-    const nextWires = circuit.wires.filter(w => {
+    let nextWires = circuit.wires.filter(w => {
       const isFromTarget = w.from.compId === compId && removedPinIds.includes(w.from.pinId!);
       const isToTarget = w.to.compId === compId && removedPinIds.includes(w.to.pinId!);
       if (isFromTarget || isToTarget) {
@@ -1505,13 +1575,26 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       return true;
     });
 
+    for (const pin of newPins) {
+      const pPos = pinWorldPos(updatedComp, pin.id, def);
+      nextWires = nextWires.map(w => {
+        if (w.from.compId === compId && w.from.pinId === pin.id) {
+          return updateWireOnComponentMoved(w, compId, pPos, true);
+        }
+        if (w.to.compId === compId && w.to.pinId === pin.id) {
+          return updateWireOnComponentMoved(w, compId, pPos, false);
+        }
+        return w;
+      });
+    }
+
     if (removedWiresCount > 0) {
       get().setStatusMessage(`Đã xóa ${removedWiresCount} dây dẫn nối vào các cực đã bị giảm bỏ.`);
     }
 
     const nextComponents = circuit.components.map(c => {
       if (c.id !== compId) return c;
-      return { ...c, props: nextProps };
+      return updatedComp;
     });
 
     const nextState: CircuitState = {
@@ -1527,7 +1610,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     });
 
     // Propagate live changes to simulationService
-    simulationService.updateComponentProp(compId, key, value);
+    simulationService.updateComponentProp(compId, key, finalValue);
     if (removedPinIds.length > 0 && (get().isSimulating || get().simulationSnapshot !== null)) {
       simulationService.recompile(nextState, get().config.mode === 'rms' ? 'rms' : 'dc');
     }

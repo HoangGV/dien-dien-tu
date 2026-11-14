@@ -273,7 +273,7 @@ export const LogicGateSymbol: React.FC<SymbolProps> = ({
 
   // Y lead wire from gate body to pin Y (x: 40, y: 0)
   const isBubbleOutput = gateType === 'NOT' || gateType === 'NAND' || gateType === 'NOR' || gateType === 'XNOR';
-  const outLeadStart = isBubbleOutput ? 30 : 25;
+  const outLeadStart = gateType === 'NOT' ? 28 : isBubbleOutput ? 33 : 25;
 
   return (
     <g>
@@ -326,14 +326,14 @@ export const LogicGateSymbol: React.FC<SymbolProps> = ({
         <g>
           {/* AND D-shape */}
           <path
-            d="M -20 -28 L 5 -28 A 28 28 0 0 1 5 28 L -20 28 Z"
+            d="M -20 -28 L 5 -28 A 20 28 0 0 1 5 28 L -20 28 Z"
             fill="#FFFFFF"
             stroke="#000000"
             strokeWidth={2}
             strokeLinejoin="round"
           />
           {gateType === 'NAND' && (
-            <circle cx={28} cy={0} r={4} fill="#FFFFFF" stroke="#000000" strokeWidth={2} />
+            <circle cx={29} cy={0} r={4} fill="#FFFFFF" stroke="#000000" strokeWidth={2} />
           )}
         </g>
       )}

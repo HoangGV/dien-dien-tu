@@ -1,26 +1,20 @@
 import React, { useState } from 'react';
 import { Layers, ChevronLeft, ChevronRight, Search } from 'lucide-react';
 import { useWorkspaceStore } from '../../store/workspaceStore';
-import { COMPONENT_DEFINITIONS, COMPONENT_MAP } from '../../core/registry';
-import { ComponentDef } from '../../core/model';
+import { getWorkspacePaletteItems } from '../../core/registry';
 
 export const Palette: React.FC = () => {
-  const { config, leftPanelOpen, toggleLeftPanel, setPlacingType, placingType } =
-    useWorkspaceStore();
+  const {
+    config,
+    leftPanelOpen,
+    toggleLeftPanel,
+    setPlacingType,
+    placingType,
+    placingPresetProps,
+  } = useWorkspaceStore();
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Filter components relevant to this workspace: ensure boundary & textbox are always at the bottom
-  const workspaceDefs = COMPONENT_DEFINITIONS.filter(def =>
-    config.paletteIds.includes(def.type)
-  ).filter(def =>
-    searchTerm ? def.nameVi.toLowerCase().includes(searchTerm.toLowerCase()) : true
-  ).sort((a, b) => {
-    const isAnnotationA = a.type === 'boundary' || a.type === 'textbox' || a.category === 'annotation';
-    const isAnnotationB = b.type === 'boundary' || b.type === 'textbox' || b.category === 'annotation';
-    if (isAnnotationA && !isAnnotationB) return 1;
-    if (!isAnnotationA && isAnnotationB) return -1;
-    return 0;
-  });
+  const paletteItems = getWorkspacePaletteItems(config.paletteIds, searchTerm);
 
   if (!leftPanelOpen) {
     return (
@@ -85,56 +79,82 @@ export const Palette: React.FC = () => {
           gridTemplateColumns: 'repeat(auto-fill, minmax(76px, 1fr))',
         }}
       >
-        {workspaceDefs.map((def) => {
-          const isPlacingThis = placingType === def.type;
+        {paletteItems.map((item, idx) => {
+          const prevGroup = idx > 0 ? paletteItems[idx - 1].groupTitle : undefined;
+          const nextGroup = idx < paletteItems.length - 1 ? paletteItems[idx + 1].groupTitle : undefined;
+          const showGroupHeader = item.groupTitle && item.groupTitle !== prevGroup;
+          const showGroupFooterDivider = item.groupTitle && item.groupTitle !== nextGroup && idx < paletteItems.length - 1;
+
+          const isPlacingThis =
+            placingType === item.type &&
+            (item.presetProps
+              ? JSON.stringify(placingPresetProps || {}) === JSON.stringify(item.presetProps)
+              : !placingPresetProps);
+
           const mockComp = {
             id: 'preview',
-            type: def.type,
+            type: item.type,
             x: 0,
             y: 0,
             rot: 0 as const,
             flip: false,
             label: '',
-            props: def.defaultProps || {},
+            props: { ...(item.def.defaultProps || {}), ...(item.presetProps || {}) },
           };
 
           return (
-            <div
-              key={def.type}
-              draggable
-              onDragStart={(e) => {
-                e.dataTransfer.setData('text/plain', def.type);
-                setPlacingType(def.type);
-              }}
-              onClick={() => {
-                if (isPlacingThis) {
-                  setPlacingType(null);
-                } else {
-                  setPlacingType(def.type);
-                }
-              }}
-              className={`w-full min-w-0 h-[68px] border-2 border-black flex flex-col items-center justify-between p-1 cursor-grab active:cursor-grabbing hover:bg-[#EEF2FF] transition-transform ${
-                isPlacingThis
-                  ? 'bg-[#FFD84D] shadow-[2px_2px_0_#000] scale-[0.98]'
-                  : 'bg-white shadow-[1px_1px_0_#000]'
-              }`}
-              title={`Kéo thả hoặc bấm để đặt: ${def.nameVi}`}
-            >
-              {/* Mini SVG Symbol preview */}
-              <div className="w-full flex-1 flex items-center justify-center overflow-hidden pointer-events-none">
-                <svg
-                  viewBox="-45 -45 90 90"
-                  className="w-[44px] h-[36px] max-w-full max-h-full"
-                >
-                  <def.symbol comp={mockComp} />
-                </svg>
+            <React.Fragment key={item.key}>
+              {showGroupHeader && (
+                <div className="col-span-full flex items-center justify-between px-1 pt-1 pb-0.5 mt-0.5 border-b border-black/30 bg-[#EEF2FF]">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-[#4169E1]">
+                    {item.groupTitle}
+                  </span>
+                </div>
+              )}
+
+              <div
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData('text/plain', item.type);
+                  if (item.presetProps) {
+                    e.dataTransfer.setData('application/x-preset-props', JSON.stringify(item.presetProps));
+                  }
+                  setPlacingType(item.type, item.presetProps);
+                }}
+                onClick={() => {
+                  if (isPlacingThis) {
+                    setPlacingType(null);
+                  } else {
+                    setPlacingType(item.type, item.presetProps);
+                  }
+                }}
+                className={`w-full min-w-0 h-[68px] border-2 border-black flex flex-col items-center justify-between p-1 cursor-grab active:cursor-grabbing hover:bg-[#EEF2FF] transition-transform ${
+                  isPlacingThis
+                    ? 'bg-[#FFD84D] shadow-[2px_2px_0_#000] scale-[0.98]'
+                    : 'bg-white shadow-[1px_1px_0_#000]'
+                }`}
+                title={`Kéo thả hoặc bấm để đặt: ${item.groupTitle ? `${item.groupTitle} ${item.label}` : item.label}`}
+              >
+                {/* Mini SVG Symbol preview */}
+                <div className="w-full flex-1 flex items-center justify-center overflow-hidden pointer-events-none">
+                  <svg
+                    viewBox="-45 -45 90 90"
+                    className="w-[44px] h-[36px] max-w-full max-h-full"
+                  >
+                    <item.def.symbol comp={mockComp} />
+                  </svg>
+                </div>
+
+                {/* Label with word wrap and no overflow */}
+                <span className="text-[10px] font-black leading-[11px] text-center w-full text-black line-clamp-2 break-words">
+                  {item.label}
+                </span>
               </div>
 
-              {/* Label with word wrap and no overflow */}
-              <span className="text-[10px] font-black leading-[11px] text-center w-full text-black line-clamp-2 break-words">
-                {def.nameVi}
-              </span>
-            </div>
+              {showGroupFooterDivider && (
+                <div className="col-span-full border-t border-black/25 my-0.5" />
+              )}
+            </React.Fragment>
           );
         })}
       </div>

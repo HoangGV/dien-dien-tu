@@ -4,7 +4,12 @@
  * Operates on discrete 0, 1, 'X' (undefined), and 'CONFLICT'.
  */
 
-import { CircuitState, ComponentInstance, Wire } from './model';
+import { CircuitState, ComponentInstance, Wire, ComponentDef } from './model';
+import { getComponentPins } from './netlist';
+import { pinWorldPos } from './geometry';
+import { updateWireOnComponentMoved } from './wiring';
+
+export const LOGIC_GATE_ORDER = ['AND', 'OR', 'NOT', 'NAND', 'NOR', 'XOR', 'XNOR'] as const;
 
 export type LogicValue = 0 | 1 | 'X' | 'CONFLICT';
 
@@ -770,4 +775,107 @@ function buildLogicExpression(
   const rawExpr = tracePin(targetCompId, targetPinId);
   if (!rawExpr) return null;
   return `Y = ${rawExpr}`;
+}
+
+export function applyLogicGateTypeChange(
+  circuit: CircuitState,
+  compId: string,
+  newGateType: string,
+  def?: ComponentDef
+): {
+  nextState: CircuitState;
+  changed: boolean;
+  statusMessage: string | null;
+  removedWiresCount: number;
+} {
+  const targetComp = circuit.components.find(c => c.id === compId);
+  if (!targetComp || targetComp.type !== 'logic_gate') {
+    return { nextState: circuit, changed: false, statusMessage: null, removedWiresCount: 0 };
+  }
+
+  const prevGateType = String(targetComp.props.gateType || 'AND').toUpperCase();
+  const nextGateType = String(newGateType).toUpperCase();
+  const prevInputs = Number(targetComp.props.inputsCount ?? (prevGateType === 'NOT' ? 1 : 2));
+
+  let nextInputs = prevInputs;
+  const msgParts: string[] = [];
+
+  if (nextGateType === 'NOT') {
+    nextInputs = 1;
+    if (prevInputs !== 1) {
+      msgParts.push(`Cổng NOT chỉ có 1 ngõ vào (đã tự chỉnh từ ${prevInputs} → 1).`);
+    }
+  } else if (nextGateType === 'XOR' || nextGateType === 'XNOR') {
+    nextInputs = 2;
+    if (prevInputs !== 2) {
+      msgParts.push(`Cổng ${nextGateType} chỉ có 2 ngõ vào (đã tự chỉnh từ ${prevInputs} → 2).`);
+    }
+  } else {
+    if (prevInputs < 2) {
+      nextInputs = 2;
+      msgParts.push(`Cổng ${nextGateType} cần tối thiểu 2 ngõ vào (đã tự chỉnh từ ${prevInputs} → 2).`);
+    } else {
+      nextInputs = Math.min(4, Math.max(2, prevInputs));
+    }
+  }
+
+  if (prevGateType === nextGateType && prevInputs === nextInputs) {
+    return { nextState: circuit, changed: false, statusMessage: null, removedWiresCount: 0 };
+  }
+
+  const nextProps = {
+    ...targetComp.props,
+    gateType: nextGateType,
+    inputsCount: nextInputs,
+  };
+
+  const updatedComp: ComponentInstance = { ...targetComp, props: nextProps };
+  const oldPins = getComponentPins(targetComp, def);
+  const newPins = getComponentPins(updatedComp, def);
+  const newPinIdSet = new Set(newPins.map(p => p.id));
+  const removedPinIds = oldPins.filter(p => !newPinIdSet.has(p.id)).map(p => p.id);
+
+  let removedWiresCount = 0;
+  let nextWires = circuit.wires.filter(w => {
+    const isFromTarget = w.from.compId === compId && removedPinIds.includes(w.from.pinId!);
+    const isToTarget = w.to.compId === compId && removedPinIds.includes(w.to.pinId!);
+    if (isFromTarget || isToTarget) {
+      removedWiresCount++;
+      return false;
+    }
+    return true;
+  });
+
+  if (def) {
+    for (const pin of newPins) {
+      const pPos = pinWorldPos(updatedComp, pin.id, def);
+      nextWires = nextWires.map(w => {
+        if (w.from.compId === compId && w.from.pinId === pin.id) {
+          return updateWireOnComponentMoved(w, compId, pPos, true);
+        }
+        if (w.to.compId === compId && w.to.pinId === pin.id) {
+          return updateWireOnComponentMoved(w, compId, pPos, false);
+        }
+        return w;
+      });
+    }
+  }
+
+  if (removedWiresCount > 0) {
+    msgParts.push(`Đã xóa ${removedWiresCount} dây dẫn nối vào các cực đã bị giảm bỏ.`);
+  }
+
+  const nextComponents = circuit.components.map(c => (c.id === compId ? updatedComp : c));
+  const nextState: CircuitState = {
+    ...circuit,
+    components: nextComponents,
+    wires: nextWires,
+  };
+
+  return {
+    nextState,
+    changed: true,
+    statusMessage: msgParts.length > 0 ? msgParts.join(' ') : null,
+    removedWiresCount,
+  };
 }

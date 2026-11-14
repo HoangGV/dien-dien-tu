@@ -39,6 +39,7 @@ export const PropsPanel: React.FC<PropsPanelProps> = ({ isBottomSheet = false })
     toggleRightPanel,
     closeRightPanel,
     updateComponentProp,
+    changeLogicGateType,
     updateComponentLabel,
     setComponentRotation,
     flipSelected,
@@ -143,6 +144,38 @@ export const PropsPanel: React.FC<PropsPanelProps> = ({ isBottomSheet = false })
                   ) : (
                     <span>Bấm CHẠY để có số đo</span>
                   )}
+                </div>
+              </div>
+            )}
+
+            {/* HÀNG NÚT LIỀN NHAU ĐỔI LOẠI CỔNG LOGIC */}
+            {selectedComp.type === 'logic_gate' && (
+              <div className="border border-black bg-[#EEF2FF] p-1.5 space-y-1">
+                <div className="text-[10px] font-black uppercase text-[#4169E1] tracking-wider">
+                  Loại cổng logic
+                </div>
+                <div className="flex w-full border border-black bg-white overflow-hidden">
+                  {['AND', 'OR', 'NOT', 'NAND', 'NOR', 'XOR', 'XNOR'].map((gType, idx) => {
+                    const currentGate = String(selectedComp.props.gateType || 'AND').toUpperCase();
+                    const isActive = currentGate === gType;
+                    return (
+                      <button
+                        key={gType}
+                        type="button"
+                        onClick={() => changeLogicGateType(selectedComp.id, gType)}
+                        className={`flex-1 min-w-0 h-[24px] px-0.5 text-[8.5px] font-black uppercase tracking-tighter cursor-pointer border-black ${
+                          idx > 0 ? 'border-l' : ''
+                        } ${
+                          isActive
+                            ? 'bg-[var(--blue)] text-white'
+                            : 'bg-white text-black hover:bg-[#FFD84D]/50'
+                        }`}
+                        title={`Đổi sang cổng ${gType}`}
+                      >
+                        {gType}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -290,6 +323,28 @@ export const PropsPanel: React.FC<PropsPanelProps> = ({ isBottomSheet = false })
                             maxVal = 100;
                             unit = '%';
                           }
+                        }
+                        if (selectedComp.type === 'logic_gate' && schema.key === 'inputsCount') {
+                          const gType = String(selectedComp.props.gateType || 'AND').toUpperCase();
+                          const isLocked = gType === 'NOT' || gType === 'XOR' || gType === 'XNOR';
+                          const lockedVal = gType === 'NOT' ? 1 : 2;
+                          if (isLocked) {
+                            return (
+                              <div className="space-y-0.5">
+                                <input
+                                  type="number"
+                                  disabled
+                                  value={lockedVal}
+                                  className="w-full h-[24px] px-1 border border-black text-[11px] font-black bg-gray-100 text-gray-500 text-right cursor-not-allowed"
+                                />
+                                <p className="text-[9px] text-gray-500 font-bold italic">
+                                  Cố định {lockedVal} ngõ vào cho cổng {gType}
+                                </p>
+                              </div>
+                            );
+                          }
+                          minVal = 2;
+                          maxVal = 4;
                         }
                         const isSlider = selectedComp.type === 'sensor_module' && (schema.key === 'envValue' || schema.key === 'threshold');
 
